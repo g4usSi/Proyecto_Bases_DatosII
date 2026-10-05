@@ -1,0 +1,29 @@
+# Reglas existentes del proyecto
+.venv
+venv
+.env
+env
+
+# Entornos y Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Configuracion local
+.env
+.env.*
+!.env.example
+.secrets/
+service-account*.json
+
+# Editores
+.idea/
+.vscode/

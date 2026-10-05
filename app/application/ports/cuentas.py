@@ -1,0 +1,19 @@
+from typing import Protocol
+
+from app.domain.cuenta import CuentaProfesional, Sesion
+
+
+class DirectorioProfesionales(Protocol):
+    def buscar_por_correo(self, correo: str) -> CuentaProfesional | None: ...
+
+    def buscar_por_id(self, id_profesional: str) -> CuentaProfesional | None: ...
+
+    def revocar_sesiones(self, id_profesional: str) -> None: ...
+
+    def registrar_login(self, id_profesional: str, exitoso: bool) -> None: ...
+
+
+class InicioSesion(Protocol):
+    def iniciar_sesion(self, correo: str, password: str) -> Sesion: ...
+
+    def cerrar_sesion(self, id_profesional: str) -> None: ...

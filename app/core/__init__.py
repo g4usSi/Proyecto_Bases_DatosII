@@ -1,0 +1,1 @@
+"""Configuracion comun del proceso."""
