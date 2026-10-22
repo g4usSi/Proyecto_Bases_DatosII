@@ -4,12 +4,18 @@ Plataforma común de historiales clínicos con FastAPI, Python 3.12 y arquitectu
 hexagonal. Identidad central en PostgreSQL: **un establecimiento por profesional**.
 La API decide el motor después de autenticar; cada establecimiento conserva sus datos.
 
+## Estado y continuidad
+
+El trabajo permanece en `main`; las ramas de motor aún no se han creado.
+Para retomar decisiones, pendientes, límites conocidos y pasos recomendados, leer
+[contexto para el siguiente agente](docs/CONTEXTO_PARA_OTRO_AGENTE.md).
+
 | Establecimiento | Motor | Estado actual |
 | --- | --- | --- |
 | Hospital General | PostgreSQL | SQL original integrado, identidad central y lectura de paciente. |
 | Centro Pediátrico | MySQL 8.4 | Modelo revisado, reglas de integridad, stock y saldos; lectura de paciente. |
 | Laboratorio Clínico | MongoDB 8 | Colecciones, validadores e índices; lectura de paciente. |
-| Clínica Odontológica | Cloud Firestore | Pendiente. |
+| Clínica Odontológica | Cloud Firestore | Pendiente; conexión cloud desde FastAPI con Firebase Admin SDK, sin emulador obligatorio. |
 
 No se han creado ramas nuevas. La interfaz web y el CRUD clínico completo siguen
 pendientes; esta base ya permite login real y lectura autorizada en tres motores.
@@ -75,7 +81,8 @@ obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID
 | `GET /api/v1/pacientes/{id_paciente}` | Lee en el motor de la institución autorizada. |
 
 401: credenciales/sesión inválidas; 403: permiso ausente; 404: paciente ausente;
-503: motor o integración no disponible. Firestore devuelve 503 hasta conectarlo.
+503: motor o integración no disponible. Firestore devuelve 503 hasta conectar su
+adaptador al proyecto cloud.
 La API todavía no publica operaciones de escritura de expedientes.
 
 ## Archivos y decisiones
@@ -88,6 +95,8 @@ La API todavía no publica operaciones de escritura de expedientes.
 - [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md).
 - [Identidad central](docs/identidad_central.md), [arquitectura](docs/arquitectura.md),
   [trabajo por ramas](docs/ramas.md).
+- [Decisión de Firebase/Firestore](docs/decision_firestore.md): conexión cloud,
+  credenciales, IAM, costos y alternativa de emulador.
 
 ## Verificación
 
@@ -116,14 +125,18 @@ sin configurar un entorno de pruebas separado.
 
 ## Trabajo siguiente
 
-Completar Firestore y definir/implementar las operaciones comunes de registro,
-consulta de historial, atención con diagnósticos/tratamientos/recetas y archivo.
+Completar la conexión cloud y el adaptador de Firestore; definir e implementar las
+operaciones comunes de registro, consulta de historial, atención con diagnósticos,
+tratamientos/recetas y archivo.
 Agregar auditoría y rectificaciones antes de permitir cambios clínicos. Para escrituras
 coordinadas en varias colecciones, convertir MongoDB a replica set y probar transacciones.
 Revisar también las reglas pendientes del esquema clínico original de PostgreSQL.
 
 La entrega debe integrar los cuatro adaptadores en una sola aplicación. Las ramas
 serán una forma de organizar desarrollo, no cuatro aplicaciones con contratos distintos.
+
+La especificación del curso manda sobre las decisiones de implementación. Si cambia
+el alcance, actualizar este README y el documento de continuidad juntos.
 
 Referencias: [FastAPI, JWT y Argon2](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/),
 [MySQL CHECK](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html),

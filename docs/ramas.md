@@ -34,13 +34,17 @@ Los nombres son sugerencias; esta preparación no crea ramas ni commits.
   inicial en la raíz según lo solicitado, sin duplicar dos versiones del modelo.
 - Agregar configuración local a `.env.example`, sin credenciales reales.
 - Registrar su fábrica de unidad de trabajo en la composición de la aplicación.
-- Extender Compose o documentar el emulador correspondiente.
+- Extender Compose o documentar el servicio externo correspondiente. Para
+  Firestore, la decisión actual es conexión cloud desde el servidor con Firebase
+  Admin SDK; el emulador es una alternativa si no hay un proyecto accesible o si
+  se necesita aislar pruebas.
 - Probar persistencia, integridad y aislamiento contra el motor real.
 - Documentar modelado, transacciones y seguridad para el informe comparativo.
 
 `database/` y los drivers de PostgreSQL, MySQL y MongoDB ya forman parte de esta base.
 La identidad central es compartida: ninguna rama debe crear otro login ni guardar
-contrasenas en su base clínica. Firestore agregará su SDK/configuración al implementarse.
+contrasenas en su base clínica. Firestore agregará su SDK/configuración al
+implementarse; no necesita un contenedor local en Compose para conectarse al cloud.
 
 ## Integración final
 

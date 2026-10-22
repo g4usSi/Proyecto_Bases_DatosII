@@ -33,7 +33,9 @@ un adaptador documental puede utilizar identificadores de documentos.
 ## Adaptadores iniciales
 
 La fábrica `app/bootstrap/factory.py` registra lectura real para PostgreSQL,
-MySQL y MongoDB cuando su configuración está presente. Firestore continúa pendiente.
+MySQL y MongoDB cuando su configuración está presente. Firestore continúa pendiente;
+la decisión es conectar su adaptador al servicio cloud desde el servidor, sin
+requerir un emulador local. Ver [decisión de Firestore](decision_firestore.md).
 Los motores implementan `RepositorioPacientes` y una unidad de trabajo por solicitud:
 
 ```python

@@ -52,8 +52,11 @@ ausente; no significa que la conexión haya fallado.
 Antes de publicar fuera del equipo: HTTPS y límite de peticiones por origen para
 reducir intentos masivos a correos inexistentes; auditoría de accesos y un flujo de
 recuperación/rectificación de cuentas. Esta entrega prepara el login local, no ese
-despliegue. Firebase queda pendiente como almacenamiento clínico de odontología;
-no se necesita Firebase Auth para la identidad central elegida.
+despliegue. Firestore queda pendiente como almacenamiento clínico de odontología.
+Se accederá desde el servidor con Firebase Admin SDK/IAM; no se necesita Firebase
+Auth para la identidad central elegida. Consulta [la decisión de Firestore](decision_firestore.md)
+para recordar que el SDK de servidor no queda restringido por Firestore Security
+Rules: la API debe validar JWT y permisos centrales en cada operación.
 
 La identidad transversal debe explicarse en la documentación de evaluación:
 PostgreSQL administra acceso, pero no copia ni reemplaza los historiales de los
