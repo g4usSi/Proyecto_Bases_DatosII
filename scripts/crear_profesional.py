@@ -79,6 +79,11 @@ def main() -> None:
                     "INSERT INTO identidad.profesional_permiso VALUES (%s,%s)",
                     (identificador, permiso),
                 )
+            if args.institucion == Institucion.HOSPITAL_GENERAL:
+                # Misma base y misma transaccion: la cuenta y su perfil nacen juntos.
+                from scripts.sincronizar_profesionales import sincronizar_hospital
+
+                sincronizar_hospital(conn, [str(identificador)])
     except psycopg.errors.UniqueViolation:
         parser.error("Ese correo ya tiene una cuenta; no se modifico.")
     except psycopg.errors.CheckViolation:
@@ -103,6 +108,8 @@ def main() -> None:
         except Exception as error:  # noqa: BLE001 - se informa y se puede reintentar
             print(f"Aviso: no se creo el perfil en Firestore ({error}).")
             print("Reintentar con: python -m scripts.sincronizar_profesionales")
+    elif args.institucion == Institucion.HOSPITAL_GENERAL:
+        print("Vinculado a personal_medico del Hospital General.")
     else:
         print("Vincular este UUID al registro clinico local cuando se habiliten escrituras.")
 

@@ -1,7 +1,6 @@
 import logging
 from zoneinfo import ZoneInfo
 
-import psycopg
 import pymysql
 from pymongo import MongoClient
 
@@ -11,6 +10,7 @@ from app.domain.institucion import Institucion
 from app.infrastructure.identity.jwt import AutenticadorCentral
 from app.infrastructure.identity.postgresql import DirectorioPostgreSQL
 from app.infrastructure.persistence.mongodb.lectura import UnidadTrabajoLecturaMongo
+from app.infrastructure.persistence.postgresql.unidad import UnidadTrabajoPostgreSQL
 from app.infrastructure.persistence.sql import UnidadTrabajoSQL
 
 logger = logging.getLogger(__name__)
@@ -29,12 +29,8 @@ def crear_contenedor(settings: Settings) -> Contenedor:
         )
         contenedor.autenticador = autenticador
         contenedor.inicio_sesion = autenticador
-        contenedor.unidades_trabajo[Institucion.HOSPITAL_GENERAL] = lambda: UnidadTrabajoSQL(
-            lambda: psycopg.connect(dsn, connect_timeout=5),
-            "SELECT id_paciente, nombres, apellidos, fecha_nacimiento "
-            "FROM public.paciente WHERE id_paciente = %s",
-            (psycopg.Error,),
-            motor="PostgreSQL",
+        contenedor.unidades_trabajo[Institucion.HOSPITAL_GENERAL] = lambda: UnidadTrabajoPostgreSQL(
+            dsn
         )
     if settings.mysql_host and settings.mysql_password:
         contenedor.unidades_trabajo[Institucion.CENTRO_PEDIATRICO] = lambda: UnidadTrabajoSQL(

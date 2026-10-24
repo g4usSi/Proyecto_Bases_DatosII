@@ -19,6 +19,7 @@ services:
       - ./database/postgresql/005_proteger_login.sql:/docker-entrypoint-initdb.d/005_proteger_login.sql:ro
       - ./database/postgresql/006_rol_secretaria_citas.sql:/docker-entrypoint-initdb.d/006_rol_secretaria_citas.sql:ro
       - ./database/postgresql/007_secretaria_restricciones.sql:/docker-entrypoint-initdb.d/007_secretaria_restricciones.sql:ro
+      - ./database/postgresql/008_escritura_api.sql:/docker-entrypoint-initdb.d/008_escritura_api.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U historiales_admin -d hospital_general"]
       interval: 5s
