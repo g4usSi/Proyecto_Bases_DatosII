@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Literal, Self
 
+from app.domain import busqueda
 from app.domain.cita import Cita, EstadoCita, NuevaCita
 from app.domain.consulta import Consulta, NuevaConsulta
 from app.domain.errores import ConflictoAgenda, TokenInvalido
@@ -42,6 +43,15 @@ class RepositorioDoble:
         )
         self.registros[paciente.id_paciente] = paciente
         return paciente
+
+    def buscar(self, palabras: tuple[str, ...], limite: int) -> list[Paciente]:
+        encontrados = [
+            p
+            for p in self.registros.values()
+            if busqueda.coincide(palabras, p.nombres, p.apellidos)
+        ]
+        encontrados.sort(key=lambda p: (p.apellidos, p.nombres, p.id_paciente))
+        return encontrados[:limite]
 
     def archivar(self, id_paciente: str, baja: Baja) -> None:
         self.registros[id_paciente] = replace(self.registros[id_paciente], archivado=True)

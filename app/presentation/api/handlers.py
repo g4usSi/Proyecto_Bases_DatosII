@@ -10,6 +10,7 @@ from app.domain.errores import (
     DatosInvalidos,
     PacienteArchivado,
     PacienteNoEncontrado,
+    ProfesionalNoVinculado,
     TokenInvalido,
 )
 
@@ -30,7 +31,8 @@ def registrar_manejadores(app: FastAPI) -> None:
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(error)})
 
     @app.exception_handler(AccesoDenegado)
-    async def acceso_denegado(request: Request, error: AccesoDenegado) -> JSONResponse:
+    @app.exception_handler(ProfesionalNoVinculado)
+    async def acceso_denegado(request: Request, error: Exception) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(error)})
 
     @app.exception_handler(TokenInvalido)

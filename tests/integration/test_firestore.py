@@ -221,3 +221,29 @@ def test_odontograma_actualiza_solo_la_pieza(unidad_firestore, paciente_sintetic
     assert set(odontograma.piezas) == {"11", "36"}
     assert odontograma.piezas["36"].estado == "obturada"
     assert odontograma.piezas["36"].superficies == ()
+
+
+def test_busqueda_por_nombre_en_firestore(cliente_firestore, unidad_firestore):
+    """Regla comun: comienzo de palabra, sin acentos ni mayusculas; incluye archivados."""
+    from app.domain import busqueda
+
+    marca = "Zzprueba" + date.today().strftime("%d%H%M%S")
+    ids = []
+    with unidad_firestore() as unidad:
+        for nombres, apellidos in ((f"{marca} María", "Pérez"), (f"{marca} Marco", "Perera")):
+            ids.append(unidad.pacientes.registrar(NuevoPaciente(nombres, apellidos)).id_paciente)
+        unidad.commit()
+    try:
+        with unidad_firestore() as unidad:
+            ambos = unidad.pacientes.buscar(busqueda.palabras(f"{marca} mar"), 10)
+            uno = unidad.pacientes.buscar(busqueda.palabras(f"{marca} MARÍA perez"), 10)
+            ninguno = unidad.pacientes.buscar(busqueda.palabras(f"{marca} xyz"), 10)
+            limitado = unidad.pacientes.buscar(busqueda.palabras(marca), 1)
+        assert {p.id_paciente for p in ambos} == set(ids)
+        assert [p.apellidos for p in ambos] == ["Perera", "Pérez"]  # apellidos, nombres
+        assert [p.id_paciente for p in uno] == [ids[0]]
+        assert ninguno == []
+        assert len(limitado) == 1
+    finally:
+        for identificador in ids:
+            _borrar_paciente(cliente_firestore, identificador)

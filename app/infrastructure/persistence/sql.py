@@ -32,6 +32,9 @@ class RepositorioPacientesSQL:
     def registrar(self, datos: NuevoPaciente) -> Paciente:
         pendiente(self.motor, "registrar paciente")
 
+    def buscar(self, palabras: tuple[str, ...], limite: int) -> list[Paciente]:
+        pendiente(self.motor, "buscar pacientes")
+
     def archivar(self, id_paciente: str, baja: Baja) -> None:
         pendiente(self.motor, "archivar historial")
 

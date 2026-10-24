@@ -47,6 +47,18 @@ class PacienteResponse(BaseModel):
     )
 
 
+class PacienteResumen(BaseModel):
+    """Fila de una busqueda: sin contacto ni alergias."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_paciente: str
+    nombres: str
+    apellidos: str
+    fecha_nacimiento: date | None = None
+    archivado: bool = False
+
+
 class PacienteCrear(Entrada):
     nombres: str = Texto
     apellidos: str = Texto

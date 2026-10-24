@@ -64,6 +64,9 @@ class RepositorioPacientesMongo:
     def registrar(self, datos: NuevoPaciente) -> Paciente:
         pendiente("MongoDB", "registrar paciente")
 
+    def buscar(self, palabras: tuple[str, ...], limite: int) -> list[Paciente]:
+        pendiente("MongoDB", "buscar pacientes")
+
     def archivar(self, id_paciente: str, baja: Baja) -> None:
         pendiente("MongoDB", "archivar historial")
 

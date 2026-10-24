@@ -10,6 +10,15 @@ class RepositorioPacientes(Protocol):
         """Busca un paciente exclusivamente en la institucion del adaptador."""
         ...
 
+    def buscar(self, palabras: tuple[str, ...], limite: int) -> list[Paciente]:
+        """Pacientes cuyo nombre coincide con TODAS las palabras (regla en domain/busqueda.py).
+
+        `palabras` ya viene en minusculas y sin acentos. Orden: apellidos, nombres,
+        identificador. Incluye archivados (el resultado indica `archivado`). No hace
+        falta devolver contacto ni alergias.
+        """
+        ...
+
     def registrar(self, datos: NuevoPaciente) -> Paciente:
         """Prepara el alta; se confirma cuando el caso de uso llama a commit()."""
         ...

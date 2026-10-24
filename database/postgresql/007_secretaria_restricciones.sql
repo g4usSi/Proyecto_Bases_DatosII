@@ -48,7 +48,13 @@ WHERE pp.id_profesional = p.id_profesional
   AND pp.permiso = 'historiales:archivar';
 
 -- 2. La secretaria solo existe en la clinica odontologica.
-ALTER TABLE identidad.profesional DROP CONSTRAINT IF EXISTS ck_secretaria_solo_odontologia;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_secretaria_solo_odontologia'
+             AND conrelid = 'identidad.profesional'::regclass) THEN
+    ALTER TABLE identidad.profesional DROP CONSTRAINT ck_secretaria_solo_odontologia;
+  END IF;
+END $$;
 ALTER TABLE identidad.profesional ADD CONSTRAINT ck_secretaria_solo_odontologia
   CHECK (rol <> 'secretaria' OR establecimiento = 'clinica_odontologica');
 

@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Query, status
 
 from app.application.use_cases.archivar_paciente import ArchivarPaciente
+from app.application.use_cases.buscar_pacientes import BuscarPacientes
 from app.application.use_cases.citas import CitasDePaciente
 from app.application.use_cases.consultar_historial import ConsultarHistorial
 from app.application.use_cases.consultar_paciente import ConsultarPaciente
@@ -33,6 +34,7 @@ from app.presentation.api.schemas.paciente import (
     ArchivoResponse,
     PacienteCrear,
     PacienteResponse,
+    PacienteResumen,
 )
 
 router = APIRouter(prefix="/pacientes", tags=["Pacientes"])
@@ -62,6 +64,17 @@ def registrar_paciente(
         )
     )
     return respuesta_paciente(paciente, contexto.usuario)
+
+
+@router.get("", response_model=list[PacienteResumen])
+def buscar_pacientes(
+    nombre: Annotated[str, Query(min_length=2, max_length=300, description="Nombre o apellido")],
+    contexto: ContextoLeerPaciente,
+    limite: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> list[PacienteResumen]:
+    """Busca por comienzo de palabra, sin importar mayusculas ni acentos."""
+    pacientes = BuscarPacientes(contexto.unidad).ejecutar(nombre, limite)
+    return [PacienteResumen.model_validate(p) for p in pacientes]
 
 
 @router.get("/{id_paciente}", response_model=PacienteResponse)

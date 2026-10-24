@@ -29,6 +29,7 @@ from google.cloud.firestore import Client, DocumentReference, Transaction, Write
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.application.errores import IntegracionNoConfigurada
+from app.domain import busqueda
 from app.domain.cita import TRANSICIONES, Cita, EstadoCita, NuevaCita
 from app.domain.consulta import Consulta, Diagnostico, NuevaConsulta, Receta, Tratamiento
 from app.domain.errores import (
@@ -49,6 +50,7 @@ SUBCOLECCION_CONSULTAS = "consultas"
 COLECCION_PROFESIONALES = "profesionales"
 COLECCION_CITAS = "citas"
 COLECCION_AGENDAS = "agendas"
+MAX_CANDIDATOS_BUSQUEDA = 200
 ERRORES_FIRESTORE = (GoogleAPIError, GoogleAuthError)
 MAXIMO_AGENDA = 500
 
@@ -138,6 +140,9 @@ class RepositorioPacientesFirestore:
                 "contacto": _sin_nulos(asdict(datos.contacto)) if datos.contacto else None,
                 "alergias_evaluadas": datos.alergias is not None,
                 "alergias": [_sin_nulos(asdict(a)) for a in datos.alergias or ()],
+                # Firestore no tiene LIKE: se guardan los comienzos de cada palabra del nombre
+                # y se busca con array_contains (regla comun en domain/busqueda.py).
+                "prefijos_nombre": busqueda.prefijos_de_nombre(datos.nombres, datos.apellidos),
                 "estado": "Activo",
                 "creado_en": firestore.SERVER_TIMESTAMP,
                 "actualizado_en": firestore.SERVER_TIMESTAMP,
@@ -151,6 +156,29 @@ class RepositorioPacientesFirestore:
             contacto=datos.contacto,
             alergias=datos.alergias,
         )
+
+    def buscar(self, palabras: tuple[str, ...], limite: int) -> list[Paciente]:
+        # array_contains admite una sola palabra: la mas larga es la mas selectiva.
+        # Las demas se comprueban en memoria. Se limita la lectura para no gastar cuota.
+        principal = max(palabras, key=len)
+        consulta = (
+            self.unidad.cliente.collection(COLECCION_PACIENTES)
+            .where(filter=FieldFilter("prefijos_nombre", "array_contains", principal))
+            .limit(MAX_CANDIDATOS_BUSQUEDA)
+        )
+        encontrados = [
+            self.a_paciente(d.id, d.to_dict() or {})
+            for d in consulta.stream(timeout=self.unidad.timeout)
+        ]
+        coinciden = [p for p in encontrados if busqueda.coincide(palabras, p.nombres, p.apellidos)]
+        coinciden.sort(
+            key=lambda p: (
+                busqueda.normalizar(p.apellidos),
+                busqueda.normalizar(p.nombres),
+                p.id_paciente,
+            )
+        )
+        return coinciden[:limite]
 
     def archivar(self, id_paciente: str, baja: Baja) -> None:
         referencia = self.referencia(id_paciente)
