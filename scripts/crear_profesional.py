@@ -120,8 +120,16 @@ def main() -> None:
         except Exception as error:  # noqa: BLE001 - se informa y se puede reintentar
             print(f"Aviso: no se vinculo en MySQL ({error}).")
             print("Reintentar con: python -m scripts.sincronizar_profesionales")
-    else:
-        print("Vincular este UUID al registro clinico local cuando se habiliten escrituras.")
+    elif args.institucion == Institucion.LABORATORIO_CLINICO:
+        # Otra base: si falla, PostgreSQL conserva la cuenta y se puede repetir la sincronizacion.
+        from scripts.sincronizar_profesionales import sincronizar_laboratorio
+
+        try:
+            sincronizar_laboratorio(dsn, [str(identificador)])
+            print("Perfil creado en MongoDB (coleccion profesionales).")
+        except Exception as error:  # noqa: BLE001 - se informa y se puede reintentar
+            print(f"Aviso: no se creo el perfil en MongoDB ({error}).")
+            print("Reintentar con: python -m scripts.sincronizar_profesionales")
 
 
 if __name__ == "__main__":

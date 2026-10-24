@@ -9,7 +9,7 @@ from app.core.config import Settings
 from app.domain.institucion import Institucion
 from app.infrastructure.identity.jwt import AutenticadorCentral
 from app.infrastructure.identity.postgresql import DirectorioPostgreSQL
-from app.infrastructure.persistence.mongodb.lectura import UnidadTrabajoLecturaMongo
+from app.infrastructure.persistence.mongodb.unidad import UnidadTrabajoMongo
 from app.infrastructure.persistence.mysql.unidad import UnidadTrabajoMySQL
 from app.infrastructure.persistence.postgresql.unidad import UnidadTrabajoPostgreSQL
 
@@ -52,8 +52,8 @@ def crear_contenedor(settings: Settings) -> Contenedor:
             settings.mongodb_uri.get_secret_value(), serverSelectionTimeoutMS=5000
         )
         contenedor.cierres.append(cliente.close)
-        contenedor.unidades_trabajo[Institucion.LABORATORIO_CLINICO] = lambda: (
-            UnidadTrabajoLecturaMongo(cliente[settings.mongodb_database])
+        contenedor.unidades_trabajo[Institucion.LABORATORIO_CLINICO] = lambda: UnidadTrabajoMongo(
+            cliente[settings.mongodb_database]
         )
     registrar_firestore(contenedor, settings)
     return contenedor

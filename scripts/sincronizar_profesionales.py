@@ -5,6 +5,7 @@ recibe un perfil sin credenciales (nombres, apellidos, rol, estado):
 
 - Hospital General: tabla personal_medico (misma base que la identidad, atomico).
 - Centro Pediatrico: tabla medico de MySQL (con la cuenta administrativa de MYSQL_ROOT_PASSWORD).
+- Laboratorio Clinico: coleccion `profesionales` de MongoDB (cuenta de MONGO_ROOT_PASSWORD).
 - Clinica Odontologica: coleccion `profesionales` de Firestore.
 
 Es idempotente: se puede ejecutar cuantas veces se quiera.
@@ -19,6 +20,8 @@ import psycopg
 import pymysql
 from dotenv import dotenv_values
 from google.cloud import firestore
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 from app.core.config import PROJECT_ROOT, Settings
 from app.infrastructure.persistence.firestore.cliente import crear_cliente_firestore
@@ -86,6 +89,53 @@ def sincronizar_centro_pediatrico(
         if propia:
             conexion_mysql.close()
     return len(filas)
+
+
+def sincronizar_laboratorio(dsn: str, ids: list[str] | None = None, coleccion=None) -> int:
+    """MongoDB (Laboratorio Clinico): crea o actualiza la coleccion `profesionales`."""
+    consulta = (
+        "SELECT id_profesional::text, nombres, apellidos, activo FROM identidad.profesional "
+        "WHERE establecimiento = 'laboratorio_clinico'"
+    )
+    parametros: tuple = ()
+    if ids:
+        consulta += " AND id_profesional::text = ANY(%s)"
+        parametros = (ids,)
+    with psycopg.connect(dsn, connect_timeout=5) as conn:
+        filas = conn.execute(consulta, parametros).fetchall()
+    if not filas:
+        return 0
+    cliente = None
+    if coleccion is None:
+        cliente, coleccion = _conectar_mongo_admin()
+    try:
+        for id_profesional, nombres, apellidos, activo in filas:
+            coleccion.update_one(
+                {"id_profesional_central": id_profesional},
+                {"$set": {"nombres": nombres, "apellidos": apellidos, "activo": activo}},
+                upsert=True,
+            )
+    finally:
+        if cliente is not None:
+            cliente.close()
+    return len(filas)
+
+
+def _conectar_mongo_admin():
+    config = dotenv_values(PROJECT_ROOT / ".env")
+    clave = os.environ.get("MONGO_ROOT_PASSWORD") or config.get("MONGO_ROOT_PASSWORD")
+    if not clave:
+        raise RuntimeError("Falta MONGO_ROOT_PASSWORD en .env (cuenta administrativa de MongoDB).")
+    puerto = int(os.environ.get("MONGO_PORT") or config.get("MONGO_PORT") or 27018)
+    cliente = MongoClient(
+        host="127.0.0.1",
+        port=puerto,
+        username="historiales_admin",
+        password=clave,
+        authSource="admin",
+        serverSelectionTimeoutMS=5000,
+    )
+    return cliente, cliente[Settings().mongodb_database].profesionales
 
 
 def _conectar_mysql_admin() -> pymysql.Connection:
@@ -163,6 +213,11 @@ def main() -> int:
         print(f"Centro Pediatrico: {total_pediatrico} profesionales sincronizados.")
     except RuntimeError as error:
         print(f"Centro Pediatrico: omitido ({error})")
+    try:
+        total_lab = sincronizar_laboratorio(dsn)
+        print(f"Laboratorio Clinico: {total_lab} profesionales sincronizados.")
+    except (RuntimeError, PyMongoError) as error:
+        print(f"Laboratorio Clinico: omitido ({error})")
     try:
         total = sincronizar(dsn)
         print(f"Clinica Odontologica: {total} profesionales sincronizados.")
