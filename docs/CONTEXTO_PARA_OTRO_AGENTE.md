@@ -4,6 +4,49 @@ Actualizado el 21 de octubre de 2026. Este documento resume el estado observado 
 el trabajo pendiente para continuar en el mismo repositorio. Confirmar el estado vivo
 de Git, Docker y las bases antes de basarse en los datos de entorno anotados aquí.
 
+## Actualización 22 de octubre de 2026
+
+- Firestore conectado (Admin SDK, `firebase-admin==7.7.0`) al proyecto
+  `proyectobases2-83f2e`, base `(default)`. Clave en `.secrets/firebase-adminsdk.json`
+  (ignorada por Git/Docker). `python -m scripts.probar_firestore` verifica la conexión.
+- Esqueleto de las cinco operaciones del curso: dominio (`paciente.py`, `consulta.py`),
+  puertos (`historial.py`), casos de uso, rutas y permisos. Las piezas que un motor no
+  implementa lanzan `OperacionPendiente` (HTTP 501). Estado por motor en
+  `docs/operaciones_comunes.md`.
+- Firestore implementa registrar y leer paciente con `WriteBatch` en la unidad de
+  trabajo. Modelo de consultas/archivo pendiente: `docs/modelo_odontologia.md`.
+- Proyecto ahora también en `C:\Users\henry\OneDrive\...\Proyecto_Bases_DatosII`.
+
+## Actualización 23 de octubre de 2026
+
+Decisiones del equipo: cada institución guarda solo sus pacientes (contacto y
+alergias opcionales en el contrato común); rol `secretaria` que registra pacientes
+y gestiona citas sin acceso clínico; la clínica odontológica agenda citas y lleva
+odontograma.
+
+- Firestore completo (pacientes, contacto/alergias, consultas, archivo, citas con
+  candado por día, odontograma FDI, perfiles de profesionales). Probado contra el
+  proyecto real con `tests/integration/test_firestore.py`. Modelo y justificación en
+  `docs/modelo_odontologia.md`.
+- `database/postgresql/006_rol_secretaria_citas.sql`: rol, permisos `citas:*` y
+  triggers que impiden permisos clínicos a la secretaria (aplicar a mano en
+  volúmenes existentes). `scripts/sincronizar_profesionales.py` copia perfiles a Firestore.
+- Avance estimado en `docs/avance.md`. El frontend no existe todavía.
+
+## Actualización 23 de octubre de 2026 (noche)
+
+Decisiones nuevas del equipo, ya aplicadas en código y documentos:
+
+- Frontend: HTML/JS sencillo servido por FastAPI (no React). Sin construir todavía;
+  faltan mockups. Plan en `docs/frontend.md`.
+- La secretaria no archiva, y existe solo en `clinica_odontologica`
+  (`database/postgresql/007_secretaria_restricciones.sql`, `permisos.PERMISOS_VEDADOS_SECRETARIA`,
+  validación en `scripts/crear_profesional.py`). Alergias: opcionales; la secretaria
+  puede anotarlas pero la API no se las devuelve.
+- Odontograma: el estado de la pieza sale de una lista fija (`EstadoDental` en
+  `app/domain/odontograma.py`); la API responde 422 con otro valor.
+- Hueco conocido: no hay búsqueda de pacientes por nombre (solo por ID).
+
 ## Objetivo y decisiones del equipo
 
 Es un proyecto académico de Bases de Datos II: una aplicación cliente-servidor con

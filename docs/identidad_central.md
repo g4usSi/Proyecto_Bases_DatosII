@@ -31,6 +31,34 @@ con contador persistido en PostgreSQL. Los errores no revelan si un correo exist
 La contraseña se verifica con un hash ficticio cuando la cuenta no existe. Las
 respuestas de validación no reflejan entradas que puedan contener contraseñas.
 
+## Rol secretaria (Clínica Odontológica)
+
+Decisiones del equipo (23/10/2026): la secretaria **existe solo en la clínica
+odontológica**, registra pacientes (puede anotar alergias, que son opcionales) y
+gestiona la agenda. No tiene acceso clínico y **no puede archivar** historiales.
+Sus permisos por defecto son `pacientes:leer`, `pacientes:registrar`, `citas:leer` y
+`citas:gestionar`.
+
+PostgreSQL lo impone para que ninguna herramienta lo salte:
+
+- `006_rol_secretaria_citas.sql`: agrega el rol y los permisos `citas:*`, y triggers
+  que impiden asignar permisos clínicos a una secretaria.
+- `007_secretaria_restricciones.sql`: agrega `historiales:archivar` a los permisos
+  vedados (`identidad.permisos_vedados_secretaria()`) y un `CHECK`
+  (`ck_secretaria_solo_odontologia`) que exige `establecimiento = 'clinica_odontologica'`.
+  Si alguna secretaria ya tenía `historiales:archivar`, la migración se lo quita.
+
+`scripts.crear_profesional` rechaza antes de tocar la base una secretaria de otra
+institución o con permisos vedados. En la API, las alergias del paciente se ocultan a
+quien no tiene `historiales:leer`.
+
+Para una base creada antes de estos cambios (PowerShell, desde la raíz, en este orden):
+
+```powershell
+Get-Content database\postgresql\006_rol_secretaria_citas.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general
+Get-Content database\postgresql\007_secretaria_restricciones.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general
+```
+
 ## Crear la primera cuenta
 
 Con las bases ejecutándose, desde PowerShell en la raíz:

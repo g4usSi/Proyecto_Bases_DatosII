@@ -2,6 +2,11 @@
 
 Actualizado el 21 de octubre de 2026.
 
+> **Actualización 22/10/2026:** conexión implementada y probada (proyecto
+> `proyectobases2-83f2e`, base `(default)`). Clave en `.secrets/firebase-adminsdk.json`,
+> configuración `HISTORIALES_FIRESTORE_*`, adaptador en
+> `app/infrastructure/persistence/firestore/`. Siguiente paso: [modelado](modelo_odontologia.md).
+
 ## Decisión del equipo
 
 Para la Clínica Odontológica, FastAPI se conectará directamente a Cloud Firestore
