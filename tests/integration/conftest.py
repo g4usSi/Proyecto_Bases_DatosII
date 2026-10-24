@@ -58,7 +58,11 @@ def mysql_pruebas(config_local):
     }
     admin = pymysql.connect(**opciones)
     try:
-        for archivo in ("001_hospital_pediatrico.sql", "002_integridad.sql"):
+        for archivo in (
+            "001_hospital_pediatrico.sql",
+            "002_integridad.sql",
+            "004_escritura_api.sql",
+        ):
             ejecutar_script(admin, PROJECT_ROOT / "database/mysql" / archivo, nombre)
         yield ConfiguracionPrivada({**opciones, "database": nombre, "autocommit": False})
     finally:

@@ -41,6 +41,8 @@ services:
       - ./database/mysql/001_hospital_pediatrico.sql:/docker-entrypoint-initdb.d/001_hospital.sql:ro
       - ./database/mysql/002_integridad.sql:/docker-entrypoint-initdb.d/002_integridad.sql:ro
       - ./database/mysql/003_permisos.sql:/docker-entrypoint-initdb.d/003_permisos.sql:ro
+      - ./database/mysql/004_escritura_api.sql:/docker-entrypoint-initdb.d/004_escritura_api.sql:ro
+      - ./database/mysql/005_permisos_escritura.sql:/docker-entrypoint-initdb.d/005_permisos_escritura.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql -u historiales_app -D hospital_pediatrico -e 'SELECT 1' >/dev/null"]
       interval: 5s

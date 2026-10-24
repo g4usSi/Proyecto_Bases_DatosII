@@ -28,33 +28,16 @@ from app.domain.errores import (
     ProfesionalNoVinculado,
 )
 from app.domain.paciente import Alergia, Baja, Contacto, NuevoPaciente, Paciente
+from app.infrastructure.persistence.comun import (
+    con_utc,
+    entero_positivo,
+    escapar_like,
+    utc_ingenuo,
+)
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 MOTOR = "PostgreSQL"
 ESTADO_ARCHIVADO = "Inactivo"
-
-
-def _entero(id_paciente: str) -> int | None:
-    """Los identificadores son enteros positivos de 32 bits; todo lo demas no existe."""
-    if not id_paciente.isascii() or not id_paciente.isdecimal():
-        return None
-    numero = int(id_paciente)
-    return numero if 0 < numero <= 2_147_483_647 else None
-
-
-def _escapar_like(texto: str) -> str:
-    return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _utc_ingenuo(valor: datetime) -> datetime:
-    """Las columnas TIMESTAMP guardan UTC sin zona; asi no dependen de la zona del servidor."""
-    if valor.tzinfo is None:
-        return valor
-    return valor.astimezone(UTC).replace(tzinfo=None)
-
-
-def _con_utc(valor: datetime) -> datetime:
-    return valor.replace(tzinfo=UTC) if valor.tzinfo is None else valor.astimezone(UTC)
 
 
 class RepositorioPacientesPostgreSQL:
@@ -62,7 +45,7 @@ class RepositorioPacientesPostgreSQL:
         self.conexion = conexion
 
     def obtener_por_id(self, id_paciente: str) -> Paciente | None:
-        numero = _entero(id_paciente)
+        numero = entero_positivo(id_paciente)
         if numero is None:
             return None
         fila = self.conexion.execute(
@@ -134,7 +117,7 @@ class RepositorioPacientesPostgreSQL:
         parametros: list[Any] = []
         for palabra in palabras:
             condiciones.append("(nombre_norm LIKE %s OR nombre_norm LIKE %s)")
-            parametros += [f"{_escapar_like(palabra)}%", f"% {_escapar_like(palabra)}%"]
+            parametros += [f"{escapar_like(palabra)}%", f"% {escapar_like(palabra)}%"]
         filas = self.conexion.execute(
             "SELECT id_paciente, nombres, apellidos, fecha_nacimiento, estado FROM ("
             "  SELECT *, lower(unaccent(nombres || ' ' || apellidos)) AS nombre_norm FROM paciente"
@@ -148,7 +131,7 @@ class RepositorioPacientesPostgreSQL:
         ]
 
     def archivar(self, id_paciente: str, baja: Baja) -> None:
-        numero = _entero(id_paciente)
+        numero = entero_positivo(id_paciente)
         if numero is None:
             raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
         # Condicional: si otra solicitud lo archivo primero, no se sobrescribe su baja.
@@ -203,7 +186,7 @@ class RepositorioHistorialPostgreSQL:
     def registrar_consulta(
         self, id_paciente: str, id_profesional: str, datos: NuevaConsulta
     ) -> Consulta:
-        numero = _entero(id_paciente)
+        numero = entero_positivo(id_paciente)
         if numero is None:
             raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
         if datos.tratamientos and not datos.diagnosticos:
@@ -228,7 +211,7 @@ class RepositorioHistorialPostgreSQL:
             id_atencion = self.conexion.execute(
                 "INSERT INTO atencion (id_paciente, id_personal, tipo_atencion, fecha_hora, "
                 "motivo, notas) VALUES (%s, %s, 'CONSULTA', %s, %s, %s) RETURNING id_atencion",
-                (numero, id_personal, _utc_ingenuo(ahora), datos.motivo, datos.notas),
+                (numero, id_personal, utc_ingenuo(ahora), datos.motivo, datos.notas),
             ).fetchone()[0]
         except psycopg.errors.CheckViolation as error:
             # Respaldo de la regla en la base (trg_atencion_paciente_activo).
@@ -256,11 +239,11 @@ class RepositorioHistorialPostgreSQL:
             id_orden = self.conexion.execute(
                 "INSERT INTO orden_medica (id_atencion, id_personal, fecha_hora, tipo_orden) "
                 "VALUES (%s, %s, %s, 'Medicamento') RETURNING id_orden",
-                (id_atencion, id_personal, _utc_ingenuo(ahora)),
+                (id_atencion, id_personal, utc_ingenuo(ahora)),
             ).fetchone()[0]
             id_receta = self.conexion.execute(
                 "INSERT INTO receta (id_orden, fecha_hora) VALUES (%s, %s) RETURNING id_receta",
-                (id_orden, _utc_ingenuo(ahora)),
+                (id_orden, utc_ingenuo(ahora)),
             ).fetchone()[0]
             for r in datos.recetas:
                 self.conexion.execute(
@@ -292,13 +275,13 @@ class RepositorioHistorialPostgreSQL:
     def listar_consultas(
         self, id_paciente: str, limite: int, antes_de: datetime | None = None
     ) -> list[Consulta]:
-        numero = _entero(id_paciente)
+        numero = entero_positivo(id_paciente)
         if numero is None:
             return []
         filtro, parametros = "", [numero]
         if antes_de is not None:
             filtro = "AND a.fecha_hora < %s "
-            parametros.append(_utc_ingenuo(antes_de))
+            parametros.append(utc_ingenuo(antes_de))
         filas = self.conexion.execute(
             "SELECT a.id_atencion, COALESCE(pm.id_profesional_central::text, "
             "'sin-cuenta-' || pm.id_personal), a.fecha_hora, "
@@ -344,7 +327,7 @@ class RepositorioHistorialPostgreSQL:
                 str(f[0]),
                 id_paciente,
                 f[1],
-                _con_utc(f[2]),
+                con_utc(f[2]),
                 f[3],
                 f[4],
                 tuple(diagnosticos[f[0]]),

@@ -10,8 +10,8 @@ from app.domain.institucion import Institucion
 from app.infrastructure.identity.jwt import AutenticadorCentral
 from app.infrastructure.identity.postgresql import DirectorioPostgreSQL
 from app.infrastructure.persistence.mongodb.lectura import UnidadTrabajoLecturaMongo
+from app.infrastructure.persistence.mysql.unidad import UnidadTrabajoMySQL
 from app.infrastructure.persistence.postgresql.unidad import UnidadTrabajoPostgreSQL
-from app.infrastructure.persistence.sql import UnidadTrabajoSQL
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def crear_contenedor(settings: Settings) -> Contenedor:
             dsn
         )
     if settings.mysql_host and settings.mysql_password:
-        contenedor.unidades_trabajo[Institucion.CENTRO_PEDIATRICO] = lambda: UnidadTrabajoSQL(
+        contenedor.unidades_trabajo[Institucion.CENTRO_PEDIATRICO] = lambda: UnidadTrabajoMySQL(
             lambda: pymysql.connect(
                 host=settings.mysql_host,
                 port=settings.mysql_port,
@@ -45,11 +45,7 @@ def crear_contenedor(settings: Settings) -> Contenedor:
                 read_timeout=10,
                 write_timeout=10,
                 init_command="SET time_zone = '+00:00'",
-            ),
-            "SELECT id_paciente, nombre, apellido, fecha_nacimiento "
-            "FROM paciente WHERE id_paciente = %s",
-            (pymysql.MySQLError,),
-            motor="MySQL",
+            )
         )
     if settings.mongodb_uri:
         cliente = MongoClient(

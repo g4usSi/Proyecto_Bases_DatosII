@@ -110,6 +110,16 @@ def main() -> None:
             print("Reintentar con: python -m scripts.sincronizar_profesionales")
     elif args.institucion == Institucion.HOSPITAL_GENERAL:
         print("Vinculado a personal_medico del Hospital General.")
+    elif args.institucion == Institucion.CENTRO_PEDIATRICO:
+        # Otra base: si falla, PostgreSQL conserva la cuenta y se puede repetir la sincronizacion.
+        from scripts.sincronizar_profesionales import sincronizar_centro_pediatrico
+
+        try:
+            sincronizar_centro_pediatrico(dsn, [str(identificador)])
+            print("Vinculado a la tabla medico del Centro Pediatrico.")
+        except Exception as error:  # noqa: BLE001 - se informa y se puede reintentar
+            print(f"Aviso: no se vinculo en MySQL ({error}).")
+            print("Reintentar con: python -m scripts.sincronizar_profesionales")
     else:
         print("Vincular este UUID al registro clinico local cuando se habiliten escrituras.")
 
