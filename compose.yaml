@@ -17,6 +17,8 @@ services:
       - ./database/postgresql/003_vinculo_profesional.sql:/docker-entrypoint-initdb.d/003_vinculo.sql:ro
       - ./database/postgresql/004_permisos.sql:/docker-entrypoint-initdb.d/004_permisos.sql:ro
       - ./database/postgresql/005_proteger_login.sql:/docker-entrypoint-initdb.d/005_proteger_login.sql:ro
+      - ./database/postgresql/006_rol_secretaria_citas.sql:/docker-entrypoint-initdb.d/006_rol_secretaria_citas.sql:ro
+      - ./database/postgresql/007_secretaria_restricciones.sql:/docker-entrypoint-initdb.d/007_secretaria_restricciones.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U historiales_admin -d hospital_general"]
       interval: 5s
@@ -76,6 +78,11 @@ services:
       HISTORIALES_MYSQL_USER: historiales_app
       HISTORIALES_MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       HISTORIALES_MONGODB_URI: mongodb://historiales_app:${MONGO_APP_PASSWORD}@mongo:27017/laboratorio_clinico?authSource=laboratorio_clinico
+      # La clave NO se copia a la imagen: se monta de solo lectura desde .secrets/.
+      HISTORIALES_FIRESTORE_CREDENTIALS: /run/secrets/historiales/firebase-adminsdk.json
+      HISTORIALES_FIRESTORE_DATABASE: ${HISTORIALES_FIRESTORE_DATABASE:-(default)}
+    volumes:
+      - ./.secrets:/run/secrets/historiales:ro
     depends_on:
       postgres: {condition: service_healthy}
       mysql: {condition: service_healthy}

@@ -8,3 +8,7 @@ PyMySQL[rsa]==1.2.3
 pymongo==4.18.2
 pwdlib[argon2]==0.3.1
 PyJWT==2.15.1
+# Clinica odontologica: Cloud Firestore mediante el SDK Admin de Firebase.
+firebase-admin==7.7.0
+# Base de zonas horarias para zoneinfo en Windows (agenda de citas).
+tzdata==2026.5

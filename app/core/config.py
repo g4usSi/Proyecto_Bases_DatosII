@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     mysql_database: str = "hospital_pediatrico"
     mongodb_uri: SecretStr | None = None
     mongodb_database: str = "laboratorio_clinico"
+    # Clinica odontologica: clave JSON de la cuenta de servicio de Firebase.
+    # Ruta relativa = relativa a la raiz del proyecto. Nunca subir el archivo a Git.
+    firestore_credentials: Path | None = None
+    firestore_project_id: str | None = None  # opcional: se toma del JSON si se omite
+    firestore_database: str = "(default)"
+    # Zona horaria de las agendas (dia local de cada cita). Guatemala: UTC-6, sin horario de verano.
+    zona_horaria: str = "America/Guatemala"
 
     @model_validator(mode="after")
     def validar_identidad(self) -> "Settings":
@@ -43,6 +50,13 @@ class Settings(BaseSettings):
         if self.mysql_host and not self.mysql_password:
             raise ValueError("MYSQL_HOST requiere MYSQL_PASSWORD.")
         return self
+
+    @field_validator("firestore_credentials")
+    @classmethod
+    def resolver_credenciales(cls, value: Path | None) -> Path | None:
+        if value is None or str(value).strip() in {"", "."}:
+            return None
+        return value if value.is_absolute() else PROJECT_ROOT / value
 
     @field_validator("api_prefix")
     @classmethod

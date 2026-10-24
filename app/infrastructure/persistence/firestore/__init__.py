@@ -1,1 +1,1 @@
-"""Adaptador futuro de la clinica odontologica: Cloud Firestore."""
+"""Adaptador de la clinica odontologica: Cloud Firestore (Firebase Admin SDK)."""

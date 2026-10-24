@@ -10,7 +10,10 @@ from dotenv import dotenv_values
 from pwdlib import PasswordHash
 
 from app.core.config import PROJECT_ROOT
+from app.domain import permisos
 from app.domain.institucion import Institucion
+
+ROLES = ["medico", "enfermeria", "laboratorista", "odontologo", "secretaria"]
 
 
 def main() -> None:
@@ -21,16 +24,27 @@ def main() -> None:
     parser.add_argument(
         "--institucion", required=True, choices=[item.value for item in Institucion]
     )
-    parser.add_argument(
-        "--rol", required=True, choices=["medico", "enfermeria", "laboratorista", "odontologo"]
-    )
+    parser.add_argument("--rol", required=True, choices=ROLES)
     parser.add_argument(
         "--permiso",
         action="append",
         default=[],
-        help="Repetir por permiso; defecto solo pacientes:leer",
+        help=(
+            "Repetir por permiso. Por defecto: pacientes:leer; secretaria: pacientes:leer, "
+            "pacientes:registrar, citas:leer y citas:gestionar."
+        ),
     )
     args = parser.parse_args()
+    elegidos = set(args.permiso) or set(
+        permisos.PERMISOS_POR_ROL.get(args.rol, permisos.PERMISOS_POR_DEFECTO)
+    )
+    if args.rol == "secretaria" and args.institucion != permisos.INSTITUCION_DE_SECRETARIA:
+        parser.error("El rol secretaria solo existe en la clinica_odontologica.")
+    if args.rol == "secretaria" and elegidos & permisos.PERMISOS_VEDADOS_SECRETARIA:
+        parser.error(
+            "Una secretaria no puede tener permisos clinicos ni archivar historiales: "
+            + ", ".join(sorted(elegidos & permisos.PERMISOS_VEDADOS_SECRETARIA))
+        )
     correo = args.correo.strip().lower()
     if "@" not in correo or any(char.isspace() for char in correo):
         parser.error("Correo invalido.")
@@ -60,19 +74,37 @@ def main() -> None:
                     args.rol,
                 ),
             )
-            for permiso in set(args.permiso or ["pacientes:leer"]):
+            for permiso in sorted(elegidos):
                 conn.execute(
                     "INSERT INTO identidad.profesional_permiso VALUES (%s,%s)",
                     (identificador, permiso),
                 )
     except psycopg.errors.UniqueViolation:
         parser.error("Ese correo ya tiene una cuenta; no se modifico.")
+    except psycopg.errors.CheckViolation:
+        parser.error(
+            "La base rechazo el rol o los permisos. Aplica 006 y 007 (database/postgresql) "
+            "si la base se creo antes de agregar el rol secretaria."
+        )
     except psycopg.errors.ForeignKeyViolation:
         parser.error("Institucion o permiso desconocido; se revirtio el alta.")
     except psycopg.Error:
         parser.error("No se pudo crear el profesional. Revisa conexiones y datos requeridos.")
     print(f"Profesional creado: {identificador}. Establecimiento: {args.institucion}.")
-    print("Vincular este UUID al registro clinico local cuando se habiliten escrituras.")
+    print(f"Permisos: {', '.join(sorted(elegidos))}.")
+    if args.institucion == Institucion.CLINICA_ODONTOLOGICA:
+        # Perfil local en Firestore (sin correo ni contrasena). No es una transaccion entre
+        # motores: si falla, PostgreSQL conserva la cuenta y se puede repetir la sincronizacion.
+        from scripts.sincronizar_profesionales import sincronizar
+
+        try:
+            sincronizar(dsn, [str(identificador)])
+            print("Perfil creado en Firestore (coleccion profesionales).")
+        except Exception as error:  # noqa: BLE001 - se informa y se puede reintentar
+            print(f"Aviso: no se creo el perfil en Firestore ({error}).")
+            print("Reintentar con: python -m scripts.sincronizar_profesionales")
+    else:
+        print("Vincular este UUID al registro clinico local cuando se habiliten escrituras.")
 
 
 if __name__ == "__main__":

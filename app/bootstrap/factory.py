@@ -1,3 +1,6 @@
+import logging
+from zoneinfo import ZoneInfo
+
 import psycopg
 import pymysql
 from pymongo import MongoClient
@@ -9,6 +12,8 @@ from app.infrastructure.identity.jwt import AutenticadorCentral
 from app.infrastructure.identity.postgresql import DirectorioPostgreSQL
 from app.infrastructure.persistence.mongodb.lectura import UnidadTrabajoLecturaMongo
 from app.infrastructure.persistence.sql import UnidadTrabajoSQL
+
+logger = logging.getLogger(__name__)
 
 
 def crear_contenedor(settings: Settings) -> Contenedor:
@@ -29,6 +34,7 @@ def crear_contenedor(settings: Settings) -> Contenedor:
             "SELECT id_paciente, nombres, apellidos, fecha_nacimiento "
             "FROM public.paciente WHERE id_paciente = %s",
             (psycopg.Error,),
+            motor="PostgreSQL",
         )
     if settings.mysql_host and settings.mysql_password:
         contenedor.unidades_trabajo[Institucion.CENTRO_PEDIATRICO] = lambda: UnidadTrabajoSQL(
@@ -47,6 +53,7 @@ def crear_contenedor(settings: Settings) -> Contenedor:
             "SELECT id_paciente, nombre, apellido, fecha_nacimiento "
             "FROM paciente WHERE id_paciente = %s",
             (pymysql.MySQLError,),
+            motor="MySQL",
         )
     if settings.mongodb_uri:
         cliente = MongoClient(
@@ -56,4 +63,31 @@ def crear_contenedor(settings: Settings) -> Contenedor:
         contenedor.unidades_trabajo[Institucion.LABORATORIO_CLINICO] = lambda: (
             UnidadTrabajoLecturaMongo(cliente[settings.mongodb_database])
         )
+    registrar_firestore(contenedor, settings)
     return contenedor
+
+
+def registrar_firestore(contenedor: Contenedor, settings: Settings) -> None:
+    ruta = settings.firestore_credentials
+    if ruta is None:
+        return
+    if not ruta.is_file():
+        # Un companero sin la clave puede trabajar con los otros tres motores.
+        logger.warning(
+            "No se encontro la clave de Firebase en %s; la clinica odontologica respondera 503.",
+            ruta,
+        )
+        return
+    # Importacion tardia: el SDK de Google solo se carga si Firestore esta configurado.
+    from app.infrastructure.persistence.firestore.cliente import crear_cliente_firestore
+    from app.infrastructure.persistence.firestore.unidad import UnidadTrabajoFirestore
+
+    cliente, cerrar = crear_cliente_firestore(
+        ruta, settings.firestore_project_id, settings.firestore_database
+    )
+    contenedor.cierres.append(cerrar)
+    zona = ZoneInfo(settings.zona_horaria)
+    contenedor.unidades_trabajo[Institucion.CLINICA_ODONTOLOGICA] = lambda: UnidadTrabajoFirestore(
+        cliente, zona
+    )
+    logger.info("Firestore conectado para la clinica odontologica (proyecto %s).", cliente.project)

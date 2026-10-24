@@ -49,6 +49,9 @@ def main() -> None:
         f"mongodb://historiales_app:{quote(mongo, safe='')}@127.0.0.1:{mongo_port}"
         "/laboratorio_clinico?authSource=laboratorio_clinico",
     )
+    # Firestore: la clave JSON se guarda en .secrets/ (ignorado por Git y por Docker).
+    asegurar("HISTORIALES_FIRESTORE_CREDENTIALS", ".secrets/firebase-adminsdk.json")
+    asegurar("HISTORIALES_FIRESTORE_DATABASE", "(default)")
     if nuevos:
         with archivo.open("a", encoding="utf-8") as salida:
             salida.write("\n# Configuracion local de motores e identidad (no subir a Git).\n")
@@ -57,6 +60,11 @@ def main() -> None:
     print(
         f"Configuracion lista: {len(nuevos)} variables agregadas. Secretos guardados solo en .env."
     )
+    clave = RAIZ / ".secrets" / "firebase-adminsdk.json"
+    if valores["HISTORIALES_FIRESTORE_CREDENTIALS"] == ".secrets/firebase-adminsdk.json" and (
+        not clave.is_file()
+    ):
+        print("Aviso: falta .secrets/firebase-adminsdk.json; Firestore respondera 503.")
 
 
 if __name__ == "__main__":
