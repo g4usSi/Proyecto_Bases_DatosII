@@ -2,8 +2,16 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.application.errores import IntegracionNoConfigurada
-from app.domain.errores import AccesoDenegado, PacienteNoEncontrado, TokenInvalido
+from app.application.errores import IntegracionNoConfigurada, OperacionPendiente
+from app.domain.errores import (
+    AccesoDenegado,
+    CitaNoEncontrada,
+    ConflictoAgenda,
+    DatosInvalidos,
+    PacienteArchivado,
+    PacienteNoEncontrado,
+    TokenInvalido,
+)
 
 
 def registrar_manejadores(app: FastAPI) -> None:
@@ -17,7 +25,8 @@ def registrar_manejadores(app: FastAPI) -> None:
         return JSONResponse(status_code=422, content={"detail": detalles})
 
     @app.exception_handler(PacienteNoEncontrado)
-    async def paciente_no_encontrado(request: Request, error: PacienteNoEncontrado) -> JSONResponse:
+    @app.exception_handler(CitaNoEncontrada)
+    async def no_encontrado(request: Request, error: Exception) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(error)})
 
     @app.exception_handler(AccesoDenegado)
@@ -38,4 +47,21 @@ def registrar_manejadores(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(error)}
+        )
+
+    @app.exception_handler(PacienteArchivado)
+    @app.exception_handler(ConflictoAgenda)
+    async def conflicto(request: Request, error: Exception) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(error)})
+
+    @app.exception_handler(OperacionPendiente)
+    async def operacion_pendiente(request: Request, error: OperacionPendiente) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED, content={"detail": str(error)}
+        )
+
+    @app.exception_handler(DatosInvalidos)
+    async def datos_invalidos(request: Request, error: DatosInvalidos) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(error)}
         )
