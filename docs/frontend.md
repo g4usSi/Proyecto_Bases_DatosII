@@ -66,6 +66,7 @@ la autorización: la API vuelve a validar cada llamada.
 | --- | --- | --- | --- |
 | Login | Todos | `POST /auth/login`, `GET /auth/me` | — |
 | Registrar paciente | Quien registra (secretaria incluida) | `POST /pacientes` | `pacientes:registrar` |
+| Buscar paciente | Quien lee pacientes | `GET /pacientes?nombre=` | `pacientes:leer` |
 | Ficha del paciente | Quien lee pacientes | `GET /pacientes/{id}` | `pacientes:leer` |
 | Historial de consultas | Personal clínico | `GET /pacientes/{id}/historial` | `historiales:leer` |
 | Nueva consulta (diagnóstico, tratamiento, receta) | Personal clínico | `POST /pacientes/{id}/consultas` | `consultas:registrar` |
@@ -87,17 +88,21 @@ la autorización: la API vuelve a validar cada llamada.
   (llegan como `null`). La pantalla de quien no tiene `historiales:leer` no debe decir
   "no registradas": simplemente no muestra esa sección.
 - **Contacto** también es opcional (teléfono, correo, dirección).
-- **501**: mostrar "Esta función todavía no está disponible para tu institución". Hoy lo
-  devuelven PostgreSQL, MySQL y MongoDB en casi todo salvo leer paciente.
+- **501**: mostrar "Esta función todavía no está disponible para tu institución". Hoy solo
+  lo devuelven citas y odontograma fuera de la clínica odontológica (los demás flujos
+  funcionan en los cuatro motores).
   **503**: "El servicio de datos no está disponible, intenta más tarde".
 - **401**: volver al login. **409**: historial archivado u horario ocupado, con el
   mensaje de la API. **422**: marcar el campo.
 
-### Hueco de la API detectado
+### Búsqueda de pacientes
 
-Hoy solo existe `GET /pacientes/{id}`: no hay **búsqueda por nombre**. Una interfaz usable
-la necesita (por ejemplo `GET /pacientes?nombre=...`). Está pendiente decidir y
-agregarla en los cuatro motores antes de diseñar la pantalla de búsqueda.
+`GET /api/v1/pacientes?nombre=...&limite=20` (permiso `pacientes:leer`) ya existe y
+funciona igual en los cuatro motores: cada palabra escrita debe ser el comienzo de una
+palabra del nombre, sin importar mayúsculas ni acentos. Pide al menos 2 letras y devuelve
+un resumen (`id_paciente`, nombres, apellidos, fecha de nacimiento y `archivado`) que debe
+marcarse en la lista para no ofrecer "nueva consulta" a un historial archivado. Para el
+detalle (contacto, alergias) se llama luego a `GET /pacientes/{id}`.
 
 ## Odontograma interactivo
 
@@ -164,7 +169,8 @@ Cada mockup debe indicar: qué rol lo ve, qué pasa con 403/501/503 y el estado 
 
 - [ ] Login
 - [ ] Menú principal según rol (secretaria / odontólogo / otros)
-- [ ] Registrar paciente (con contacto y alergias opcionales)
+- [ ] Registrar paciente (con contacto y alergias opcionales; el Centro Pediátrico exige fecha de nacimiento)
+- [ ] Buscar paciente por nombre (lista con marca de archivado)
 - [ ] Ficha del paciente
 - [ ] Historial de consultas
 - [ ] Nueva consulta con varios diagnósticos, tratamientos y recetas

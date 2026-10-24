@@ -12,14 +12,15 @@ Para retomar decisiones, pendientes, límites conocidos y pasos recomendados, le
 
 | Establecimiento | Motor | Estado actual |
 | --- | --- | --- |
-| Hospital General | PostgreSQL | SQL original integrado, identidad central y lectura de paciente. |
-| Centro Pediátrico | MySQL 8.4 | Modelo revisado, reglas de integridad, stock y saldos; lectura de paciente. |
-| Laboratorio Clínico | MongoDB 8 | Colecciones, validadores e índices; lectura de paciente. |
+| Hospital General | PostgreSQL | SQL original integrado, identidad central y CRUD clínico completo (migración `008`). |
+| Centro Pediátrico | MySQL 8.4 | Modelo revisado, reglas de integridad, stock y saldos; CRUD clínico completo (migraciones `004` y `005`). |
+| Laboratorio Clínico | MongoDB 8 | Colecciones, validadores e índices; CRUD clínico completo (consulta en un solo documento). |
 | Clínica Odontológica | Cloud Firestore | Completo: pacientes, consultas, archivo, citas, odontograma (estados fijos) y rol secretaria. [Modelo](docs/modelo_odontologia.md). |
 
-No se han creado ramas nuevas. Las cinco operaciones del curso ya tienen rutas,
-casos de uso y permisos; cada motor reemplaza sus piezas pendientes (HTTP 501).
-Ver [operaciones comunes](docs/operaciones_comunes.md) y el [avance estimado](docs/avance.md).
+No se han creado ramas nuevas. Las cinco operaciones del curso y la búsqueda por nombre
+funcionan en **los cuatro motores**; solo citas y odontograma fuera de Firestore responden
+501. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
+migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
 
 **Frontend:** pendiente. Decisión: HTML/JS sencillo servido por la misma FastAPI (sin
 React ni paso de compilación). Faltan los mockups; el plan, las pantallas por rol y el
@@ -111,6 +112,9 @@ python -m scripts.crear_profesional --correo medico@example.com --nombres "Nombr
 ```
 
 Se solicita la contraseña oculta; no se publica una cuenta con contraseña de ejemplo.
+Al crear la cuenta también se vincula al profesional local de su institución (necesario
+para registrar consultas); si ese motor no estaba disponible, repetir con
+`python -m scripts.sincronizar_profesionales`.
 En `/docs`, ejecutar `POST /api/v1/auth/login` con correo y contraseña. Copiar el
 `access_token`, pegarlo en **Authorize** y probar `/auth/me`. El establecimiento se
 obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID.
@@ -121,6 +125,7 @@ obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID
 | `POST /api/v1/auth/login` | Credenciales centrales, JWT de 30 minutos. |
 | `GET /api/v1/auth/me` | Usuario, institución y permisos vigentes. |
 | `POST /api/v1/auth/logout` | Revoca todas las sesiones del profesional. |
+| `GET /api/v1/pacientes?nombre=` | Busca por nombre (comienzo de palabra, sin acentos) en la institución autorizada. |
 | `GET /api/v1/pacientes/{id_paciente}` | Lee en el motor de la institución autorizada. |
 | `POST /api/v1/pacientes` | Registra paciente nuevo (`pacientes:registrar`). |
 | `GET /api/v1/pacientes/{id}/historial` | Consultas paginadas (`historiales:leer`). |
@@ -139,8 +144,11 @@ disponible (por ejemplo, Firestore sin clave).
 - `laboratorio_clinico_mongo.js`: script solicitado de laboratorio, en esta raíz.
 - `database/mysql/001_hospital_pediatrico.sql`: esquema revisado.
 - `database/mysql/002_integridad.sql`: reglas, stock y consistencia de facturación.
+- `database/mysql/004_escritura_api.sql` y `005_permisos_escritura.sql`: columnas y permisos
+  mínimos para las escrituras de la API.
 - `database/mysql/original/`: copia intacta del SQL recibido.
-- `database/postgresql/`: esquema del hospital, identidad y cuentas limitadas.
+- `database/postgresql/`: esquema del hospital, identidad y cuentas limitadas
+  (`008_escritura_api.sql`: escrituras de la API, `unaccent` y permisos mínimos).
 - [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md).
 - [Identidad central](docs/identidad_central.md), [arquitectura](docs/arquitectura.md),
   [trabajo por ramas](docs/ramas.md).
@@ -177,13 +185,14 @@ sin configurar un entorno de pruebas separado.
 
 ## Trabajo siguiente
 
-Firestore ya está completo. Pendiente: implementar en PostgreSQL, MySQL y MongoDB las
-operaciones que hoy responden 501 (registro, historial, atención con
-diagnósticos/tratamientos/recetas y archivo), hacer los mockups y el frontend
-([plan](docs/frontend.md)) y redactar el documento comparativo.
-Agregar auditoría y rectificaciones antes de permitir cambios clínicos. Para escrituras
-coordinadas en varias colecciones, convertir MongoDB a replica set y probar transacciones.
-Revisar también las reglas pendientes del esquema clínico original de PostgreSQL.
+Los cuatro motores ya implementan registro, lectura, búsqueda, historial, consulta con
+diagnósticos/tratamientos/recetas y archivo. Pendiente: hacer los mockups y el frontend
+([plan](docs/frontend.md)), redactar el documento comparativo, citas en los motores que no
+sean Firestore si el equipo lo decide, y revisar las reglas pendientes del esquema clínico
+original de PostgreSQL (pagos, camas). Agregar auditoría y rectificaciones antes de permitir
+cambios clínicos. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
+usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja
+simultáneas (ver [operaciones comunes](docs/operaciones_comunes.md)).
 
 La entrega debe integrar los cuatro adaptadores en una sola aplicación. Las ramas
 serán una forma de organizar desarrollo, no cuatro aplicaciones con contratos distintos.

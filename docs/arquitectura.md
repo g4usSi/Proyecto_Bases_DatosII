@@ -32,9 +32,10 @@ un adaptador documental puede utilizar identificadores de documentos.
 
 ## Adaptadores iniciales
 
-La fábrica `app/bootstrap/factory.py` registra lectura real para PostgreSQL,
-MySQL y MongoDB, y Firestore (lectura y alta de paciente) cuando existe su clave.
-Las operaciones aún no implementadas en un motor responden 501; ver
+La fábrica `app/bootstrap/factory.py` registra un adaptador completo por institución
+(`postgresql/unidad.py`, `mysql/unidad.py`, `mongodb/unidad.py` y `firestore/unidad.py`, este
+último solo si existe su clave). Las operaciones que un motor no ofrece (citas y odontograma
+fuera de Firestore) responden 501; ver
 [operaciones comunes](operaciones_comunes.md) y [modelo de Firestore](modelo_odontologia.md).
 Los motores implementan `RepositorioPacientes` y una unidad de trabajo por solicitud:
 

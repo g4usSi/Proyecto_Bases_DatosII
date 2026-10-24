@@ -17,6 +17,28 @@ de Git, Docker y las bases antes de basarse en los datos de entorno anotados aqu
   trabajo. Modelo de consultas/archivo pendiente: `docs/modelo_odontologia.md`.
 - Proyecto ahora también en `C:\Users\henry\OneDrive\...\Proyecto_Bases_DatosII`.
 
+## Estado vigente (23 de octubre de 2026, noche) — leer primero
+
+Esta sección corrige lo que dicen las actualizaciones históricas de más abajo.
+
+- Los cuatro motores implementan registrar, leer, **buscar por nombre**, historial,
+  consulta (diagnósticos, tratamientos, recetas) y archivar. Citas y odontograma solo en
+  Firestore. Detalle, migraciones para volúmenes existentes y diseño de consistencia en
+  `docs/operaciones_comunes.md`; porcentajes en `docs/avance.md` (backend ≈ 93 %).
+- Un commit por motor: `feat(postgresql)`, `feat(mysql)`, `feat(mongodb)` (autor HDZaid).
+  Archivos nuevos: `app/infrastructure/persistence/{postgresql,mysql,mongodb}/unidad.py`
+  (el antiguo `mongodb/lectura.py` pasó a `unidad.py`; `sql.py` solo queda como esqueleto
+  que usan algunas pruebas unitarias), `persistence/comun.py` (ayudantes comunes),
+  migraciones `postgresql/008`, `mysql/004` y `mysql/005`, y `tests/integration/test_*_api.py`.
+- MongoDB sigue siendo servidor único: las escrituras se acumulan hasta `commit()` y la
+  consulta usa una escritura condicional previa como punto de serialización con la baja.
+  La cuenta `historiales_app` conserva el rol `readWrite` (MongoDB no permite limitarlo
+  por operación sin un rol personalizado); definir uno si se quiere el mínimo estricto.
+- Las cuentas SQL de la API no pueden borrar datos clínicos; MySQL tampoco ve el salario.
+- Frontend: sin construir (HTML/JS servido por FastAPI; plan en `docs/frontend.md`).
+- Las pruebas de integración se ejecutaron contra PostgreSQL 16, MySQL 8.0 y MongoDB 8.0
+  locales; falta verificar el arranque desde cero con `docker compose` (MySQL 8.4).
+
 ## Actualización 23 de octubre de 2026
 
 Decisiones del equipo: cada institución guarda solo sus pacientes (contacto y

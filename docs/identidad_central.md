@@ -70,8 +70,12 @@ python -m scripts.crear_profesional --correo medico@example.com --nombres "Nombr
 La contraseña se pide oculta, dos veces. Se otorga solamente `pacientes:leer` por
 defecto; usar `--permiso` repetido para permisos adicionales existentes. El alta es
 atómica: un correo repetido o permiso desconocido revierte toda la operación.
-Crear cuenta no crea ni modifica un médico local automáticamente. El UUID impreso
-se vincula al profesional local antes de habilitar escrituras de consultas.
+Crear la cuenta también vincula el UUID al profesional local de la institución
+(`personal_medico` en el Hospital General, `medico` en el Centro Pediátrico, colección
+`profesionales` en el Laboratorio y la Clínica), sin copiar correo ni contraseña. Es
+necesario para registrar consultas. Si el motor local no estaba disponible, la cuenta
+central se conserva y se repite con `python -m scripts.sincronizar_profesionales`
+(idempotente). La API responde 403 con ese mensaje si falta el vínculo.
 
 En Swagger, ejecutar login, copiar `access_token` y pegarlo en **Authorize**. Después
 probar `/auth/me` y la consulta de paciente. Una base vacía devuelve 404 para un ID
@@ -88,7 +92,7 @@ Rules: la API debe validar JWT y permisos centrales en cada operación.
 
 La identidad transversal debe explicarse en la documentación de evaluación:
 PostgreSQL administra acceso, pero no copia ni reemplaza los historiales de los
-otros tres motores. Las cuatro operaciones clínicas comunes siguen pendientes de
-completar en todos los adaptadores.
+otros tres motores. Las operaciones clínicas comunes ya están completas en los
+cuatro adaptadores.
 
 Referencia: [FastAPI, hashing y JWT](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/).

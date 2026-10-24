@@ -7,29 +7,34 @@ propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
 
 | Parte | Avance |
 | --- | --- |
-| Backend (API + motores) | **≈ 63 %** |
+| Backend (API + motores) | **≈ 93 %** |
 | Frontend (cliente) | **0 %**: tecnología decidida (HTML/JS en FastAPI), faltan mockups |
 | Documento comparativo | **≈ 30 %**: el material está repartido en `docs/`, sin redactar |
-| Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 37 %** |
+| Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 52 %** |
 
 ## Backend
 
 | Área (peso) | Avance | Detalle |
 | --- | --- | --- |
 | Base común (20 %) | 95 % | FastAPI hexagonal, login JWT, enrutamiento por usuario, permisos, roles, Docker. |
-| Modelo por motor (20 %) | 85 % | Firestore 100 %. MySQL y MongoDB 85 %. PostgreSQL 70 % (reglas pendientes del SQL original). |
-| Operaciones comunes en 4 motores (40 %) | 40 % | 8 de 20: Firestore 5/5; PostgreSQL, MySQL y MongoDB solo leen paciente. |
-| Consistencia demostrada (10 %) | 50 % | Firestore: transacciones. MySQL: triggers probados. PostgreSQL: parcial. MongoDB necesita replica set para escribir varias colecciones. |
-| Pruebas (10 %) | 60 % | Unitarias de todas las rutas. Integración: lectura en 4 motores y Firestore completo. |
+| Modelo por motor (20 %) | 85 % | Firestore 100 %. MySQL y MongoDB 90 %. PostgreSQL 70 % (reglas pendientes del SQL original: pagos, camas, cita/atención). |
+| Operaciones comunes en 4 motores (40 %) | 100 % | 20 de 20 (5 operaciones × 4 motores) más búsqueda por nombre. Citas y odontograma solo en Firestore (extra de la clínica). |
+| Consistencia demostrada (10 %) | 85 % | Pruebas de concurrencia (dos bajas, consulta vs. baja) en PostgreSQL, MySQL, MongoDB y Firestore. MongoDB: sin transacciones (servidor único); queda una ventana de milisegundos documentada. |
+| Pruebas (10 %) | 85 % | Unitarias de todas las rutas. Integración real por motor (datos sintéticos, cuenta limitada de la API, flujo completo con login). Faltan pruebas en contenedores nuevos desde cero (Docker). |
 
 Operaciones por motor (✅ hecho, — pendiente):
 
-| | Registrar | Leer | Historial | Consulta + diagnóstico + receta | Archivar |
-| --- | --- | --- | --- | --- | --- |
-| PostgreSQL | — | ✅ | — | — | — |
-| MySQL | — | ✅ | — | — | — |
-| MongoDB | — | ✅ | — | — | — |
-| Firestore | ✅ | ✅ | ✅ | ✅ | ✅ |
+| | Registrar | Leer | Buscar | Historial | Consulta + diagnóstico + receta | Archivar |
+| --- | --- | --- | --- | --- | --- | --- |
+| PostgreSQL | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| MySQL | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| MongoDB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Firestore | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+Lo que falta del backend: citas en los otros tres motores (la clínica es la que agenda),
+las reglas pendientes del SQL original de PostgreSQL, auditoría/rectificación clínica y
+probar el arranque desde cero con Docker (los scripts nuevos se probaron en motores locales
+equivalentes).
 
 ## Frontend (pendiente completo)
 
