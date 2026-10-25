@@ -12,22 +12,28 @@ llama "consulta" en varias tablas:
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Literal, Self
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import psycopg
 
 from app.application.errores import IntegracionNoConfigurada
-from app.domain.consulta import Consulta, Diagnostico, NuevaConsulta, Receta, Tratamiento
+from app.domain.cita import TRANSICIONES, Cita, EstadoCita, NuevaCita
+from app.domain.consulta import Adenda, Consulta, Diagnostico, NuevaConsulta, Receta, Tratamiento
 from app.domain.errores import (
+    CitaNoEncontrada,
+    ConflictoAgenda,
+    ConsultaNoEncontrada,
     DatosInvalidos,
     PacienteArchivado,
     PacienteNoEncontrado,
     ProfesionalNoVinculado,
 )
-from app.domain.paciente import Alergia, Baja, Contacto, NuevoPaciente, Paciente
+from app.domain.paciente import Alergia, Baja, CambiosPaciente, Contacto, NuevoPaciente, Paciente
+from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.comun import (
     con_utc,
     entero_positivo,
@@ -38,6 +44,15 @@ from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 MOTOR = "PostgreSQL"
 ESTADO_ARCHIVADO = "Inactivo"
+# La tabla cita guarda el estado con la capitalizacion del modelo original.
+ESTADO_CITA_BD = {
+    EstadoCita.PROGRAMADA: "Programada",
+    EstadoCita.CONFIRMADA: "Confirmada",
+    EstadoCita.ATENDIDA: "Atendida",
+    EstadoCita.CANCELADA: "Cancelada",
+    EstadoCita.NO_ASISTIO: "No_asistio",
+}
+ESTADO_CITA_DOMINIO = {valor: clave for clave, valor in ESTADO_CITA_BD.items()}
 
 
 class RepositorioPacientesPostgreSQL:
@@ -159,6 +174,68 @@ class RepositorioPacientesPostgreSQL:
                 raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
             raise PacienteArchivado("El historial ya estaba archivado.")
 
+    def actualizar(self, id_paciente: str, cambios: CambiosPaciente) -> None:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        asignaciones, parametros = [], []
+        for columna, valor in (
+            ("nombres", cambios.nombres),
+            ("apellidos", cambios.apellidos),
+            ("fecha_nacimiento", cambios.fecha_nacimiento),
+        ):
+            if valor is not None:
+                asignaciones.append(f"{columna} = %s")
+                parametros.append(valor)
+        if cambios.contacto is not None:  # reemplaza el contacto completo
+            asignaciones += ["telefono = %s", "correo_electronico = %s", "direccion = %s"]
+            parametros += [
+                cambios.contacto.telefono,
+                cambios.contacto.correo,
+                cambios.contacto.direccion,
+            ]
+        try:
+            cambiados = self.conexion.execute(
+                "UPDATE paciente SET " + ", ".join(asignaciones) + " "
+                "WHERE id_paciente = %s AND estado = 'Activo'",
+                (*parametros, numero),
+            ).rowcount
+        except psycopg.errors.CheckViolation as error:
+            raise DatosInvalidos("La fecha de nacimiento no puede ser futura.") from error
+        self._comprobar_activo(numero, cambiados)
+
+    def agregar_alergias(self, id_paciente: str, alergias: tuple[Alergia, ...]) -> None:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        # Condicional: tambien marca el historial como "alergias evaluadas".
+        cambiados = self.conexion.execute(
+            "UPDATE paciente SET alergias_evaluadas = TRUE "
+            "WHERE id_paciente = %s AND estado = 'Activo'",
+            (numero,),
+        ).rowcount
+        self._comprobar_activo(numero, cambiados)
+        try:
+            for a in alergias:
+                self.conexion.execute(
+                    "INSERT INTO paciente_alergia (id_paciente, sustancia, reaccion, severidad) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (numero, a.sustancia, a.reaccion, a.severidad),
+                )
+        except psycopg.errors.UniqueViolation as error:
+            raise DatosInvalidos("Esa alergia ya estaba registrada.") from error
+
+    def _comprobar_activo(self, numero: int, cambiados: int) -> None:
+        """Tras un UPDATE condicional (estado = 'Activo'): distingue ausente de archivado."""
+        if cambiados:
+            return
+        existe = self.conexion.execute(
+            "SELECT 1 FROM paciente WHERE id_paciente = %s", (numero,)
+        ).fetchone()
+        if existe is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+
 
 class RepositorioHistorialPostgreSQL:
     def __init__(self, conexion: psycopg.Connection) -> None:
@@ -235,31 +312,7 @@ class RepositorioHistorialPostgreSQL:
                 "INSERT INTO tratamiento (id_diagnostico, descripciones) VALUES (%s, %s)",
                 (ids_diagnostico[0], t.descripcion),
             )
-        if datos.recetas:
-            id_orden = self.conexion.execute(
-                "INSERT INTO orden_medica (id_atencion, id_personal, fecha_hora, tipo_orden) "
-                "VALUES (%s, %s, %s, 'Medicamento') RETURNING id_orden",
-                (id_atencion, id_personal, utc_ingenuo(ahora)),
-            ).fetchone()[0]
-            id_receta = self.conexion.execute(
-                "INSERT INTO receta (id_orden, fecha_hora) VALUES (%s, %s) RETURNING id_receta",
-                (id_orden, utc_ingenuo(ahora)),
-            ).fetchone()[0]
-            for r in datos.recetas:
-                self.conexion.execute(
-                    "INSERT INTO detalle_receta (id_receta, medicamento, dosis, frecuencia, "
-                    "via_administracion, duracion_dias, indicaciones) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                    (
-                        id_receta,
-                        r.medicamento,
-                        r.dosis,
-                        r.frecuencia,
-                        r.via_administracion,
-                        r.duracion_dias,
-                        r.instrucciones,
-                    ),
-                )
+        self._insertar_recetas(id_atencion, id_personal, ahora, datos.recetas)
         return Consulta(
             str(id_atencion),
             id_paciente,
@@ -272,16 +325,129 @@ class RepositorioHistorialPostgreSQL:
             datos.recetas,
         )
 
+    def _insertar_recetas(
+        self, id_atencion: int, id_personal: int, ahora: datetime, recetas: tuple[Receta, ...]
+    ) -> None:
+        if not recetas:
+            return
+        id_orden = self.conexion.execute(
+            "INSERT INTO orden_medica (id_atencion, id_personal, fecha_hora, tipo_orden) "
+            "VALUES (%s, %s, %s, 'Medicamento') RETURNING id_orden",
+            (id_atencion, id_personal, utc_ingenuo(ahora)),
+        ).fetchone()[0]
+        id_receta = self.conexion.execute(
+            "INSERT INTO receta (id_orden, fecha_hora) VALUES (%s, %s) RETURNING id_receta",
+            (id_orden, utc_ingenuo(ahora)),
+        ).fetchone()[0]
+        for r in recetas:
+            self.conexion.execute(
+                "INSERT INTO detalle_receta (id_receta, medicamento, dosis, frecuencia, "
+                "via_administracion, duracion_dias, indicaciones) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    id_receta,
+                    r.medicamento,
+                    r.dosis,
+                    r.frecuencia,
+                    r.via_administracion,
+                    r.duracion_dias,
+                    r.instrucciones,
+                ),
+            )
+
+    def obtener_consulta(self, id_paciente: str, id_consulta: str) -> Consulta | None:
+        numero, atencion = entero_positivo(id_paciente), entero_positivo(id_consulta)
+        if numero is None or atencion is None:
+            return None
+        consultas = self._cargar(id_paciente, numero, "AND a.id_atencion = %s ", [atencion], 1)
+        return consultas[0] if consultas else None
+
+    def agregar_a_consulta(
+        self, id_paciente: str, id_consulta: str, id_profesional: str, adenda: Adenda
+    ) -> Consulta:
+        numero, atencion = entero_positivo(id_paciente), entero_positivo(id_consulta)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if atencion is None:
+            raise ConsultaNoEncontrada("La consulta no existe en el historial del paciente.")
+        id_personal = self._id_personal(id_profesional)
+        # Una baja concurrente espera a que termine esta adenda (o esta ve la baja).
+        estado = self.conexion.execute(
+            "SELECT estado FROM paciente WHERE id_paciente = %s FOR SHARE", (numero,)
+        ).fetchone()
+        if estado is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if estado[0] == ESTADO_ARCHIVADO:
+            raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+        # FOR UPDATE: dos adendas a la misma consulta se aplican una tras otra.
+        existe = self.conexion.execute(
+            "SELECT 1 FROM atencion WHERE id_atencion = %s AND id_paciente = %s "
+            "AND tipo_atencion = 'CONSULTA' FOR UPDATE",
+            (atencion, numero),
+        ).fetchone()
+        if existe is None:
+            raise ConsultaNoEncontrada("La consulta no existe en el historial del paciente.")
+
+        ahora = datetime.now(UTC)
+        try:
+            ids_diagnostico = [
+                self.conexion.execute(
+                    "INSERT INTO diagnostico (id_atencion, descripcion, codigo, sistema_codigo) "
+                    "VALUES (%s, %s, %s, %s) RETURNING id_diagnostico",
+                    (atencion, d.descripcion, d.codigo, d.sistema_codigo),
+                ).fetchone()[0]
+                for d in adenda.diagnosticos
+            ]
+            if adenda.tratamientos:
+                destino = ids_diagnostico[0] if ids_diagnostico else None
+                if destino is None:
+                    # En este modelo un tratamiento cuelga de un diagnostico ya existente.
+                    fila = self.conexion.execute(
+                        "SELECT id_diagnostico FROM diagnostico WHERE id_atencion = %s "
+                        "ORDER BY id_diagnostico LIMIT 1",
+                        (atencion,),
+                    ).fetchone()
+                    if fila is None:
+                        raise DatosInvalidos(
+                            "En el Hospital General cada tratamiento se registra bajo un "
+                            "diagnostico: agrega tambien un diagnostico."
+                        )
+                    destino = fila[0]
+                for t in adenda.tratamientos:
+                    self.conexion.execute(
+                        "INSERT INTO tratamiento (id_diagnostico, descripciones) VALUES (%s, %s)",
+                        (destino, t.descripcion),
+                    )
+            self._insertar_recetas(atencion, id_personal, ahora, adenda.recetas)
+            # Las notas solo crecen por el final (lo exige tambien el trigger de la base).
+            rotulo = adenda.rotular(ahora, id_profesional)
+            self.conexion.execute(
+                "UPDATE atencion SET notas = CASE WHEN COALESCE(notas, '') = '' THEN %s "
+                "ELSE notas || E'\n\n' || %s END WHERE id_atencion = %s",
+                (rotulo, rotulo, atencion),
+            )
+        except psycopg.errors.CheckViolation as error:
+            raise PacienteArchivado("El historial esta archivado; no admite cambios.") from error
+        consulta = self.obtener_consulta(id_paciente, id_consulta)
+        assert consulta is not None
+        return consulta
+
     def listar_consultas(
         self, id_paciente: str, limite: int, antes_de: datetime | None = None
     ) -> list[Consulta]:
         numero = entero_positivo(id_paciente)
         if numero is None:
             return []
-        filtro, parametros = "", [numero]
+        filtro, parametros = "", []
         if antes_de is not None:
             filtro = "AND a.fecha_hora < %s "
             parametros.append(utc_ingenuo(antes_de))
+        return self._cargar(id_paciente, numero, filtro, parametros, limite)
+
+    def _cargar(
+        self, id_paciente: str, numero: int, filtro: str, extra: list[Any], limite: int
+    ) -> list[Consulta]:
+        parametros = [numero, *extra]
         filas = self.conexion.execute(
             "SELECT a.id_atencion, COALESCE(pm.id_profesional_central::text, "
             "'sin-cuenta-' || pm.id_personal), a.fecha_hora, "
@@ -338,6 +504,178 @@ class RepositorioHistorialPostgreSQL:
         ]
 
 
+class RepositorioProfesionalesPostgreSQL:
+    def __init__(self, conexion: psycopg.Connection) -> None:
+        self.conexion = conexion
+
+    def obtener(self, id_profesional: str) -> ProfesionalLocal | None:
+        try:
+            uuid = UUID(id_profesional)
+        except ValueError:
+            return None
+        fila = self.conexion.execute(
+            "SELECT id_profesional_central, nombres, apellidos, rol, estado "
+            "FROM personal_medico WHERE id_profesional_central = %s",
+            (uuid,),
+        ).fetchone()
+        if fila is None:
+            return None
+        return ProfesionalLocal(
+            str(fila[0]), fila[1], fila[2], fila[3].lower(), fila[4] == "Activo"
+        )
+
+
+class RepositorioCitasPostgreSQL:
+    """Citas del hospital. La base impide los choques (restriccion de exclusion).
+
+    El modelo original guarda `fecha` y `hora` locales del hospital; aqui se convierten
+    desde/hacia la zona horaria configurada y la API siempre responde en UTC.
+    """
+
+    _COLUMNAS = (
+        "c.id_cita, c.id_paciente, p.nombres || ' ' || p.apellidos, "
+        "COALESCE(pm.id_profesional_central::text, 'sin-cuenta-' || pm.id_personal), "
+        "c.fecha, c.hora, c.duracion_minutos, COALESCE(c.motivo, ''), c.estado, "
+        "COALESCE(c.creada_por::text, ''), c.motivo_cambio "
+        "FROM cita c JOIN paciente p ON p.id_paciente = c.id_paciente "
+        "JOIN personal_medico pm ON pm.id_personal = c.id_personal "
+    )
+
+    def __init__(self, conexion: psycopg.Connection, zona: ZoneInfo) -> None:
+        self.conexion = conexion
+        self.zona = zona
+
+    def _local(self, valor: datetime) -> datetime:
+        return valor.astimezone(self.zona).replace(tzinfo=None)
+
+    def _a_cita(self, fila: tuple) -> Cita:
+        inicio = datetime.combine(fila[4], fila[5], tzinfo=self.zona).astimezone(UTC)
+        return Cita(
+            id_cita=str(fila[0]),
+            id_paciente=str(fila[1]),
+            nombre_paciente=fila[2],
+            id_profesional=fila[3],
+            inicio=inicio,
+            fin=inicio + timedelta(minutes=fila[6]),
+            motivo=fila[7],
+            estado=ESTADO_CITA_DOMINIO[fila[8]],
+            creada_por=fila[9],
+            motivo_cambio=fila[10],
+        )
+
+    def obtener(self, id_cita: str) -> Cita | None:
+        numero = entero_positivo(id_cita)
+        if numero is None:
+            return None
+        fila = self.conexion.execute(
+            "SELECT " + self._COLUMNAS + "WHERE c.id_cita = %s", (numero,)
+        ).fetchone()
+        return self._a_cita(fila) if fila else None
+
+    def agendar(self, datos: NuevaCita, nombre_paciente: str, creada_por: str) -> Cita:
+        paciente = entero_positivo(datos.id_paciente)
+        if paciente is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        try:
+            profesional, quien = UUID(datos.id_profesional), UUID(creada_por)
+        except ValueError as error:
+            raise ProfesionalNoVinculado("La cuenta o el profesional no son validos.") from error
+        fila = self.conexion.execute(
+            "SELECT id_personal FROM personal_medico WHERE id_profesional_central = %s",
+            (profesional,),
+        ).fetchone()
+        if fila is None:
+            raise DatosInvalidos("El profesional no existe, no esta activo o no atiende.")
+        local = self._local(datos.inicio)
+        try:
+            id_cita = self.conexion.execute(
+                "INSERT INTO cita (id_paciente, id_personal, fecha, hora, duracion_minutos, "
+                "motivo, estado, creada_por) VALUES (%s, %s, %s, %s, %s, %s, 'Programada', %s) "
+                "RETURNING id_cita",
+                (
+                    paciente,
+                    fila[0],
+                    local.date(),
+                    local.time(),
+                    datos.duracion_minutos,
+                    datos.motivo,
+                    quien,
+                ),
+            ).fetchone()[0]
+        except psycopg.errors.ExclusionViolation as error:
+            raise ConflictoAgenda("El profesional ya tiene una cita en ese horario.") from error
+        except psycopg.errors.CheckViolation as error:
+            if "archivado" in str(error):
+                raise PacienteArchivado(
+                    "El historial esta archivado; no admite citas nuevas."
+                ) from error
+            raise DatosInvalidos(
+                "El profesional no existe, no esta activo o no atiende."
+            ) from error
+        cita = self.obtener(str(id_cita))
+        assert cita is not None
+        return cita
+
+    def listar_agenda(
+        self, desde: datetime, hasta: datetime, id_profesional: str | None = None
+    ) -> list[Cita]:
+        filtro, parametros = "", [self._local(desde), self._local(hasta)]
+        if id_profesional is not None:
+            try:
+                parametros.append(UUID(id_profesional))
+            except ValueError:
+                return []
+            filtro = "AND pm.id_profesional_central = %s "
+        filas = self.conexion.execute(
+            "SELECT "
+            + self._COLUMNAS
+            + "WHERE c.fecha + c.hora >= %s AND c.fecha + c.hora < %s "
+            + filtro
+            + "ORDER BY c.fecha + c.hora, c.id_cita LIMIT 500",
+            parametros,
+        ).fetchall()
+        return [self._a_cita(f) for f in filas]
+
+    def listar_por_paciente(self, id_paciente: str, limite: int) -> list[Cita]:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            return []
+        filas = self.conexion.execute(
+            "SELECT " + self._COLUMNAS + "WHERE c.id_paciente = %s "
+            "ORDER BY c.fecha DESC, c.hora DESC, c.id_cita DESC LIMIT %s",
+            (numero, limite),
+        ).fetchall()
+        return [self._a_cita(f) for f in filas]
+
+    def cambiar_estado(
+        self, id_cita: str, estado: EstadoCita, por: str, motivo: str | None
+    ) -> Cita:
+        numero = entero_positivo(id_cita)
+        if numero is None:
+            raise CitaNoEncontrada("La cita no existe en tu institucion.")
+        try:
+            quien = UUID(por)
+        except ValueError as error:
+            raise ProfesionalNoVinculado("La cuenta no es valida.") from error
+        # FOR UPDATE: dos cambios simultaneos sobre la misma cita se aplican uno tras otro.
+        fila = self.conexion.execute(
+            "SELECT estado FROM cita WHERE id_cita = %s FOR UPDATE", (numero,)
+        ).fetchone()
+        if fila is None:
+            raise CitaNoEncontrada("La cita no existe en tu institucion.")
+        actual = ESTADO_CITA_DOMINIO[fila[0]]
+        if estado not in TRANSICIONES.get(actual, set()):
+            raise ConflictoAgenda(f"Una cita '{actual}' no puede pasar a '{estado}'.")
+        self.conexion.execute(
+            "UPDATE cita SET estado = %s, motivo_cambio = %s, actualizada_por = %s "
+            "WHERE id_cita = %s",
+            (ESTADO_CITA_BD[estado], motivo, quien, numero),
+        )
+        cita = self.obtener(id_cita)
+        assert cita is not None
+        return cita
+
+
 class UnidadTrabajoPostgreSQL:
     """Cada solicitud abre su conexion y la cierra; sin commit() todo se revierte."""
 
@@ -345,8 +683,10 @@ class UnidadTrabajoPostgreSQL:
         self,
         dsn: str,
         conectar: Callable[[], psycopg.Connection] | None = None,
+        zona: ZoneInfo | None = None,
     ) -> None:
         self.dsn = dsn
+        self.zona = zona or ZoneInfo("America/Guatemala")
         self._conectar = conectar or self._conectar_por_defecto
         self.conexion: psycopg.Connection | None = None
 
@@ -360,10 +700,14 @@ class UnidadTrabajoPostgreSQL:
             raise IntegracionNoConfigurada("La base clinica no esta disponible.") from error
         self.pacientes = RepositorioPacientesPostgreSQL(self.conexion)
         self.historial = RepositorioHistorialPostgreSQL(self.conexion)
-        # Citas, perfiles y odontograma: pendientes en este motor (HTTP 501).
-        for nombre, repositorio in repositorios_pendientes(MOTOR).items():
-            if nombre not in ("historial",):
-                setattr(self, nombre, repositorio)
+        self.profesionales = RepositorioProfesionalesPostgreSQL(self.conexion)
+        self.citas = RepositorioCitasPostgreSQL(self.conexion, self.zona)
+        # El odontograma es propio de la clinica odontologica (HTTP 501 aqui).
+        pendientes = repositorios_pendientes(MOTOR)
+        self.odontograma = pendientes["odontograma"]
+        self.crecimiento = pendientes["crecimiento"]
+        self.vacunacion = pendientes["vacunacion"]
+        self.laboratorio = pendientes["laboratorio"]
         return self
 
     def __exit__(
