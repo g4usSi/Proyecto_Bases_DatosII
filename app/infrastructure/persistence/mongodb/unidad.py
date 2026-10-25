@@ -620,6 +620,7 @@ class RepositorioHistorialMongo:
 
 class RepositorioProfesionalesMongo:
     def __init__(self, unidad: "UnidadTrabajoMongo") -> None:
+        self.unidad = unidad
         self.coleccion = unidad.database.profesionales
 
     def obtener(self, id_profesional: str) -> ProfesionalLocal | None:
@@ -636,6 +637,21 @@ class RepositorioProfesionalesMongo:
             fila["apellidos"],
             str(fila.get("rol") or "medico").lower(),
             bool(fila["activo"]),
+        )
+
+    def sincronizar(self, perfil: ProfesionalLocal) -> None:
+        uuid = str(UUID(perfil.id_profesional))
+        cambios = {
+            "nombres": perfil.nombres,
+            "apellidos": perfil.apellidos,
+            "rol": perfil.rol,
+            "activo": perfil.activo,
+        }
+        coleccion = self.coleccion
+        self.unidad.pendientes.append(
+            lambda: coleccion.update_one(
+                {"id_profesional_central": uuid}, {"$set": cambios}, upsert=True
+            )
         )
 
 
@@ -1188,6 +1204,7 @@ class UnidadTrabajoMongo:
         self.odontograma = pendientes["odontograma"]
         self.crecimiento = pendientes["crecimiento"]
         self.vacunacion = pendientes["vacunacion"]
+        self.hospital = pendientes["hospital"]
         return self
 
     def __exit__(

@@ -66,6 +66,22 @@ def _auditar(request: Request, usuario: UsuarioAutenticado, permiso: str, permit
     registrar(usuario, request.method, plantilla, permiso, paciente)
 
 
+def usuario_con_permiso(permiso: str) -> Callable[..., UsuarioAutenticado]:
+    """Exige el permiso SIN abrir el motor clinico (la identidad vive en PostgreSQL)."""
+
+    def dependencia(
+        request: Request,
+        usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
+    ) -> UsuarioAutenticado:
+        if permiso not in usuario.permisos:
+            _auditar(request, usuario, permiso, permitido=False)
+            raise AccesoDenegado("No tienes permiso para realizar esta operacion.")
+        _auditar(request, usuario, permiso, permitido=True)
+        return usuario
+
+    return dependencia
+
+
 def contexto_con_permiso(permiso: str) -> Callable[..., Contexto]:
     """Dependencia que exige un permiso y abre el motor de la institucion del token."""
 
@@ -104,6 +120,14 @@ ContextoLeerCitas = Annotated[Contexto, Depends(_con(permisos.CITAS_LEER))]
 ContextoGestionarCitas = Annotated[Contexto, Depends(_con(permisos.CITAS_GESTIONAR))]
 ContextoResultadosLab = Annotated[Contexto, Depends(_con(permisos.LABORATORIO_RESULTADOS))]
 ContextoValidarLab = Annotated[Contexto, Depends(_con(permisos.LABORATORIO_VALIDAR))]
+AdministradorDeProfesionales = Annotated[
+    UsuarioAutenticado, Depends(usuario_con_permiso(permisos.PROFESIONALES_ADMINISTRAR))
+]
+UsuarioLeerCitas = Annotated[UsuarioAutenticado, Depends(usuario_con_permiso(permisos.CITAS_LEER))]
+ContextoDepartamentos = Annotated[
+    Contexto,
+    Depends(contexto_con_alguno(permisos.PACIENTES_LEER, permisos.PROFESIONALES_ADMINISTRAR)),
+]
 ContextoLeerLab = Annotated[
     Contexto,
     Depends(contexto_con_alguno(permisos.HISTORIALES_LEER, permisos.LABORATORIO_RESULTADOS)),

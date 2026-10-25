@@ -572,6 +572,19 @@ class RepositorioProfesionalesMySQL:
             return None
         return ProfesionalLocal(fila[0], fila[1], fila[2], "medico", bool(fila[3]))
 
+    def sincronizar(self, perfil: ProfesionalLocal) -> None:
+        # El colegiado real lo completa el centro; mientras tanto uno provisional unico que
+        # nunca se sobrescribe (igual que scripts/sincronizar_profesionales.py).
+        uuid = str(UUID(perfil.id_profesional))
+        with self.conexion.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO medico (id_profesional_central, nombre, apellido, colegiado, activo) "
+                "VALUES (%s, %s, %s, %s, %s) AS nuevo "
+                "ON DUPLICATE KEY UPDATE nombre = nuevo.nombre, apellido = nuevo.apellido, "
+                "activo = nuevo.activo",
+                (uuid, perfil.nombres, perfil.apellidos, f"PEND-{uuid}", perfil.activo),
+            )
+
 
 class RepositorioCitasMySQL:
     """Citas del centro. El trigger cita_validar_insert impide los choques de horario."""
@@ -996,6 +1009,7 @@ class UnidadTrabajoMySQL:
         pendientes = repositorios_pendientes(MOTOR)
         self.odontograma = pendientes["odontograma"]
         self.laboratorio = pendientes["laboratorio"]
+        self.hospital = pendientes["hospital"]
         return self
 
     def __exit__(

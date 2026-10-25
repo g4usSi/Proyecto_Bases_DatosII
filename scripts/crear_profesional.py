@@ -13,7 +13,7 @@ from app.core.config import PROJECT_ROOT
 from app.domain import permisos
 from app.domain.institucion import Institucion
 
-ROLES = ["medico", "enfermeria", "laboratorista", "odontologo", "secretaria"]
+ROLES = ["medico", "enfermeria", "laboratorista", "odontologo", "secretaria", "administrador"]
 
 
 def main() -> None:
@@ -32,7 +32,8 @@ def main() -> None:
         help=(
             "Repetir por permiso. Por defecto: pacientes:leer; secretaria: pacientes:leer, "
             "pacientes:registrar, citas:leer y citas:gestionar; laboratorista: pacientes:leer, "
-            "laboratorio:resultados y laboratorio:validar."
+            "laboratorio:resultados y laboratorio:validar; administrador: "
+            "profesionales:administrar (unico permiso posible)."
         ),
     )
     args = parser.parse_args()
@@ -46,6 +47,13 @@ def main() -> None:
             "Una secretaria no puede tener permisos clinicos ni archivar historiales: "
             + ", ".join(sorted(elegidos & permisos.PERMISOS_VEDADOS_SECRETARIA))
         )
+    if args.rol == "administrador" and elegidos != {permisos.PROFESIONALES_ADMINISTRAR}:
+        parser.error(
+            "La cuenta de administracion tiene solo profesionales:administrar (sin permisos "
+            "clinicos). Omite --permiso."
+        )
+    if args.rol != "administrador" and permisos.PROFESIONALES_ADMINISTRAR in elegidos:
+        parser.error("profesionales:administrar es exclusivo del rol administrador.")
     correo = args.correo.strip().lower()
     if "@" not in correo or any(char.isspace() for char in correo):
         parser.error("Correo invalido.")
@@ -89,8 +97,8 @@ def main() -> None:
         parser.error("Ese correo ya tiene una cuenta; no se modifico.")
     except psycopg.errors.CheckViolation:
         parser.error(
-            "La base rechazo el rol o los permisos. Aplica 006 y 007 (database/postgresql) "
-            "si la base se creo antes de agregar el rol secretaria."
+            "La base rechazo el rol o los permisos. Aplica las migraciones de "
+            "database/postgresql (006, 007 y 012) si la base se creo antes."
         )
     except psycopg.errors.ForeignKeyViolation:
         parser.error("Institucion o permiso desconocido; se revirtio el alta.")
@@ -98,7 +106,9 @@ def main() -> None:
         parser.error("No se pudo crear el profesional. Revisa conexiones y datos requeridos.")
     print(f"Profesional creado: {identificador}. Establecimiento: {args.institucion}.")
     print(f"Permisos: {', '.join(sorted(elegidos))}.")
-    if args.institucion == Institucion.CLINICA_ODONTOLOGICA:
+    if args.rol == "administrador":
+        print("Cuenta de administracion: gestiona el personal de su institucion desde la API.")
+    elif args.institucion == Institucion.CLINICA_ODONTOLOGICA:
         # Perfil local en Firestore (sin correo ni contrasena). No es una transaccion entre
         # motores: si falla, PostgreSQL conserva la cuenta y se puede repetir la sincronizacion.
         from scripts.sincronizar_profesionales import sincronizar

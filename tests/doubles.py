@@ -4,15 +4,17 @@ from types import TracebackType
 from typing import Literal, Self
 
 from app.domain import busqueda
+from app.domain.administracion import EstadoCuenta, FichaProfesional, ProfesionalAgenda
 from app.domain.cita import ESTADOS_OCUPAN_HORARIO, Cita, EstadoCita, NuevaCita
 from app.domain.consulta import Adenda, Consulta, NuevaConsulta
-from app.domain.errores import ConflictoAgenda, TokenInvalido
+from app.domain.errores import ConflictoAgenda, ConflictoEstado, TokenInvalido
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.odontograma import EstadoPieza, Odontograma
 from app.domain.paciente import Alergia, Baja, CambiosPaciente, NuevoPaciente, Paciente
 from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.pendiente import (
     CrecimientoNoAplica,
+    HospitalNoAplica,
     LaboratorioNoAplica,
     VacunacionNoAplica,
 )
@@ -143,6 +145,9 @@ class ProfesionalesDoble:
     def obtener(self, id_profesional: str) -> ProfesionalLocal | None:
         return self.registros.get(id_profesional)
 
+    def sincronizar(self, perfil: ProfesionalLocal) -> None:
+        self.registros[perfil.id_profesional] = perfil
+
 
 @dataclass
 class CitasDoble:
@@ -225,6 +230,7 @@ class UnidadTrabajoDoble:
         self.crecimiento = CrecimientoNoAplica("Doble")
         self.vacunacion = VacunacionNoAplica("Doble")
         self.laboratorio = LaboratorioNoAplica("Doble")
+        self.hospital = HospitalNoAplica("Doble")
         self.confirmaciones = 0
         self.reversiones = 0
         self.finalizada = False
@@ -247,3 +253,92 @@ class UnidadTrabajoDoble:
 
     def rollback(self) -> None:
         self.reversiones += 1
+
+
+class CifradorDoble:
+    """Hash reversible SOLO para pruebas."""
+
+    def cifrar(self, contrasena: str) -> str:
+        return "hash:" + contrasena
+
+    def verificar(self, contrasena: str, cifrada: str) -> bool:
+        return cifrada == "hash:" + contrasena
+
+
+@dataclass
+class DirectorioAdministrableDoble:
+    """Identidad central en memoria (cuentas + contrasenas + bitacora)."""
+
+    fichas: dict[str, FichaProfesional] = field(default_factory=dict)
+    contrasenas: dict[str, str] = field(default_factory=dict)
+    bitacora: list[tuple[str, str, str]] = field(default_factory=list)
+
+    def crear(self, institucion, datos, permisos, contrasena_cifrada, id_actor):
+        if any(f.correo == datos.correo for f in self.fichas.values()):
+            raise ConflictoEstado("Ya existe una cuenta con ese correo.")
+        identificador = f"00000000-0000-4000-8000-{len(self.fichas) + 1:012d}"
+        ficha = FichaProfesional(
+            identificador,
+            datos.correo,
+            datos.nombres,
+            datos.apellidos,
+            datos.rol,
+            institucion,
+            EstadoCuenta.ACTIVA,
+            permisos,
+            datos.id_departamento,
+            debe_cambiar_contrasena=True,
+        )
+        self.fichas[identificador] = ficha
+        self.contrasenas[identificador] = contrasena_cifrada
+        self.bitacora.append((id_actor, identificador, "alta"))
+        return ficha
+
+    def listar(self, institucion, rol=None, id_departamento=None, estado=None, limite=200):
+        return [
+            f
+            for f in self.fichas.values()
+            if f.institucion == institucion
+            and (rol is None or f.rol == rol)
+            and (id_departamento is None or f.id_departamento == id_departamento)
+            and (estado is None or f.estado == estado)
+        ][:limite]
+
+    def obtener(self, institucion, id_profesional):
+        ficha = self.fichas.get(id_profesional)
+        return ficha if ficha and ficha.institucion == institucion else None
+
+    def actualizar(self, institucion, id_profesional, cambios, permisos, id_actor):
+        ficha = self.obtener(institucion, id_profesional)
+        nuevos = {}
+        for campo in ("nombres", "apellidos", "estado"):
+            if getattr(cambios, campo) is not None:
+                nuevos[campo] = getattr(cambios, campo)
+        if cambios.quitar_departamento:
+            nuevos["id_departamento"] = None
+        elif cambios.id_departamento is not None:
+            nuevos["id_departamento"] = cambios.id_departamento
+        if permisos is not None:
+            nuevos["permisos"] = permisos
+        self.fichas[id_profesional] = replace(ficha, **nuevos)
+        self.bitacora.append((id_actor, id_profesional, "cambio"))
+        return self.fichas[id_profesional]
+
+    def establecer_contrasena(
+        self, id_profesional, contrasena_cifrada, debe_cambiar, id_actor, accion
+    ):
+        self.contrasenas[id_profesional] = contrasena_cifrada
+        if id_profesional in self.fichas:
+            self.fichas[id_profesional] = replace(
+                self.fichas[id_profesional], debe_cambiar_contrasena=debe_cambiar
+            )
+        self.bitacora.append((id_actor, id_profesional, accion))
+
+    def listar_para_agenda(self, institucion):
+        return [
+            ProfesionalAgenda(f.id_profesional, f.nombres, f.apellidos, f.rol, f.id_departamento)
+            for f in self.fichas.values()
+            if f.institucion == institucion
+            and f.estado != EstadoCuenta.INACTIVA
+            and f.rol not in ("secretaria", "administrador")
+        ]

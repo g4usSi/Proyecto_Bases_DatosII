@@ -8,6 +8,8 @@ from pymongo import MongoClient
 from app.bootstrap.container import Contenedor
 from app.core.config import Settings
 from app.domain.institucion import Institucion
+from app.infrastructure.identity.administracion import AdministracionPostgreSQL
+from app.infrastructure.identity.cifrado import CifradorArgon2
 from app.infrastructure.identity.jwt import AutenticadorCentral
 from app.infrastructure.identity.postgresql import DirectorioPostgreSQL
 from app.infrastructure.persistence.mongodb.unidad import UnidadTrabajoMongo
@@ -21,8 +23,9 @@ def crear_contenedor(settings: Settings) -> Contenedor:
     contenedor = Contenedor()
     if settings.postgres_dsn and settings.jwt_secret:
         dsn = settings.postgres_dsn.get_secret_value()
+        directorio = DirectorioPostgreSQL(dsn)
         autenticador = AutenticadorCentral(
-            DirectorioPostgreSQL(dsn),
+            directorio,
             settings.jwt_secret.get_secret_value(),
             settings.jwt_issuer,
             settings.jwt_audience,
@@ -30,6 +33,9 @@ def crear_contenedor(settings: Settings) -> Contenedor:
         )
         contenedor.autenticador = autenticador
         contenedor.inicio_sesion = autenticador
+        contenedor.cuentas = directorio
+        contenedor.administracion = AdministracionPostgreSQL(dsn)
+        contenedor.cifrador = CifradorArgon2()
         contenedor.unidades_trabajo[Institucion.HOSPITAL_GENERAL] = lambda: UnidadTrabajoPostgreSQL(
             dsn, zona=ZoneInfo(settings.zona_horaria)
         )

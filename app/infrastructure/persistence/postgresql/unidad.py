@@ -32,6 +32,7 @@ from app.domain.errores import (
     PacienteNoEncontrado,
     ProfesionalNoVinculado,
 )
+from app.domain.hospital import Departamento
 from app.domain.paciente import Alergia, Baja, CambiosPaciente, Contacto, NuevoPaciente, Paciente
 from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.comun import (
@@ -53,6 +54,13 @@ ESTADO_CITA_BD = {
     EstadoCita.NO_ASISTIO: "No_asistio",
 }
 ESTADO_CITA_DOMINIO = {valor: clave for clave, valor in ESTADO_CITA_BD.items()}
+# Rol de la identidad central -> rol del modelo original (personal_medico.rol).
+ROL_PERSONAL_MEDICO = {
+    "medico": "Medico",
+    "enfermeria": "Enfermero",
+    "laboratorista": "Tecnico",
+    "odontologo": "Medico",
+}
 
 
 class RepositorioPacientesPostgreSQL:
@@ -524,6 +532,26 @@ class RepositorioProfesionalesPostgreSQL:
             str(fila[0]), fila[1], fila[2], fila[3].lower(), fila[4] == "Activo"
         )
 
+    def sincronizar(self, perfil: ProfesionalLocal) -> None:
+        # Mismo criterio que scripts/sincronizar_profesionales.py: no pisa un 'Suspendido'
+        # puesto por el hospital mientras la cuenta siga activa.
+        self.conexion.execute(
+            "INSERT INTO personal_medico (nombres, apellidos, rol, estado, id_profesional_central) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (id_profesional_central) DO UPDATE SET "
+            "  nombres = EXCLUDED.nombres, apellidos = EXCLUDED.apellidos, rol = EXCLUDED.rol, "
+            "  estado = CASE WHEN EXCLUDED.estado = 'Inactivo' THEN 'Inactivo' "
+            "                WHEN personal_medico.estado = 'Inactivo' THEN 'Activo' "
+            "                ELSE personal_medico.estado END",
+            (
+                perfil.nombres,
+                perfil.apellidos,
+                ROL_PERSONAL_MEDICO.get(perfil.rol, "Administrativo"),
+                "Activo" if perfil.activo else "Inactivo",
+                UUID(perfil.id_profesional),
+            ),
+        )
+
 
 class RepositorioCitasPostgreSQL:
     """Citas del hospital. La base impide los choques (restriccion de exclusion).
@@ -676,6 +704,22 @@ class RepositorioCitasPostgreSQL:
         return cita
 
 
+class RepositorioHospitalPostgreSQL:
+    """Modulos propios del hospital sobre el esquema original (001 + 010 + 012)."""
+
+    def __init__(self, conexion: psycopg.Connection) -> None:
+        self.conexion = conexion
+
+    def listar_departamentos(self) -> list[Departamento]:
+        return [
+            Departamento(fila[0], fila[1])
+            for fila in self.conexion.execute(
+                "SELECT id_departamento, descripcion FROM departamento "
+                "ORDER BY descripcion, id_departamento"
+            )
+        ]
+
+
 class UnidadTrabajoPostgreSQL:
     """Cada solicitud abre su conexion y la cierra; sin commit() todo se revierte."""
 
@@ -702,6 +746,7 @@ class UnidadTrabajoPostgreSQL:
         self.historial = RepositorioHistorialPostgreSQL(self.conexion)
         self.profesionales = RepositorioProfesionalesPostgreSQL(self.conexion)
         self.citas = RepositorioCitasPostgreSQL(self.conexion, self.zona)
+        self.hospital = RepositorioHospitalPostgreSQL(self.conexion)
         # El odontograma es propio de la clinica odontologica (HTTP 501 aqui).
         pendientes = repositorios_pendientes(MOTOR)
         self.odontograma = pendientes["odontograma"]

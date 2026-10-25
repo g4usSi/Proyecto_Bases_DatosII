@@ -10,6 +10,7 @@ from typing import NoReturn
 from app.application.errores import OperacionPendiente
 from app.domain.cita import Cita, EstadoCita, NuevaCita
 from app.domain.consulta import Adenda, Consulta, NuevaConsulta
+from app.domain.hospital import Departamento
 from app.domain.laboratorio import NuevaMuestra, Orden, PruebaCatalogo, Resultado
 from app.domain.odontograma import EstadoPieza, Odontograma
 from app.domain.pediatria import (
@@ -55,6 +56,9 @@ class ProfesionalesPendiente:
         self.motor = motor
 
     def obtener(self, id_profesional: str) -> ProfesionalLocal | None:
+        pendiente(self.motor, "perfil de profesionales")
+
+    def sincronizar(self, perfil: ProfesionalLocal) -> None:
         pendiente(self.motor, "perfil de profesionales")
 
 
@@ -205,6 +209,19 @@ class LaboratorioNoAplica:
         self._no()
 
 
+class HospitalNoAplica:
+    """Departamentos, camas, ingresos y cobros del Hospital General."""
+
+    def __init__(self, motor: str) -> None:
+        self.motor = motor
+
+    def _no(self) -> NoReturn:
+        pendiente(self.motor, "modulo hospitalario (solo aplica al Hospital General)")
+
+    def listar_departamentos(self) -> list[Departamento]:
+        self._no()
+
+
 def repositorios_pendientes(motor: str) -> dict[str, object]:
     """Atributos que una unidad de trabajo sin implementacion propia debe exponer."""
     return {
@@ -215,4 +232,5 @@ def repositorios_pendientes(motor: str) -> dict[str, object]:
         "crecimiento": CrecimientoNoAplica(motor),
         "vacunacion": VacunacionNoAplica(motor),
         "laboratorio": LaboratorioNoAplica(motor),
+        "hospital": HospitalNoAplica(motor),
     }

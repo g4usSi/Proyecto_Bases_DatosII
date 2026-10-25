@@ -10,6 +10,7 @@ from app.domain.institucion import Institucion
 CONSULTA = """
 SELECT p.id_profesional, p.correo, p.password_hash, p.establecimiento,
        p.version_token, p.bloqueado_hasta, (p.activo AND e.activo) AS activo,
+       p.nombres, p.apellidos, p.rol, p.debe_cambiar_contrasena,
        COALESCE(array_agg(pp.permiso) FILTER (WHERE pp.permiso IS NOT NULL), '{}') AS permisos
 FROM identidad.profesional p
 JOIN identidad.establecimiento e ON e.codigo = p.establecimiento
@@ -42,6 +43,10 @@ class DirectorioPostgreSQL:
             row["version_token"],
             row["activo"],
             row["bloqueado_hasta"],
+            row["nombres"],
+            row["apellidos"],
+            row["rol"],
+            row["debe_cambiar_contrasena"],
         )
 
     def buscar_por_correo(self, correo: str) -> CuentaProfesional | None:

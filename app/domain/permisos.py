@@ -9,6 +9,9 @@ CITAS_LEER = "citas:leer"
 CITAS_GESTIONAR = "citas:gestionar"
 LABORATORIO_RESULTADOS = "laboratorio:resultados"  # tomar muestras y registrar resultados
 LABORATORIO_VALIDAR = "laboratorio:validar"  # validar una orden (despues no se modifica)
+# Solo el rol administrador (uno por institucion): altas, permisos, estado y contrasenas del
+# personal de SU institucion. Nunca se combina con permisos clinicos (012_administracion).
+PROFESIONALES_ADMINISTRAR = "profesionales:administrar"
 
 # Igual que identidad.permisos_clinicos() en 006_rol_secretaria_citas.sql.
 PERMISOS_CLINICOS = frozenset({HISTORIALES_LEER, CONSULTAS_REGISTRAR})
@@ -27,5 +30,6 @@ INSTITUCION_DE_SECRETARIA = "clinica_odontologica"
 PERMISOS_POR_ROL = {
     "laboratorista": frozenset({PACIENTES_LEER, LABORATORIO_RESULTADOS, LABORATORIO_VALIDAR}),
     "secretaria": frozenset({PACIENTES_LEER, PACIENTES_REGISTRAR, CITAS_LEER, CITAS_GESTIONAR}),
+    "administrador": frozenset({PROFESIONALES_ADMINISTRAR}),
 }
 PERMISOS_POR_DEFECTO = frozenset({PACIENTES_LEER})

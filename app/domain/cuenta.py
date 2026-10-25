@@ -15,9 +15,21 @@ class CuentaProfesional:
     version_token: int
     activo: bool
     bloqueado_hasta: datetime | None = None
+    nombres: str | None = None
+    apellidos: str | None = None
+    rol: str | None = None
+    debe_cambiar_contrasena: bool = False
 
     def usuario(self) -> UsuarioAutenticado:
-        return UsuarioAutenticado(self.id_profesional, self.institucion, self.permisos)
+        return UsuarioAutenticado(
+            self.id_profesional,
+            self.institucion,
+            self.permisos,
+            self.nombres,
+            self.apellidos,
+            self.rol,
+            self.debe_cambiar_contrasena,
+        )
 
 
 @dataclass(frozen=True, slots=True)

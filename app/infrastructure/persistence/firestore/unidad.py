@@ -453,6 +453,21 @@ class RepositorioProfesionalesFirestore:
             bool(datos.get("activo", False)),
         )
 
+    def sincronizar(self, perfil: ProfesionalLocal) -> None:
+        if not _id_valido(perfil.id_profesional):
+            raise DatosInvalidos("Identificador de profesional invalido.")
+        # Mismo documento que scripts/sincronizar_profesionales.py; va en el batch de la unidad.
+        self.unidad.lote.set(
+            self.unidad.cliente.collection(COLECCION_PROFESIONALES).document(perfil.id_profesional),
+            {
+                "nombres": perfil.nombres,
+                "apellidos": perfil.apellidos,
+                "rol": perfil.rol,
+                "activo": perfil.activo,
+                "sincronizado_en": firestore.SERVER_TIMESTAMP,
+            },
+        )
+
 
 class RepositorioCitasFirestore:
     def __init__(self, unidad: "UnidadTrabajoFirestore") -> None:
@@ -702,6 +717,7 @@ class UnidadTrabajoFirestore:
         self.crecimiento = pendientes["crecimiento"]
         self.vacunacion = pendientes["vacunacion"]
         self.laboratorio = pendientes["laboratorio"]
+        self.hospital = pendientes["hospital"]
 
     def __enter__(self) -> Self:
         self.lote = self.cliente.batch()

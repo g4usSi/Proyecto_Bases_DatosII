@@ -38,7 +38,8 @@ def sincronizar_hospital(conexion: psycopg.Connection, ids: list[str] | None = N
         "             WHEN 'laboratorista' THEN 'Tecnico' WHEN 'odontologo' THEN 'Medico' "
         "             ELSE 'Administrativo' END, "
         "  CASE WHEN p.activo THEN 'Activo' ELSE 'Inactivo' END, p.id_profesional "
-        "FROM identidad.profesional p WHERE p.establecimiento = 'hospital_general'" + filtro + " "
+        "FROM identidad.profesional p WHERE p.establecimiento = 'hospital_general' "
+        "AND p.rol <> 'administrador'" + filtro + " "
         "ON CONFLICT (id_profesional_central) DO UPDATE SET "
         "  nombres = EXCLUDED.nombres, apellidos = EXCLUDED.apellidos, rol = EXCLUDED.rol, "
         # No se pisa un 'Suspendido' puesto por el hospital mientras la cuenta siga activa.
@@ -60,7 +61,7 @@ def sincronizar_centro_pediatrico(
     """
     consulta = (
         "SELECT id_profesional::text, nombres, apellidos, activo FROM identidad.profesional "
-        "WHERE establecimiento = 'centro_pediatrico'"
+        "WHERE establecimiento = 'centro_pediatrico' AND rol <> 'administrador'"
     )
     parametros: tuple = ()
     if ids:
@@ -95,7 +96,7 @@ def sincronizar_laboratorio(dsn: str, ids: list[str] | None = None, coleccion=No
     """MongoDB (Laboratorio Clinico): crea o actualiza la coleccion `profesionales`."""
     consulta = (
         "SELECT id_profesional::text, nombres, apellidos, activo, rol FROM identidad.profesional "
-        "WHERE establecimiento = 'laboratorio_clinico'"
+        "WHERE establecimiento = 'laboratorio_clinico' AND rol <> 'administrador'"
     )
     parametros: tuple = ()
     if ids:
@@ -173,7 +174,8 @@ def sincronizar(dsn: str, ids: list[str] | None = None) -> int:
         raise RuntimeError("Falta la clave de Firebase (.secrets/firebase-adminsdk.json).")
     consulta = (
         "SELECT id_profesional::text, nombres, apellidos, rol, activo "
-        "FROM identidad.profesional WHERE establecimiento = 'clinica_odontologica'"
+        "FROM identidad.profesional WHERE establecimiento = 'clinica_odontologica' "
+        "AND rol <> 'administrador'"
     )
     parametros: tuple = ()
     if ids:

@@ -3,6 +3,7 @@ from typing import Literal, Protocol, Self
 
 from app.application.ports.citas import RepositorioCitas
 from app.application.ports.historial import RepositorioHistorial
+from app.application.ports.hospital import RepositorioHospital
 from app.application.ports.laboratorio import RepositorioLaboratorio
 from app.application.ports.odontograma import RepositorioOdontograma
 from app.application.ports.pacientes import RepositorioPacientes
@@ -42,6 +43,9 @@ class UnidadDeTrabajo(Protocol):
 
     @property
     def laboratorio(self) -> RepositorioLaboratorio: ...
+
+    @property
+    def hospital(self) -> RepositorioHospital: ...
 
     def __enter__(self) -> Self: ...
 

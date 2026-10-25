@@ -72,6 +72,7 @@ def mysql_app(mysql_pruebas):
         "005_permisos_escritura.sql",
         "007_permisos_extensiones.sql",
         "009_permisos_pediatria.sql",
+        "011_permisos_profesionales.sql",
     ):
         texto = (PROJECT_ROOT / "database/mysql" / archivo).read_text(encoding="utf-8")
         texto = texto.replace("historiales_app", usuario)
@@ -493,7 +494,8 @@ def test_la_cuenta_de_la_api_tiene_permisos_minimos(centro):
                 "UPDATE cita SET id_medico = 1",
                 "UPDATE consulta_medica SET motivo_consulta = 'Otro'",
                 "SELECT salario FROM medico",
-                "INSERT INTO medico (nombre, apellido, colegiado) VALUES ('a','b','c')",
+                "INSERT INTO medico (nombre, apellido, colegiado, salario) VALUES ('a','b','c',1)",
+                "UPDATE medico SET colegiado = 'otro'",
                 "SELECT * FROM facturacion",
             ):
                 with pytest.raises(pymysql.err.OperationalError) as error:
