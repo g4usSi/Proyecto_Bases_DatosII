@@ -54,7 +54,7 @@
     bsonType: "object", required: ["_id", "id_profesional_central", "nombres", "apellidos", "activo"],
     properties: {
       _id: objetoId, id_profesional_central: uuid, nombres: texto, apellidos: texto,
-      especialidad: texto, registro_profesional: texto, activo: { bsonType: "bool" }
+      rol: texto, especialidad: texto, registro_profesional: texto, activo: { bsonType: "bool" }
     }
   });
   laboratorio.profesionales.createIndex({ id_profesional_central: 1 }, { unique: true, name: "uq_identidad" });
@@ -106,6 +106,36 @@
   });
   laboratorio.consultas.createIndex({ id_paciente: 1, fecha_hora: -1, _id: -1 }, { name: "ix_historial" });
   laboratorio.consultas.createIndex({ id_profesional_central: 1, fecha_hora: -1 }, { name: "ix_profesional" });
+
+  // Citas (toma de muestras). `bloques` tiene una llave por minuto ocupado
+  // ("<profesional>|<minuto desde la epoca>") y el indice unico PARCIAL (solo citas que
+  // ocupan horario) hace que MongoDB rechace atomicamente dos citas que se cruzan.
+  // Cancelar o cerrar la cita pone ocupa = false y la saca del indice.
+  asegurarColeccion("citas", {
+    bsonType: "object",
+    required: ["_id", "id_paciente", "nombre_paciente", "id_profesional_central", "inicio", "fin",
+      "duracion_minutos", "estado", "ocupa", "bloques", "creada_por", "creada_en"],
+    properties: {
+      _id: objetoId, id_paciente: objetoId, nombre_paciente: texto, id_profesional_central: uuid,
+      inicio: fecha, fin: fecha, duracion_minutos: { bsonType: "int", minimum: 5, maximum: 480 },
+      motivo: texto, motivo_cambio: texto,
+      estado: { enum: ["Programada", "Confirmada", "Atendida", "Cancelada", "No asistio"] },
+      ocupa: { bsonType: "bool" },
+      bloques: { bsonType: "array", minItems: 1, maxItems: 480, items: { bsonType: "string" } },
+      creada_por: uuid, creada_en: fecha, actualizada_por: uuid, actualizada_en: fecha
+    }
+  }, [
+    { $expr: { $lt: ["$inicio", "$fin"] } },
+    { $or: [
+      { estado: { $in: ["Programada", "Confirmada"] }, ocupa: true },
+      { estado: { $in: ["Atendida", "Cancelada", "No asistio"] }, ocupa: false }
+    ] },
+    { $or: [{ estado: { $ne: "Cancelada" } }, { motivo_cambio: { $regex: "\\S" } }] }
+  ]);
+  laboratorio.citas.createIndex({ bloques: 1 }, { unique: true, name: "uq_cita_sin_choques",
+    partialFilterExpression: { ocupa: true } });
+  laboratorio.citas.createIndex({ inicio: 1, _id: 1 }, { name: "ix_agenda" });
+  laboratorio.citas.createIndex({ id_paciente: 1, inicio: -1, _id: -1 }, { name: "ix_cita_paciente" });
 
   // La orden conserva una copia de la prueba/version y del rango usado en ese examen.
   // Cambiar el catalogo no debe reinterpretar un resultado historico.
@@ -170,5 +200,5 @@
     laboratorio.createUser({ user: "historiales_app", pwd: process.env.MONGO_APP_PASSWORD,
       roles: [{ role: "readWrite", db: "laboratorio_clinico" }] });
   }
-  print("Laboratorio Clinico: 5 colecciones, validadores e indices listos. Sin pacientes de ejemplo.");
+  print("Laboratorio Clinico: 6 colecciones, validadores e indices listos. Sin pacientes de ejemplo.");
 })();

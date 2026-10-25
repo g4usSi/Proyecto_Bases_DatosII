@@ -94,7 +94,7 @@ def sincronizar_centro_pediatrico(
 def sincronizar_laboratorio(dsn: str, ids: list[str] | None = None, coleccion=None) -> int:
     """MongoDB (Laboratorio Clinico): crea o actualiza la coleccion `profesionales`."""
     consulta = (
-        "SELECT id_profesional::text, nombres, apellidos, activo FROM identidad.profesional "
+        "SELECT id_profesional::text, nombres, apellidos, activo, rol FROM identidad.profesional "
         "WHERE establecimiento = 'laboratorio_clinico'"
     )
     parametros: tuple = ()
@@ -109,10 +109,17 @@ def sincronizar_laboratorio(dsn: str, ids: list[str] | None = None, coleccion=No
     if coleccion is None:
         cliente, coleccion = _conectar_mongo_admin()
     try:
-        for id_profesional, nombres, apellidos, activo in filas:
+        for id_profesional, nombres, apellidos, activo, rol in filas:
             coleccion.update_one(
                 {"id_profesional_central": id_profesional},
-                {"$set": {"nombres": nombres, "apellidos": apellidos, "activo": activo}},
+                {
+                    "$set": {
+                        "nombres": nombres,
+                        "apellidos": apellidos,
+                        "activo": activo,
+                        "rol": rol,
+                    }
+                },
                 upsert=True,
             )
     finally:
