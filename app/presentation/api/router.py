@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.presentation.api.routes import (
     auth,
     citas,
+    hospital,
     laboratorio,
     odontograma,
     pacientes,
@@ -18,3 +19,4 @@ api_router.include_router(odontograma.router)
 api_router.include_router(citas.router)
 api_router.include_router(pediatria.router)
 api_router.include_router(laboratorio.router)
+api_router.include_router(hospital.router)

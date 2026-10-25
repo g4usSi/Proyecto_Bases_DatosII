@@ -121,9 +121,8 @@ def test_flujo_completo_del_administrador_del_hospital(entorno, admin_pg):
     with TestClient(create_app(Settings())) as client:
         admin = cabecera(login(client, entorno.crear_admin("hospital_general"), CLAVE_ADMIN))
         departamentos = client.get("/api/v1/departamentos", headers=admin).json()
-        assert {"id_departamento": entorno.departamento, "nombre": f"Zz Area {entorno.marca}"} in (
-            departamentos
-        )
+        propio = next(d for d in departamentos if d["id_departamento"] == entorno.departamento)
+        assert propio["nombre"] == f"Zz Area {entorno.marca}" and propio["camas"] == 0
         # El administrador no tiene acceso clinico.
         assert (
             client.get("/api/v1/pacientes", params={"nombre": "ana"}, headers=admin).status_code

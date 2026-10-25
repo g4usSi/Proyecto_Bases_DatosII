@@ -12,6 +12,8 @@ LABORATORIO_VALIDAR = "laboratorio:validar"  # validar una orden (despues no se 
 # Solo el rol administrador (uno por institucion): altas, permisos, estado y contrasenas del
 # personal de SU institucion. Nunca se combina con permisos clinicos (012_administracion).
 PROFESIONALES_ADMINISTRAR = "profesionales:administrar"
+# Hospital General: marcar camas en limpieza/mantenimiento/disponibles (013_camas_ingresos).
+CAMAS_GESTIONAR = "camas:gestionar"
 
 # Igual que identidad.permisos_clinicos() en 006_rol_secretaria_citas.sql.
 PERMISOS_CLINICOS = frozenset({HISTORIALES_LEER, CONSULTAS_REGISTRAR})

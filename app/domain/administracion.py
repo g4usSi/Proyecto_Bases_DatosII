@@ -44,7 +44,7 @@ _COMUNES = frozenset(
 
 # Permisos que tienen sentido en cada institucion (otro -> 422).
 PERMISOS_ASIGNABLES: dict[Institucion, frozenset[str]] = {
-    Institucion.HOSPITAL_GENERAL: _COMUNES,
+    Institucion.HOSPITAL_GENERAL: _COMUNES | {p.CAMAS_GESTIONAR},
     Institucion.CENTRO_PEDIATRICO: _COMUNES,
     Institucion.LABORATORIO_CLINICO: _COMUNES | {p.LABORATORIO_RESULTADOS, p.LABORATORIO_VALIDAR},
     Institucion.CLINICA_ODONTOLOGICA: _COMUNES,

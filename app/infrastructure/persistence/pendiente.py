@@ -9,8 +9,17 @@ from typing import NoReturn
 
 from app.application.errores import OperacionPendiente
 from app.domain.cita import Cita, EstadoCita, NuevaCita
-from app.domain.consulta import Adenda, Consulta, NuevaConsulta
-from app.domain.hospital import Departamento
+from app.domain.consulta import Adenda, Consulta, Diagnostico, NuevaConsulta
+from app.domain.hospital import (
+    Cama,
+    Departamento,
+    EstadoCama,
+    Ingreso,
+    NuevaOrdenMedica,
+    NuevoIngreso,
+    ResumenHospital,
+    TipoIngreso,
+)
 from app.domain.laboratorio import (
     EstadoOrden,
     NuevaMuestra,
@@ -238,6 +247,55 @@ class HospitalNoAplica:
         pendiente(self.motor, "modulo hospitalario (solo aplica al Hospital General)")
 
     def listar_departamentos(self) -> list[Departamento]:
+        self._no()
+
+    def listar_camas(
+        self, id_departamento: int | None = None, estado: EstadoCama | None = None
+    ) -> list[Cama]:
+        self._no()
+
+    def obtener_cama(self, id_cama: int) -> Cama | None:
+        self._no()
+
+    def cambiar_estado_cama(self, id_cama: int, estado: EstadoCama) -> Cama:
+        self._no()
+
+    def ingresar(
+        self, id_paciente: str, id_profesional: str, datos: NuevoIngreso, ahora: datetime
+    ) -> Ingreso:
+        self._no()
+
+    def obtener_ingreso(self, id_paciente: str, id_ingreso: str) -> Ingreso | None:
+        self._no()
+
+    def listar_ingresos(
+        self,
+        id_paciente: str | None = None,
+        abiertos: bool | None = None,
+        tipo: TipoIngreso | None = None,
+        limite: int = 100,
+    ) -> list[Ingreso]:
+        self._no()
+
+    def agregar_diagnostico(
+        self, id_paciente: str, id_ingreso: str, diagnostico: Diagnostico
+    ) -> Ingreso:
+        self._no()
+
+    def agregar_orden(
+        self,
+        id_paciente: str,
+        id_ingreso: str,
+        id_profesional: str,
+        orden: NuevaOrdenMedica,
+        ahora: datetime,
+    ) -> Ingreso:
+        self._no()
+
+    def dar_alta(self, id_paciente: str, id_ingreso: str, motivo: str, ahora: datetime) -> Ingreso:
+        self._no()
+
+    def resumen(self, hoy: date) -> ResumenHospital:
         self._no()
 
 

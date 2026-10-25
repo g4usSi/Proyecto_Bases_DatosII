@@ -107,6 +107,9 @@ class DepartamentoResponse(BaseModel):
 
     id_departamento: int
     nombre: str
+    habitaciones: int = 0
+    camas: int = 0
+    camas_disponibles: int = 0
 
 
 class CambiarContrasenaRequest(Entrada):
