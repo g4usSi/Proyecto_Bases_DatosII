@@ -56,6 +56,8 @@ services:
       - ./database/mysql/010_sin_stock_vacunas.sql:/docker-entrypoint-initdb.d/010_sin_stock_vacunas.sql:ro
       - ./database/mysql/011_permisos_profesionales.sql:/docker-entrypoint-initdb.d/011_permisos_profesionales.sql:ro
       - ./database/mysql/012_permisos_cobros.sql:/docker-entrypoint-initdb.d/012_permisos_cobros.sql:ro
+      - ./database/mysql/013_tutores.sql:/docker-entrypoint-initdb.d/013_tutores.sql:ro
+      - ./database/mysql/014_permisos_tutores.sql:/docker-entrypoint-initdb.d/014_permisos_tutores.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql -u historiales_app -D hospital_pediatrico -e 'SELECT 1' >/dev/null"]
       interval: 5s

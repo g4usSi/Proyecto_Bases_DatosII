@@ -10,6 +10,7 @@ from app.application.ports.odontograma import RepositorioOdontograma
 from app.application.ports.pacientes import RepositorioPacientes
 from app.application.ports.pediatria import RepositorioCrecimiento, RepositorioVacunacion
 from app.application.ports.profesionales import RepositorioProfesionales
+from app.application.ports.tutores import RepositorioTutores
 
 
 class UnidadDeTrabajo(Protocol):
@@ -50,6 +51,9 @@ class UnidadDeTrabajo(Protocol):
 
     @property
     def cobros(self) -> RepositorioCobros: ...
+
+    @property
+    def tutores(self) -> RepositorioTutores: ...
 
     def __enter__(self) -> Self: ...
 

@@ -741,6 +741,7 @@ class UnidadTrabajoPostgreSQL:
         self.crecimiento = pendientes["crecimiento"]
         self.vacunacion = pendientes["vacunacion"]
         self.laboratorio = pendientes["laboratorio"]
+        self.tutores = pendientes["tutores"]
         return self
 
     def __exit__(

@@ -1299,6 +1299,7 @@ class UnidadTrabajoMongo:
         self.vacunacion = pendientes["vacunacion"]
         self.hospital = pendientes["hospital"]
         self.cobros = pendientes["cobros"]
+        self.tutores = pendientes["tutores"]
         return self
 
     def __exit__(

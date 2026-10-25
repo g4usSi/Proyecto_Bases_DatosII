@@ -78,6 +78,7 @@ def mysql_app(mysql_pruebas):
         "009_permisos_pediatria.sql",
         "011_permisos_profesionales.sql",
         "012_permisos_cobros.sql",
+        "014_permisos_tutores.sql",
     ):
         texto = (PROJECT_ROOT / "database/mysql" / archivo).read_text(encoding="utf-8")
         texto = texto.replace("historiales_app", usuario)
@@ -1454,3 +1455,122 @@ def test_facturacion_por_la_api(centro):
     assert cargo.json()["total"] == "80.00"
     assert (pago.json()["estado"], pago.json()["saldo"]) == ("pagado", "0.00")
     assert anular.status_code == 501 and servicios.status_code == 501
+
+
+# ---------------------------------------------------------------------------------------
+# Tutores
+# ---------------------------------------------------------------------------------------
+
+
+def test_tutores_principal_unico_hermanos_y_autorizacion(centro):
+    configuracion = Settings(
+        mysql_host=centro.datos["host"],
+        mysql_port=centro.datos["port"],
+        mysql_user=centro.datos["user"],
+        mysql_password=centro.datos["password"],
+        mysql_database=centro.datos["database"],
+    )
+    documento = "DPI-" + uuid4().hex[:12]
+    hermano_a, hermano_b = registrar(centro, "Lia"), registrar(centro, "Leo")
+    with TestClient(create_app(configuracion)) as client:
+        login = client.post(
+            "/api/v1/auth/login", json={"correo": centro.correo, "password": centro.password}
+        )
+        h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        ruta_a = f"/api/v1/pacientes/{hermano_a}/tutores"
+        madre = client.post(
+            ruta_a,
+            json={
+                "tutor": {
+                    "nombres": "Marta",
+                    "apellidos": centro.marca,
+                    "documento": documento,
+                    "telefono": "5555-1111",
+                },
+                "parentesco": "Madre",
+                "es_principal": True,
+            },
+            headers=h,
+        )
+        assert madre.status_code == 201, madre.text
+        id_madre = madre.json()["tutor"]["id_tutor"]
+        assert madre.json()["es_principal"] and madre.json()["autorizado"]
+
+        # Mismo documento: se busca y se vincula al hermano (tutor compartido).
+        repetido = client.post(
+            ruta_a.replace(hermano_a, hermano_b),
+            json={
+                "tutor": {"nombres": "X", "apellidos": "Y", "documento": documento},
+                "parentesco": "Madre",
+            },
+            headers=h,
+        )
+        assert repetido.status_code == 409
+        encontrado = client.get("/api/v1/tutores", params={"documento": documento}, headers=h)
+        assert encontrado.json()["id_tutor"] == id_madre
+        compartido = client.post(
+            f"/api/v1/pacientes/{hermano_b}/tutores",
+            json={"id_tutor": id_madre, "parentesco": "Madre", "es_principal": True},
+            headers=h,
+        )
+        assert compartido.status_code == 201
+        assert (
+            client.post(
+                ruta_a, json={"id_tutor": id_madre, "parentesco": "Madre"}, headers=h
+            ).status_code
+            == 409
+        )
+
+        # Un nuevo principal reemplaza al anterior (uno solo por paciente).
+        abuelo = client.post(
+            ruta_a,
+            json={
+                "tutor": {"nombres": "Jose", "apellidos": centro.marca},
+                "parentesco": "Abuelo",
+                "es_principal": True,
+            },
+            headers=h,
+        ).json()
+        lista = client.get(ruta_a, headers=h).json()
+        assert [(t["tutor"]["nombres"], t["es_principal"]) for t in lista] == [
+            ("Jose", True),
+            ("Marta", False),
+        ]
+        # El contacto es del tutor: cambia tambien en el hermano.
+        cambio = client.patch(
+            f"{ruta_a}/{id_madre}", json={"telefono": "5555-2222", "autorizado": False}, headers=h
+        )
+        assert cambio.status_code == 200 and cambio.json()["autorizado"] is False
+        del_hermano = client.get(f"/api/v1/pacientes/{hermano_b}/tutores", headers=h).json()
+        assert del_hermano[0]["tutor"]["telefono"] == "5555-2222"
+        assert del_hermano[0]["es_principal"] is True  # el otro paciente no cambia
+
+        # Reglas: principal debe estar autorizado; vacio; inexistente.
+        id_abuelo = abuelo["tutor"]["id_tutor"]
+        assert (
+            client.patch(f"{ruta_a}/{id_abuelo}", json={"autorizado": False}, headers=h).status_code
+            == 422
+        )
+        assert client.patch(f"{ruta_a}/{id_abuelo}", json={}, headers=h).status_code == 422
+        assert (
+            client.patch(f"{ruta_a}/999999", json={"parentesco": "X"}, headers=h).status_code == 404
+        )
+        assert (
+            client.post(ruta_a, json={"parentesco": "Tio"}, headers=h).status_code == 422
+        )  # ni id_tutor ni tutor
+
+        # Historial archivado: se leen, pero no se cambian.
+        client.post(
+            f"/api/v1/pacientes/{hermano_a}/archivo", json={"motivo": "traslado"}, headers=h
+        )
+        assert client.get(ruta_a, headers=h).status_code == 200
+        assert (
+            client.patch(f"{ruta_a}/{id_madre}", json={"parentesco": "Mama"}, headers=h).status_code
+            == 409
+        )
+    with centro.admin.cursor() as cursor:
+        with pytest.raises(pymysql.err.OperationalError, match="archivado"):
+            cursor.execute(
+                "UPDATE paciente_tutor SET parentesco = 'X' WHERE id_paciente = %s",
+                (hermano_a,),
+            )

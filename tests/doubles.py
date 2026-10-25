@@ -17,6 +17,7 @@ from app.infrastructure.persistence.pendiente import (
     CrecimientoNoAplica,
     HospitalNoAplica,
     LaboratorioNoAplica,
+    TutoresNoAplica,
     VacunacionNoAplica,
 )
 
@@ -233,6 +234,7 @@ class UnidadTrabajoDoble:
         self.laboratorio = LaboratorioNoAplica("Doble")
         self.hospital = HospitalNoAplica("Doble")
         self.cobros = CobrosNoAplica("Doble")
+        self.tutores = TutoresNoAplica("Doble")
         self.confirmaciones = 0
         self.reversiones = 0
         self.finalizada = False

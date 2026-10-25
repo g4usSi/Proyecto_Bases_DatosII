@@ -38,6 +38,7 @@ from app.domain.pediatria import (
     TipoVacuna,
 )
 from app.domain.profesional import ProfesionalLocal
+from app.domain.tutores import CambiosTutor, NuevoTutor, Tutor, TutorDePaciente, Vinculo
 
 
 def pendiente(motor: str, operacion: str) -> NoReturn:
@@ -352,6 +353,34 @@ class CobrosNoAplica:
         self._no()
 
 
+class TutoresNoAplica:
+    """Los tutores del paciente son propios del Centro Pediatrico."""
+
+    def __init__(self, motor: str) -> None:
+        self.motor = motor
+
+    def _no(self) -> NoReturn:
+        pendiente(self.motor, "tutores del paciente" + _SOLO_PEDIATRIA)
+
+    def listar(self, id_paciente: str) -> list[TutorDePaciente]:
+        self._no()
+
+    def buscar_por_documento(self, documento: str) -> Tutor | None:
+        self._no()
+
+    def vincular(
+        self,
+        id_paciente: str,
+        vinculo: Vinculo,
+        id_tutor: str | None = None,
+        nuevo: NuevoTutor | None = None,
+    ) -> TutorDePaciente:
+        self._no()
+
+    def cambiar(self, id_paciente: str, id_tutor: str, cambios: CambiosTutor) -> TutorDePaciente:
+        self._no()
+
+
 def repositorios_pendientes(motor: str) -> dict[str, object]:
     """Atributos que una unidad de trabajo sin implementacion propia debe exponer."""
     return {
@@ -364,4 +393,5 @@ def repositorios_pendientes(motor: str) -> dict[str, object]:
         "laboratorio": LaboratorioNoAplica(motor),
         "hospital": HospitalNoAplica(motor),
         "cobros": CobrosNoAplica(motor),
+        "tutores": TutoresNoAplica(motor),
     }
