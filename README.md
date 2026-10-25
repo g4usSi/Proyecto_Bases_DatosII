@@ -23,7 +23,9 @@ No se han creado ramas nuevas. Las cinco operaciones del curso, la búsqueda por
 las adendas, la corrección de datos/alergias y las **citas con no-solape** funcionan en
 **los cuatro motores**. Los módulos propios de cada establecimiento (odontograma en
 Firestore, crecimiento y vacunación en MySQL, órdenes y resultados de laboratorio en
-MongoDB) responden 501 en los demás. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
+MongoDB; camas, ingresos y cobros en PostgreSQL; tutores y facturación en MySQL) responden
+501 en los demás. La administración de profesionales (una cuenta de administración por
+institución) y el cambio de contraseña funcionan para todas. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
 migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
 
 **Frontend:** pendiente. Decisión: HTML/JS sencillo servido por la misma FastAPI (sin
@@ -142,6 +144,12 @@ obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID
 | `POST /api/v1/pacientes/{id}/archivo` | Baja por traslado, fallecimiento o causa administrativa (`historiales:archivar`). |
 | `POST /api/v1/citas`, `GET /api/v1/citas` | Agendar y ver agenda (`citas:gestionar`, `citas:leer`). |
 | `POST /api/v1/citas/{id}/estado` | Atendida, cancelada (con motivo) o no asistió. |
+| `POST/GET/PATCH /api/v1/profesionales` | Administración del personal de tu institución (`profesionales:administrar`). |
+| `POST /api/v1/auth/cambiar-contrasena` | Cambia tu contraseña y devuelve un token nuevo. |
+| `/api/v1/camas`, `/api/v1/ingresos`, `/api/v1/hospital/resumen` | Hospital General: camas, emergencias e ingresos, inicio. |
+| `/api/v1/cobros`, `/api/v1/pacientes/{id}/cobros` | Cobros y pagos (hospital y centro pediátrico; `pagos:ver` / `pagos:registrar`). |
+| `/api/v1/pacientes/{id}/tutores` | Tutores del paciente (centro pediátrico). |
+| `GET /api/v1/laboratorio/ordenes` | Tablero de órdenes del laboratorio. |
 | `GET/PUT /api/v1/pacientes/{id}/odontograma` | Odontograma FDI; el estado de la pieza debe estar en la lista fija, si no responde 422 (`historiales:leer` / `consultas:registrar`). |
 
 401: credenciales/sesión inválidas; 403: permiso ausente; 404: paciente ausente;
@@ -199,10 +207,10 @@ sin configurar un entorno de pruebas separado.
 
 El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
 Pendiente: hacer los mockups y el frontend ([plan](docs/frontend.md)), redactar el
-documento comparativo, exponer pagos y camas del Hospital General si el equipo lo decide,
-probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
-aplica las migraciones nuevas (PostgreSQL 009–011, MySQL 006–010 y repetir el JS de MongoDB:
-sección 14 de la documentación). MongoDB corre como servidor único: convertirlo a *replica set* permitiría
+documento comparativo, probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
+aplica las migraciones nuevas (PostgreSQL 009–014, MySQL 006–014 y repetir el JS de MongoDB:
+sección 14 de la documentación) y crea la cuenta de administración de cada institución con
+`python -m scripts.crear_profesional ... --rol administrador`. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
 usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja
 simultáneas (ver [operaciones comunes](docs/operaciones_comunes.md)).
 

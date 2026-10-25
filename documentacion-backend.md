@@ -6,8 +6,8 @@ sus propios pacientes en su propio motor.
 
 | Establecimiento | Motor | Qué guarda |
 | --- | --- | --- |
-| Hospital General | PostgreSQL | Pacientes, historial, citas; identidad y cuentas de **todos** (esquema `identidad`). |
-| Centro Pediátrico | MySQL 8.4 | Pacientes, historial, citas, crecimiento y vacunación. |
+| Hospital General | PostgreSQL | Pacientes, historial, citas, camas, ingresos y cobros; identidad y cuentas de **todos** (esquema `identidad`). |
+| Centro Pediátrico | MySQL 8.4 | Pacientes, historial, citas, crecimiento, vacunación, tutores y facturación. |
 | Laboratorio Clínico | MongoDB 8 | Pacientes, historial, citas, catálogo de pruebas, órdenes, muestras y resultados. |
 | Clínica Odontológica | Cloud Firestore | Pacientes, historial, citas (agenda), odontograma. |
 
@@ -57,6 +57,21 @@ no perderlas antes de implementar el cliente.
   el esquema recomendado depende de él. La tabla `catalogo_vacunas` (lotes) sigue en el
   esquema original pero la API ya no la usa.
 
+### 0.4 Administración de profesionales (decisiones de la brecha con el frontend)
+
+* **Una cuenta de administración por institución** (rol `administrador`). Tiene un único
+  permiso, `profesionales:administrar`, y **ningún permiso clínico**: no ve pacientes. La
+  base lo impone (`012_administracion_profesionales.sql`). Se crea con
+  `scripts/crear_profesional.py --rol administrador`; la API no crea administradores.
+* Solo el administrador restablece contraseñas. Cada persona cambia la suya con
+  `POST /auth/cambiar-contrasena`.
+* La institución sale siempre del token del administrador: un administrador del
+  laboratorio no ve ni modifica al personal del hospital (404).
+* Roles que el administrador puede dar de alta: hospital y centro pediátrico `medico` y
+  `enfermeria`; laboratorio `laboratorista` y `medico`; clínica `odontologo` y `secretaria`.
+* "Lotes y vencimientos" (mockup del Centro Pediátrico) **no se construyó**: contradice la
+  decisión §0.3.
+
 ---
 
 ## 1. Cómo funciona una petición
@@ -105,6 +120,10 @@ desde fuera.
 | `pediatria.py` | Control de crecimiento, catálogo de vacunas y dosis (`pendiente/aplicada/cancelada`); cálculo de edad en meses. |
 | `laboratorio.py` | Catálogo de pruebas con rangos de referencia, orden, muestra, resultado; interpretación bajo/normal/alto. |
 | `permisos.py` | Permisos, roles y permisos vedados a la secretaria. |
+| `administracion.py` | Cuentas que gestiona el administrador: roles por institución, permisos asignables, política y generación de contraseñas, estados `activa/bloqueada/inactiva`. |
+| `hospital.py` | Departamentos, camas, ingresos (emergencia/programado/traslado), órdenes médicas y resumen. |
+| `cobros.py` | Cobros, cargos y pagos (contrato común del hospital y la facturación pediátrica). |
+| `tutores.py` | Tutores del paciente pediátrico, vínculo, principal y autorización. |
 | `profesional.py`, `cuenta.py`, `identidad.py`, `institucion.py` | Cuenta, estado de bloqueo, institución ↔ motor. |
 | `errores.py` | Errores de negocio que la API traduce a códigos HTTP (§5). |
 
@@ -112,7 +131,10 @@ desde fuera.
 
 `RepositorioPacientes`, `RepositorioHistorial`, `RepositorioCitas`, `RepositorioProfesionales`,
 `RepositorioOdontograma`, `RepositorioCrecimiento`, `RepositorioVacunacion`,
-`RepositorioLaboratorio` y `UnidadDeTrabajo` (agrupa los anteriores y ofrece `commit()`).
+`RepositorioLaboratorio`, `RepositorioHospital`, `RepositorioCobros`, `RepositorioTutores` y
+`UnidadDeTrabajo` (agrupa los anteriores y ofrece `commit()`). Fuera de la unidad de trabajo,
+`DirectorioAdministrable` y `Cifrador` (`ports/administracion.py`) administran las cuentas de
+la identidad central.
 Lo que un motor no ofrece se resuelve con el repositorio *pendiente*
 (`persistence/pendiente.py`), que responde **501**.
 
@@ -130,7 +152,11 @@ Lo que un motor no ofrece se resuelve con el repositorio *pendiente*
 | `citas.py` | `AgendarCita`, `ConsultarAgenda`, `CitasDePaciente`, `CambiarEstadoCita`. |
 | `odontograma.py` | `ConsultarOdontograma`, `ActualizarPieza`. |
 | `pediatria.py` | Crecimiento: `RegistrarControlCrecimiento`, `ConsultarCrecimiento`. Vacunación: `ConsultarCatalogoVacunas`, `ConsultarEsquema`, `ProgramarDosis`, `GenerarEsquemaRecomendado`, `AplicarDosis`, `CancelarDosis`. |
-| `laboratorio.py` | `ConsultarCatalogoLaboratorio`, `SolicitarOrden`, `ConsultarOrdenes`, `RegistrarMuestra`, `RegistrarResultados`, `ValidarOrden`, `CancelarOrden`. |
+| `laboratorio.py` | `ConsultarCatalogoLaboratorio`, `SolicitarOrden`, `ConsultarOrdenes`, `RegistrarMuestra`, `RegistrarResultados`, `ValidarOrden`, `CancelarOrden`, `TableroLaboratorio`, `VersionesDePrueba`. |
+| `profesionales.py` | `AdministrarProfesionales` (alta, lista, cambios, restablecer, selector de agenda) y `CambiarContrasena`. |
+| `hospital.py` | `ConsultarDepartamentos`, `ConsultarCamas`, `CambiarEstadoCama`, `IngresarPaciente`, `ConsultarIngresos`, `AgregarDiagnosticoIngreso`, `AgregarOrdenIngreso`, `DarDeAlta`, `ResumenDelHospital`. |
+| `cobros.py` | `ConsultarServicios`, `ConsultarCobros`, `AbrirCobro`, `AgregarCargo`, `RegistrarPago`, `AnularPago`, `CerrarCobro`, `AnularCobro`. |
+| `tutores.py` | `ConsultarTutores`, `VincularTutor`, `CambiarTutor`. |
 
 Reglas comunes que aplican todos: el paciente debe existir (404) y **no estar archivado**
 (409) para cualquier escritura; los datos se validan antes de tocar la base (422).
@@ -158,7 +184,8 @@ a qué establecimiento corresponde.
 | --- | --- |
 | `POST /auth/login` | Valida correo/contraseña (Argon2). Cuenta bloqueada tras intentos fallidos repetidos. Devuelve el JWT. |
 | `POST /auth/logout` | Revoca **todas las sesiones** del profesional (los tokens emitidos dejan de valer). |
-| `GET /auth/me` | Datos del profesional autenticado: institución, rol y permisos vigentes. |
+| `GET /auth/me` | Datos del profesional autenticado: institución, nombres, rol, permisos vigentes y `debe_cambiar_contrasena` (tras un alta o restablecimiento). |
+| `POST /auth/cambiar-contrasena` | La persona cambia su contraseña (`contrasena_actual`, `contrasena_nueva`). Cierra sus demás sesiones y devuelve un token nuevo. Una contraseña actual incorrecta da 422 y cuenta como intento fallido. |
 
 ### 3.3 Pacientes e historial (todos los motores)
 
@@ -219,6 +246,69 @@ Flujo de una orden: `solicitada → en_proceso → validada` (o `cancelada`).
 | `POST /pacientes/{id}/ordenes/{id_orden}/validar` | `laboratorio:validar` | Valida la orden. Desde ese momento es **inmutable**. Exige que todas las pruebas tengan resultado. |
 | `POST /pacientes/{id}/ordenes/{id_orden}/cancelar` | `consultas:registrar` | Cancela una orden aún abierta. |
 
+### 3.8 Profesionales (cuenta de administración; todos los motores)
+
+| Ruta | Permiso | Qué hace |
+| --- | --- | --- |
+| `POST /profesionales` | `profesionales:administrar` | Alta: correo, nombres, apellidos, rol, `id_departamento` (solo hospital), permisos y `contrasena_inicial` opcional (si se omite se genera y se devuelve **una sola vez**). 201; **409** si el correo existe; 422 si la contraseña es débil o el rol/permisos no aplican a la institución. Vincula el perfil local en el motor (`vinculado`). |
+| `GET /profesionales?rol=&id_departamento=&estado=` | `profesionales:administrar` | Personal de la institución (sin cuentas de administración). |
+| `GET /profesionales/{id}` | `profesionales:administrar` | Una ficha (404 si es de otra institución). |
+| `PATCH /profesionales/{id}` | `profesionales:administrar` | Nombres, área, permisos (lista completa) y estado `activa`/`bloqueada`/`inactiva`. Bloquear o desactivar corta el acceso de inmediato. |
+| `POST /profesionales/{id}/restablecer-contrasena` | `profesionales:administrar` | Genera una contraseña nueva, la muestra una vez (`Cache-Control: no-store`) y cierra las sesiones de esa persona. |
+| `GET /departamentos` | `pacientes:leer` o `profesionales:administrar` | Áreas del hospital con habitaciones y camas disponibles (otros → 501). |
+| `GET /citas/profesionales` | `citas:leer` | Profesionales activos con quienes se puede agendar (sin correo ni permisos). Resuelve la decisión D5. |
+
+Contraseñas: 12 a 128 caracteres, letras combinadas con números o símbolos, sin el usuario
+del correo. Cada alta, cambio o restablecimiento queda en `identidad.bitacora_profesionales`
+(solo agregar; nunca guarda contraseñas).
+
+### 3.9 Hospital General: camas, ingresos y resumen (otros → 501)
+
+| Ruta | Permiso | Qué hace |
+| --- | --- | --- |
+| `GET /camas?id_departamento=&estado=` | `pacientes:leer` | Camas con su estado y el paciente ingresado. |
+| `POST /camas/{id}/estado` | `camas:gestionar` | `disponible`, `limpieza` o `mantenimiento`. 409 si tiene un paciente; `ocupada` solo la pone un ingreso (422). |
+| `POST /pacientes/{id}/ingresos` | `consultas:registrar` | Ingreso de `emergencia`, `programado` o `traslado` en una cama disponible, con motivo y diagnósticos. 409 si la cama no está disponible (aun con dos ingresos simultáneos), si el paciente ya está ingresado o si el historial está archivado. |
+| `GET /ingresos?abiertos=&tipo=` | `historiales:leer` | Tablero de internados y emergencias. |
+| `GET /pacientes/{id}/ingresos`, `GET /pacientes/{id}/ingresos/{id}` | `historiales:leer` | Ingresos del paciente / uno con diagnósticos y órdenes. Un ingreso no aparece en el historial de consultas. |
+| `POST .../ingresos/{id}/diagnosticos` | `consultas:registrar` | Agrega un diagnóstico mientras siga ingresado. |
+| `POST .../ingresos/{id}/ordenes` | `consultas:registrar` | Orden médica: `medicamento` (con recetas), `examen`, `procedimiento` o `interconsulta` (con descripción). |
+| `POST .../ingresos/{id}/alta` | `consultas:registrar` | Alta con motivo, una sola vez (409 después). La cama queda en limpieza. Se permite aunque el historial se haya archivado. |
+| `GET /hospital/resumen` | `pacientes:leer` | Inicio: camas por estado, ocupación, ingresos y emergencias abiertos, ingresos y altas de hoy, citas de hoy por estado. Solo conteos. |
+
+### 3.10 Cobros y pagos (Hospital General y Centro Pediátrico; otros → 501)
+
+Las mismas rutas en los dos motores para que la interfaz no cambie. Los montos viajan como
+texto decimal (`"150.00"`).
+
+| Ruta | Permiso | Qué hace |
+| --- | --- | --- |
+| `GET /servicios` | `pagos:ver` | Servicios con tarifa general vigente (solo hospital). |
+| `GET /cobros?estado=` | `pagos:ver` | Tablero de cobros (`abierto`, `cerrado`, `pagado`, `anulado`; repetible). |
+| `POST /pacientes/{id}/cobros` | `pagos:registrar` | Abre el cobro de una atención (`id_atencion`: consulta o ingreso en el hospital, consulta en pediatría). Uno vigente por atención (409). |
+| `GET /pacientes/{id}/cobros`, `GET /pacientes/{id}/cobros/{id}` | `pagos:ver` | Cobros del paciente / uno con cargos, pagos, total, pagado y saldo. |
+| `POST .../cobros/{id}/cargos` | `pagos:registrar` | Hospital: `id_servicio` + cantidad (precio de la tarifa vigente del profesional o general, **congelado**). Pediatría: `concepto` + `precio_unitario`. 409 si el cobro ya no admite cargos. |
+| `POST .../cobros/{id}/pagos` | `pagos:registrar` | `metodo` (efectivo, tarjeta, transferencia, cheque*) y monto. 409 si excede el saldo, aun con dos pagos simultáneos. Saldado → `pagado`. |
+| `POST .../pagos/{id}/anular`, `.../cerrar`, `.../anular` | `pagos:registrar` | Solo hospital: el pago queda anulado (no se borra); cerrar impide más cargos; anular exige no tener pagos. |
+
+\* El Centro Pediátrico no acepta cheque (422).
+
+### 3.11 Tutores (solo Centro Pediátrico; otros → 501)
+
+| Ruta | Permiso | Qué hace |
+| --- | --- | --- |
+| `GET /pacientes/{id}/tutores` | `pacientes:leer` | Tutores del paciente, el principal primero, con parentesco, contacto y `autorizado` (puede recogerlo). |
+| `GET /tutores?documento=` | `pacientes:leer` | Busca un tutor por DPI/pasaporte para vincularlo a un hermano. |
+| `POST /pacientes/{id}/tutores` | `pacientes:registrar` | Vincula un tutor existente (`id_tutor`) o uno nuevo (`tutor`). Si es principal, el anterior deja de serlo. 409 si ya estaba vinculado o el documento existe. |
+| `PATCH /pacientes/{id}/tutores/{id_tutor}` | `pacientes:registrar` | Parentesco, principal, autorización o contacto (el contacto es del tutor y se ve en todos sus pacientes). El principal siempre está autorizado (422). |
+
+### 3.12 Laboratorio: tablero y versiones
+
+| Ruta | Permiso | Qué hace |
+| --- | --- | --- |
+| `GET /laboratorio/ordenes?estado=&limite=&antes_de=` | `historiales:leer` o `laboratorio:resultados` | Órdenes de todo el laboratorio, más recientes primero, con nombre del paciente, muestras y pruebas pendientes (sin valores). `estado` repetible; `antes_de` es un cursor. |
+| `GET /laboratorio/pruebas/{codigo}/versiones` | ídem | Todas las versiones publicadas de una prueba; marca la vigente. 404 si no existe. |
+
 ---
 
 ## 4. Permisos y roles
@@ -233,6 +323,9 @@ Flujo de una orden: `solicitada → en_proceso → validada` (o `cancelada`).
 | `citas:leer` / `citas:gestionar` | Ver / agendar y cambiar estado de citas. |
 | `laboratorio:resultados` | Registrar muestras y capturar resultados. |
 | `laboratorio:validar` | Validar órdenes. |
+| `profesionales:administrar` | Solo la cuenta de administración: altas, permisos, estado y contraseñas del personal de su institución. |
+| `camas:gestionar` | Hospital: marcar camas disponibles, en limpieza o en mantenimiento. |
+| `pagos:ver` / `pagos:registrar` | Hospital y Centro Pediátrico: ver montos / abrir cobros, cargar, pagar y anular. |
 
 Los permisos se asignan **por profesional** (tabla en PostgreSQL), no por rol. El rol solo
 fija los valores por defecto al crear la cuenta:
@@ -242,8 +335,9 @@ fija los valores por defecto al crear la cuenta:
   `pacientes:registrar`, `citas:leer`, `citas:gestionar`. **No puede** tener permisos
   clínicos ni archivar; está bloqueado en el script, en triggers y en un `CHECK` de
   PostgreSQL. No cuenta como profesional de atención.
+* **administrador**: solo `profesionales:administrar` (una cuenta por institución, §0.4).
 * Otros roles (`medico`, `enfermeria`, `odontologo`): por defecto solo `pacientes:leer`; el
-  resto se concede con `--permiso`.
+  resto se concede con `--permiso` o desde `PATCH /profesionales/{id}`.
 
 ## 5. Códigos de respuesta
 
@@ -254,7 +348,7 @@ fija los valores por defecto al crear la cuenta:
 | 404 | Paciente, cita, consulta, orden o dosis inexistente (también si pertenece a otra institución). |
 | 409 | Paciente archivado, horario ocupado, transición de estado inválida, orden ya validada, dosis que ya no está pendiente. |
 | 422 | Datos inválidos (formato, rangos, estado de pieza fuera de la lista, etc.). |
-| 501 | La operación no aplica a ese motor (odontograma, pediatría, laboratorio). |
+| 501 | La operación no aplica a ese motor (odontograma, pediatría, tutores, laboratorio, camas, cobros). |
 | 503 | Motor no disponible o integración sin configurar. |
 
 ---
@@ -278,16 +372,19 @@ Migraciones en `database/postgresql/` (se aplican en orden):
 | `009_citas_adendas_edicion.sql` | Citas con restricción de no-solape (`EXCLUDE USING gist`), adendas, edición de pacientes. |
 | `010_integridad_hospital.sql` | Reglas de integridad que faltaban del esquema original. |
 | `011_permisos_laboratorio.sql` | Permisos `laboratorio:resultados` y `laboratorio:validar`. |
+| `012_administracion_profesionales.sql` | Rol `administrador`, permiso `profesionales:administrar` (reglas en la base), área del profesional, `debe_cambiar_contrasena`, bitácora de administración solo-agregar y permisos de la API. |
+| `013_camas_ingresos.sql` | Ingreso ↔ cama: solo camas disponibles (bloqueo de la cama), Ocupada solo con ingreso abierto, alta única que deja la cama en limpieza, ingreso no reasignable. `orden_medica.descripcion`. Permiso `camas:gestionar`. |
+| `014_cobros.sql` | Permisos `pagos:ver`/`pagos:registrar`, referencia del pago, descripción del cobro y permisos de la API sobre el módulo de pagos. |
 
 Consistencia: una transacción por petición; `EXCLUDE gist` impide citas solapadas aunque
 dos peticiones lleguen a la vez; *advisory locks* y `FOR SHARE` serializan la baja contra
 una consulta simultánea; triggers protegen datos inmutables.
-Pagos y camas del esquema original tienen sus reglas en la base pero **no tienen API**.
+Pagos y camas del esquema original ya tienen API (§3.9 y §3.10) sobre esas mismas reglas.
 
 ### 6.2 MySQL — Centro Pediátrico
 
-Archivos en `database/mysql/` (001, 002, 004, 006, 008 son esquema; 003, 005, 007, 009 son
-permisos de la cuenta limitada).
+Archivos en `database/mysql/` (001, 002, 004, 006, 008, 010, 013 son esquema; 003, 005, 007,
+009, 011, 012, 014 son permisos de la cuenta limitada).
 
 | Archivo | Contenido |
 | --- | --- |
@@ -299,6 +396,10 @@ permisos de la cuenta limitada).
 | `008_pediatria.sql` | `control_crecimiento` y reglas: triggers `control_validar_insert`, `control_inmutable`, `control_conservar_delete`. |
 | `009_permisos_pediatria.sql` | `SELECT/INSERT` en controles; `UPDATE` por columna en `esquema_vacunacion`. |
 | `010_sin_stock_vacunas.sql` | Quita el descuento de stock y la exigencia de lote al aplicar una dosis (triggers y `CHECK` de `esquema_vacunacion`). Idempotente. |
+| `011_permisos_profesionales.sql` | La API vincula médicos dados de alta por la administración (sin salario). |
+| `012_permisos_cobros.sql` | `SELECT/INSERT` en facturación, detalle y pago (sin `UPDATE`/`DELETE`). |
+| `013_tutores.sql` | Triggers: no se vinculan ni cambian tutores de un historial archivado. |
+| `014_permisos_tutores.sql` | Permisos por columna sobre `tutor` y `paciente_tutor`. |
 
 Consistencia: `FOR UPDATE`/`FOR SHARE` en las filas del paciente, la dosis y la agenda; los
 triggers lanzan `SIGNAL 45000` y el adaptador (`_traducir_trigger`) los convierte en
@@ -369,7 +470,7 @@ Colecciones por paciente con subcolecciones de consultas y odontograma, más
 | Script | Qué hace |
 | --- | --- |
 | `configurar_desarrollo.py` | Genera `.env` con contraseñas aleatorias sin sobrescribir valores existentes. |
-| `crear_profesional.py` | Alta de un profesional (correo, institución, rol, `--permiso` repetible). Pide la contraseña por consola. Valida las reglas de la secretaria. |
+| `crear_profesional.py` | Alta de un profesional (correo, institución, rol, `--permiso` repetible). Pide la contraseña por consola. Valida las reglas de la secretaria y crea la **cuenta de administración** (`--rol administrador`). |
 | `sincronizar_profesionales.py` | Copia los profesionales activos de PostgreSQL al motor de su institución (MongoDB guarda también el `rol`). |
 | `cargar_catalogos.py` | `vacunas ARCHIVO.json` y `laboratorio ARCHIVO.json [--desactivar-anteriores]`. Carga catálogos con conexión administrativa. Vacunas: solo tipos (sin lotes). Laboratorio: una (código, versión) publicada es inmutable. |
 | `probar_firestore.py` | Comprueba la conexión a Firestore. |
@@ -435,24 +536,38 @@ Barrido de los cuatro modelos contra el enunciado del curso:
 | Sin comprobación de disponibilidad de las bases. | `/health/ready`. |
 | Catálogos sin forma de cargarse. | `scripts/cargar_catalogos.py` y ejemplos DEMO. |
 | `compose.yaml` no montaba las migraciones nuevas. | Montajes añadidos. |
+| No había API para administrar profesionales ni cambiar contraseñas. | Cuenta de administración por institución, `/profesionales`, restablecer y cambiar contraseña (§3.8). |
+| El laboratorio solo listaba órdenes por paciente; solo mostraba la versión vigente. | Tablero `/laboratorio/ordenes` y `/laboratorio/pruebas/{codigo}/versiones` (§3.12). |
+| Camas, ingresos y pagos del hospital sin endpoints. | §3.9 y §3.10 (migraciones 013 y 014). |
+| Tutores y facturación pediátrica sin endpoints. | §3.10 y §3.11 (MySQL 012 a 014). |
 
 ## 14. Cómo aplicar los cambios a bases ya creadas
 
-* **PostgreSQL**: ejecutar con la cuenta administradora, en orden, `009`, `010` y `011`.
-* **MySQL**: ejecutar `006`, `007`, `008`, `009` y `010` (las de esquema como administrador, las
-  de permisos igual) en la base `hospital_pediatrico`. La `010` es la que quita el stock.
+* **PostgreSQL**: ejecutar con la cuenta administradora, en orden, `009` a `014`.
+* **MySQL**: ejecutar `006` a `014` (todas como administrador) en la base
+  `hospital_pediatrico`. La `010` es la que quita el stock.
 * **MongoDB**: volver a ejecutar `laboratorio_clinico_mongo.js` (crea la colección `citas`
   y actualiza validadores e índices sin borrar datos).
 * **Firestore**: no requiere migración.
 * Después: `python -m scripts.sincronizar_profesionales` para que MongoDB guarde el `rol`.
+* Cuenta de administración (una por institución), por ejemplo:
+  `python -m scripts.crear_profesional --correo admin.hospital@example.com --nombres "Ada" --apellidos "Admin" --institucion hospital_general --rol administrador`.
 
 ## 15. Límites conocidos
 
 * Lo nuevo de Firestore (citas de agenda, adendas, edición) se probó con el **emulador**; no se repitió contra el proyecto real.
 * El arranque desde cero con Docker no se ejecutó; sí se verificó la inicialización de
   los scripts contra motores locales equivalentes.
-* Pagos y camas del Hospital General tienen reglas en la base pero no endpoints.
-* No hay API para cambiar contraseñas ni administrar profesionales: se hace con scripts.
+* Las cuentas de administración se crean con el script, no por la API.
+* Un alta desde la API no es una transacción entre motores: si el motor de la institución no
+  responde, la cuenta queda creada con `vinculado: false` y se completa con
+  `scripts/sincronizar_profesionales.py`.
+* `debe_cambiar_contrasena` se informa en `/auth/me`; la API no bloquea las demás rutas
+  mientras siga en `true` (lo pide el frontend).
+* Facturación pediátrica: sin cierre ni anulación de facturas o pagos (501); la hora de cada
+  cargo es la de la factura (el modelo no la guarda).
+* Los tableros devuelven como máximo 500 filas (ingresos y cobros) o 200 (órdenes de
+  laboratorio, con cursor `antes_de`).
 * MongoDB sin *replica set*: no hay transacciones; queda una ventana de milisegundos entre
   una consulta y una baja simultáneas (las actualizaciones condicionales la acotan).
 * Granularidad de agenda en MongoDB: 1 minuto.
