@@ -23,6 +23,8 @@ PERMISOS = [
     "consultas:registrar",
     "historiales:archivar",
     "camas:gestionar",
+    "pagos:ver",
+    "pagos:registrar",
 ]
 
 
@@ -95,18 +97,32 @@ def hospital(admin):
             "SELECT id_atencion FROM atencion WHERE id_paciente = ANY(%s)", (pacientes,)
         )
     ]
-    for sql in (
-        "DELETE FROM detalle_receta WHERE id_receta IN (SELECT r.id_receta FROM receta r "
-        "JOIN orden_medica o ON o.id_orden = r.id_orden WHERE o.id_atencion = ANY(%s))",
-        "DELETE FROM receta WHERE id_orden IN "
-        "(SELECT id_orden FROM orden_medica WHERE id_atencion = ANY(%s))",
-        "DELETE FROM orden_medica WHERE id_atencion = ANY(%s)",
-        "DELETE FROM diagnostico WHERE id_atencion = ANY(%s)",
-        "DELETE FROM ingreso WHERE id_atencion = ANY(%s)",
-        "DELETE FROM atencion WHERE id_atencion = ANY(%s)",
-    ):
-        admin.execute(sql, (atenciones,))
+    # Un cobro pagado ya no admite cambios (trigger): la limpieza los desactiva en su sesion.
+    with admin.transaction():
+        admin.execute("SET LOCAL session_replication_role = replica")
+        for sql in (
+            "DELETE FROM pago WHERE id_cobro IN "
+            "(SELECT id_cobro FROM cobro WHERE id_atencion = ANY(%s))",
+            "DELETE FROM detalle_cobro WHERE id_cobro IN "
+            "(SELECT id_cobro FROM cobro WHERE id_atencion = ANY(%s))",
+            "DELETE FROM cobro WHERE id_atencion = ANY(%s)",
+            "DELETE FROM detalle_receta WHERE id_receta IN (SELECT r.id_receta FROM receta r "
+            "JOIN orden_medica o ON o.id_orden = r.id_orden WHERE o.id_atencion = ANY(%s))",
+            "DELETE FROM receta WHERE id_orden IN "
+            "(SELECT id_orden FROM orden_medica WHERE id_atencion = ANY(%s))",
+            "DELETE FROM orden_medica WHERE id_atencion = ANY(%s)",
+            "DELETE FROM diagnostico WHERE id_atencion = ANY(%s)",
+            "DELETE FROM ingreso WHERE id_atencion = ANY(%s)",
+            "DELETE FROM atencion WHERE id_atencion = ANY(%s)",
+        ):
+            admin.execute(sql, (atenciones,))
     admin.execute("DELETE FROM paciente WHERE id_paciente = ANY(%s)", (pacientes,))
+    admin.execute(
+        "DELETE FROM tarifa WHERE id_servicio IN "
+        "(SELECT id_servicio FROM servicio WHERE nombre LIKE %s)",
+        (marca + "%",),
+    )
+    admin.execute("DELETE FROM servicio WHERE nombre LIKE %s", (marca + "%",))
     admin.execute("DELETE FROM cama WHERE id_cama = ANY(%s)", (camas,))
     admin.execute("DELETE FROM habitacion WHERE id_habitacion = %s", (habitacion,))
     admin.execute("DELETE FROM departamento WHERE id_departamento = %s", (departamento,))
@@ -393,3 +409,216 @@ def test_la_base_impone_las_reglas_de_camas_aunque_se_salte_la_api(hospital, adm
         )
         admin.execute("DELETE FROM atencion WHERE id_personal = %s", (id_personal,))
         admin.execute("DELETE FROM personal_medico WHERE id_personal = %s", (id_personal,))
+
+
+# ---------------------------------------------------------------------------------------
+# Cobros y pagos
+# ---------------------------------------------------------------------------------------
+
+
+def servicio(admin, marca, nombre, general, personal=None, id_personal=None) -> int:
+    id_servicio = admin.execute(
+        "INSERT INTO servicio (nombre, tipo, unidad_cobro) VALUES (%s, 'Consulta', 'Por_evento') "
+        "RETURNING id_servicio",
+        (f"{marca} {nombre}",),
+    ).fetchone()[0]
+    admin.execute(
+        "INSERT INTO tarifa (id_servicio, monto_vigente) VALUES (%s, %s)", (id_servicio, general)
+    )
+    if personal is not None:
+        admin.execute(
+            "INSERT INTO tarifa (id_servicio, id_personal, monto_vigente) VALUES (%s, %s, %s)",
+            (id_servicio, id_personal, personal),
+        )
+    return id_servicio
+
+
+def consulta(client, h, id_paciente) -> str:
+    respuesta = client.post(
+        f"/api/v1/pacientes/{id_paciente}/consultas", json={"motivo": "Control"}, headers=h
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    return respuesta.json()["id_consulta"]
+
+
+def test_cobro_con_tarifa_congelada_pagos_y_saldo(hospital, admin):
+    with TestClient(create_app(Settings())) as client:
+        identificador, correo = hospital.cuenta()
+        h = entrar(client, correo)
+        id_personal = admin.execute(
+            "SELECT id_personal FROM personal_medico WHERE id_profesional_central = %s",
+            (identificador,),
+        ).fetchone()[0]
+        consulta_general = servicio(
+            admin, hospital.marca, "Consulta", "100.00", "80.00", id_personal
+        )
+        curacion = servicio(admin, hospital.marca, "Curacion", "35.50")
+        servicios = client.get("/api/v1/servicios", headers=h).json()
+        propio = next(s for s in servicios if s["id_servicio"] == consulta_general)
+        assert propio["tarifa_general"] == "100.00"
+
+        ana = paciente(client, h, hospital.marca)
+        id_atencion = consulta(client, h, ana)
+        abierto = client.post(
+            f"/api/v1/pacientes/{ana}/cobros",
+            json={"id_atencion": id_atencion, "descripcion": "Consulta general"},
+            headers=h,
+        )
+        assert abierto.status_code == 201, abierto.text
+        cobro = abierto.json()
+        assert (cobro["estado"], cobro["total"], cobro["saldo"]) == ("abierto", "0", "0")
+        ruta = f"/api/v1/pacientes/{ana}/cobros/{cobro['id_cobro']}"
+        duplicado = client.post(
+            f"/api/v1/pacientes/{ana}/cobros", json={"id_atencion": id_atencion}, headers=h
+        )
+        assert duplicado.status_code == 409
+
+        # El precio sale de la tarifa del profesional de la atencion (80), no de la general.
+        cargo = client.post(
+            f"{ruta}/cargos", json={"id_servicio": consulta_general, "cantidad": 2}, headers=h
+        ).json()
+        assert cargo["total"] == "160.00" and cargo["cargos"][0]["precio_unitario"] == "80.00"
+        cargo = client.post(f"{ruta}/cargos", json={"id_servicio": curacion}, headers=h).json()
+        assert cargo["total"] == "195.50"
+        assert cargo["cargos"][1]["concepto"] == f"{hospital.marca} Curacion"
+        con_precio = client.post(
+            f"{ruta}/cargos", json={"id_servicio": curacion, "precio_unitario": "1"}, headers=h
+        )
+        sin_servicio = client.post(f"{ruta}/cargos", json={"concepto": "Otro"}, headers=h)
+        fraccion = client.post(
+            f"{ruta}/cargos", json={"id_servicio": curacion, "cantidad": "1.5"}, headers=h
+        )
+        inexistente = client.post(f"{ruta}/cargos", json={"id_servicio": 2_000_000}, headers=h)
+        assert {con_precio.status_code, sin_servicio.status_code, fraccion.status_code} == {422}
+        assert inexistente.status_code == 422
+        # Si la tarifa cambia despues, el cargo ya registrado no cambia (precio congelado).
+        admin.execute(
+            "UPDATE tarifa SET monto_vigente = 999 WHERE id_servicio = %s", (consulta_general,)
+        )
+
+        pago = client.post(
+            f"{ruta}/pagos",
+            json={"metodo": "efectivo", "monto": "150.00", "referencia": "R-1"},
+            headers=h,
+        ).json()
+        assert (pago["pagado"], pago["saldo"], pago["estado"]) == ("150.00", "45.50", "abierto")
+        assert pago["cargos"][0]["precio_unitario"] == "80.00"
+        exceso = client.post(f"{ruta}/pagos", json={"metodo": "tarjeta", "monto": "50"}, headers=h)
+        assert exceso.status_code == 409 and "excede" in exceso.text
+        centavos = client.post(
+            f"{ruta}/pagos", json={"metodo": "tarjeta", "monto": "1.001"}, headers=h
+        )
+        assert centavos.status_code == 422
+        id_pago = pago["pagos"][0]["id_pago"]
+        anulado = client.post(f"{ruta}/pagos/{id_pago}/anular", headers=h).json()
+        assert anulado["pagado"] == "0" and anulado["pagos"][0]["anulado"] is True
+        assert client.post(f"{ruta}/pagos/{id_pago}/anular", headers=h).status_code == 409
+        pagado = client.post(
+            f"{ruta}/pagos", json={"metodo": "transferencia", "monto": "195.50"}, headers=h
+        ).json()
+        assert (pagado["estado"], pagado["saldo"]) == ("pagado", "0.00")
+        assert pagado["cerrado_en"] is not None
+        assert (
+            client.post(f"{ruta}/cargos", json={"id_servicio": curacion}, headers=h).status_code
+            == 409
+        )
+        assert client.post(f"{ruta}/anular", headers=h).status_code == 409
+
+        tablero = client.get("/api/v1/cobros", params={"estado": "pagado"}, headers=h).json()
+        assert cobro["id_cobro"] in [c["id_cobro"] for c in tablero]
+        assert [
+            c["id_cobro"] for c in client.get(f"/api/v1/pacientes/{ana}/cobros", headers=h).json()
+        ] == [cobro["id_cobro"]]
+        assert client.get(ruta, headers=h).json() == pagado
+        ajeno = paciente(client, h, hospital.marca, "Beto")
+        assert (
+            client.get(
+                f"/api/v1/pacientes/{ajeno}/cobros/{cobro['id_cobro']}", headers=h
+            ).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                f"/api/v1/pacientes/{ajeno}/cobros", json={"id_atencion": id_atencion}, headers=h
+            ).status_code
+            == 404
+        )
+
+
+def test_cerrar_y_anular_cobros(hospital, admin):
+    with TestClient(create_app(Settings())) as client:
+        _, correo = hospital.cuenta()
+        h = entrar(client, correo)
+        curacion = servicio(admin, hospital.marca, "Curacion", "40.00")
+        ana = paciente(client, h, hospital.marca)
+        rutas = []
+        for _ in range(2):
+            cobro = client.post(
+                f"/api/v1/pacientes/{ana}/cobros",
+                json={"id_atencion": consulta(client, h, ana)},
+                headers=h,
+            ).json()
+            ruta = f"/api/v1/pacientes/{ana}/cobros/{cobro['id_cobro']}"
+            client.post(f"{ruta}/cargos", json={"id_servicio": curacion}, headers=h)
+            rutas.append(ruta)
+        cerrado = client.post(f"{rutas[0]}/cerrar", headers=h).json()
+        assert cerrado["estado"] == "cerrado"
+        assert (
+            client.post(f"{rutas[0]}/cargos", json={"id_servicio": curacion}, headers=h).status_code
+            == 409
+        )
+        client.post(f"{rutas[0]}/pagos", json={"metodo": "efectivo", "monto": "10"}, headers=h)
+        assert client.post(f"{rutas[0]}/anular", headers=h).status_code == 409  # tiene pagos
+        anulado = client.post(f"{rutas[1]}/anular", headers=h).json()
+        assert anulado["estado"] == "anulado"
+        sin_pago = client.post(
+            f"{rutas[1]}/pagos", json={"metodo": "efectivo", "monto": "1"}, headers=h
+        )
+        assert sin_pago.status_code == 409
+
+
+def test_dos_pagos_simultaneos_no_exceden_el_total(hospital, admin):
+    with TestClient(create_app(Settings())) as client:
+        _, correo = hospital.cuenta()
+        h = entrar(client, correo)
+        curacion = servicio(admin, hospital.marca, "Curacion", "150.00")
+        ana = paciente(client, h, hospital.marca)
+        cobro = client.post(
+            f"/api/v1/pacientes/{ana}/cobros",
+            json={"id_atencion": consulta(client, h, ana)},
+            headers=h,
+        ).json()
+        ruta = f"/api/v1/pacientes/{ana}/cobros/{cobro['id_cobro']}"
+        client.post(f"{ruta}/cargos", json={"id_servicio": curacion}, headers=h)
+        resultados = []
+        barrera = threading.Barrier(2)
+
+        def pagar():
+            barrera.wait(timeout=10)
+            resultados.append(
+                client.post(
+                    f"{ruta}/pagos", json={"metodo": "efectivo", "monto": "100"}, headers=h
+                ).status_code
+            )
+
+        hilos = [threading.Thread(target=pagar) for _ in range(2)]
+        [t.start() for t in hilos]
+        [t.join(timeout=30) for t in hilos]
+        assert sorted(resultados) == [200, 409]
+        assert client.get(ruta, headers=h).json()["pagado"] == "100.00"
+
+
+def test_permisos_de_pagos(hospital):
+    with TestClient(create_app(Settings())) as client:
+        _, solo_ver = hospital.cuenta(["pacientes:leer", "pagos:ver"])
+        _, sin_pagos = hospital.cuenta(["pacientes:leer", "historiales:leer"])
+        h_ver, h_sin = entrar(client, solo_ver), entrar(client, sin_pagos)
+        assert client.get("/api/v1/cobros", headers=h_ver).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/pacientes/1/cobros", json={"id_atencion": "1"}, headers=h_ver
+            ).status_code
+            == 403
+        )
+        assert client.get("/api/v1/cobros", headers=h_sin).status_code == 403
+        assert client.get("/api/v1/servicios", headers=h_sin).status_code == 403

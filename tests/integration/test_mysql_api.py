@@ -7,6 +7,7 @@ permisos de 003 + 005, de modo que tambien se prueba lo que la API NO puede hace
 import re
 import threading
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import psycopg
@@ -15,9 +16,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 
-from app.application.errores import IntegracionNoConfigurada
+from app.application.errores import IntegracionNoConfigurada, OperacionPendiente
 from app.core.config import PROJECT_ROOT, Settings
 from app.domain.cita import EstadoCita, NuevaCita
+from app.domain.cobros import EstadoCobro, MetodoPago, NuevoCargo, NuevoPago
 from app.domain.consulta import Adenda, Diagnostico, NuevaConsulta, Receta, Tratamiento
 from app.domain.errores import (
     CitaNoEncontrada,
@@ -52,6 +54,8 @@ PERMISOS = [
     "historiales:archivar",
     "citas:leer",
     "citas:gestionar",
+    "pagos:ver",
+    "pagos:registrar",
 ]
 
 
@@ -73,6 +77,7 @@ def mysql_app(mysql_pruebas):
         "007_permisos_extensiones.sql",
         "009_permisos_pediatria.sql",
         "011_permisos_profesionales.sql",
+        "012_permisos_cobros.sql",
     ):
         texto = (PROJECT_ROOT / "database/mysql" / archivo).read_text(encoding="utf-8")
         texto = texto.replace("historiales_app", usuario)
@@ -496,7 +501,9 @@ def test_la_cuenta_de_la_api_tiene_permisos_minimos(centro):
                 "SELECT salario FROM medico",
                 "INSERT INTO medico (nombre, apellido, colegiado, salario) VALUES ('a','b','c',1)",
                 "UPDATE medico SET colegiado = 'otro'",
-                "SELECT * FROM facturacion",
+                "UPDATE facturacion SET total_pagado = 0",
+                "DELETE FROM pago",
+                "UPDATE pago SET monto = 1",
             ):
                 with pytest.raises(pymysql.err.OperationalError) as error:
                     cursor.execute(sql)
@@ -1292,3 +1299,158 @@ def test_script_de_carga_de_vacunas_es_idempotente(centro):
     for malo in ({}, {"vacunas": []}, {"vacunas": [{"nombre": " "}]}):
         with pytest.raises(CatalogoInvalido):
             cargar_vacunas(centro.admin, malo)
+
+
+# ---------------------------------------------------------------------------------------
+# Facturacion (contrato comun de cobros)
+# ---------------------------------------------------------------------------------------
+
+
+def test_facturacion_cargos_pagos_y_saldo(centro):
+    identificador = registrar(centro)
+    otro = registrar(centro, "Otro")
+    id_consulta = consulta_base(centro, identificador)
+    ahora = datetime.now(UTC)
+    with centro.unidad() as unidad:
+        with pytest.raises(RegistroNoEncontrado):  # la consulta es de otro paciente
+            unidad.cobros.abrir(otro, id_consulta, None, ahora)
+        cobro = unidad.cobros.abrir(identificador, id_consulta, "Consulta pediatrica", ahora)
+        unidad.commit()
+    assert (cobro.estado, cobro.total, cobro.descripcion) == (
+        EstadoCobro.ABIERTO,
+        Decimal("0"),
+        "Consulta pediatrica",
+    )
+    with centro.unidad() as unidad, pytest.raises(ConflictoEstado):
+        unidad.cobros.abrir(identificador, id_consulta, None, ahora)
+    with centro.unidad() as unidad:
+        with pytest.raises(DatosInvalidos):  # sin catalogo de servicios
+            unidad.cobros.agregar_cargo(
+                identificador, cobro.id_cobro, NuevoCargo(Decimal(1), id_servicio=1), ahora
+            )
+        unidad.cobros.agregar_cargo(
+            identificador,
+            cobro.id_cobro,
+            NuevoCargo(Decimal("2"), concepto="Consulta", precio_unitario=Decimal("75.25")),
+            ahora,
+        )
+        unidad.commit()
+    with centro.unidad() as unidad:
+        with pytest.raises(ConflictoEstado):
+            unidad.cobros.registrar_pago(
+                identificador, cobro.id_cobro, NuevoPago(MetodoPago.EFECTIVO, Decimal("200")), ahora
+            )
+    with centro.unidad() as unidad:
+        with pytest.raises(DatosInvalidos):  # el centro no acepta cheques
+            unidad.cobros.registrar_pago(
+                identificador, cobro.id_cobro, NuevoPago(MetodoPago.CHEQUE, Decimal("1")), ahora
+            )
+    with centro.unidad() as unidad:
+        parcial = unidad.cobros.registrar_pago(
+            identificador,
+            cobro.id_cobro,
+            NuevoPago(MetodoPago.TARJETA, Decimal("100.50"), "AUT-1"),
+            ahora,
+        )
+        unidad.commit()
+    assert (parcial.total, parcial.pagado, parcial.saldo) == (
+        Decimal("150.50"),
+        Decimal("100.50"),
+        Decimal("50.00"),
+    )
+    assert parcial.pagos[0].referencia == "AUT-1" and parcial.estado == EstadoCobro.ABIERTO
+    with centro.unidad() as unidad:
+        pagada = unidad.cobros.registrar_pago(
+            identificador, cobro.id_cobro, NuevoPago(MetodoPago.EFECTIVO, Decimal("50")), ahora
+        )
+        unidad.commit()
+        for operacion in (
+            lambda: unidad.cobros.anular_pago(identificador, cobro.id_cobro, "1"),
+            lambda: unidad.cobros.cerrar(identificador, cobro.id_cobro, ahora),
+            lambda: unidad.cobros.anular(identificador, cobro.id_cobro, ahora),
+            lambda: unidad.cobros.listar_servicios(),
+        ):
+            with pytest.raises(OperacionPendiente):
+                operacion()
+    assert pagada.estado == EstadoCobro.PAGADO and pagada.saldo == 0
+    with centro.unidad() as unidad:
+        pagadas = unidad.cobros.listar(None, frozenset({EstadoCobro.PAGADO}), 500)
+        abiertas = unidad.cobros.listar(None, frozenset({EstadoCobro.ABIERTO}), 500)
+        assert cobro.id_cobro in [c.id_cobro for c in pagadas]
+        assert cobro.id_cobro not in [c.id_cobro for c in abiertas]
+        assert unidad.cobros.listar(None, frozenset({EstadoCobro.ANULADO}), 500) == []
+        assert [c.id_cobro for c in unidad.cobros.listar(identificador)] == [cobro.id_cobro]
+        assert unidad.cobros.obtener(otro, cobro.id_cobro) is None
+
+
+def test_dos_pagos_simultaneos_no_exceden_la_factura(centro):
+    identificador = registrar(centro)
+    ahora = datetime.now(UTC)
+    with centro.unidad() as unidad:
+        cobro = unidad.cobros.abrir(
+            identificador, consulta_base(centro, identificador), None, ahora
+        )
+        unidad.cobros.agregar_cargo(
+            identificador,
+            cobro.id_cobro,
+            NuevoCargo(Decimal(1), concepto="Vacuna", precio_unitario=Decimal("150")),
+            ahora,
+        )
+        unidad.commit()
+    resultados = []
+    barrera = threading.Barrier(2)
+
+    def pagar():
+        try:
+            with centro.unidad() as unidad:
+                barrera.wait(timeout=10)
+                unidad.cobros.registrar_pago(
+                    identificador,
+                    cobro.id_cobro,
+                    NuevoPago(MetodoPago.EFECTIVO, Decimal("100")),
+                    datetime.now(UTC),
+                )
+                unidad.commit()
+            resultados.append("ok")
+        except ConflictoEstado:
+            resultados.append("excede")
+
+    hilos = [threading.Thread(target=pagar) for _ in range(2)]
+    [t.start() for t in hilos]
+    [t.join(timeout=30) for t in hilos]
+    assert sorted(resultados) == ["excede", "ok"]
+
+
+def test_facturacion_por_la_api(centro):
+    identificador = registrar(centro)
+    id_consulta = consulta_base(centro, identificador)
+    configuracion = Settings(
+        mysql_host=centro.datos["host"],
+        mysql_port=centro.datos["port"],
+        mysql_user=centro.datos["user"],
+        mysql_password=centro.datos["password"],
+        mysql_database=centro.datos["database"],
+    )
+    with TestClient(create_app(configuracion)) as client:
+        login = client.post(
+            "/api/v1/auth/login", json={"correo": centro.correo, "password": centro.password}
+        )
+        h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        cobro = client.post(
+            f"/api/v1/pacientes/{identificador}/cobros",
+            json={"id_atencion": id_consulta},
+            headers=h,
+        )
+        assert cobro.status_code == 201, cobro.text
+        ruta = f"/api/v1/pacientes/{identificador}/cobros/{cobro.json()['id_cobro']}"
+        cargo = client.post(
+            f"{ruta}/cargos",
+            json={"concepto": "Control", "cantidad": "1", "precio_unitario": "80.00"},
+            headers=h,
+        )
+        pago = client.post(f"{ruta}/pagos", json={"metodo": "efectivo", "monto": "80"}, headers=h)
+        anular = client.post(f"{ruta}/anular", headers=h)
+        servicios = client.get("/api/v1/servicios", headers=h)
+    assert cargo.json()["total"] == "80.00"
+    assert (pago.json()["estado"], pago.json()["saldo"]) == ("pagado", "0.00")
+    assert anular.status_code == 501 and servicios.status_code == 501

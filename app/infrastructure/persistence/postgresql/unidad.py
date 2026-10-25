@@ -41,6 +41,7 @@ from app.infrastructure.persistence.comun import (
     utc_ingenuo,
 )
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
+from app.infrastructure.persistence.postgresql.cobros import RepositorioCobrosPostgreSQL
 from app.infrastructure.persistence.postgresql.hospital import RepositorioHospitalPostgreSQL
 
 MOTOR = "PostgreSQL"
@@ -730,6 +731,7 @@ class UnidadTrabajoPostgreSQL:
         self.historial = RepositorioHistorialPostgreSQL(self.conexion)
         self.profesionales = RepositorioProfesionalesPostgreSQL(self.conexion)
         self.citas = RepositorioCitasPostgreSQL(self.conexion, self.zona)
+        self.cobros = RepositorioCobrosPostgreSQL(self.conexion)
         self.hospital = RepositorioHospitalPostgreSQL(
             self.conexion, self.zona, self.historial._id_personal
         )

@@ -2,6 +2,7 @@ from types import TracebackType
 from typing import Literal, Protocol, Self
 
 from app.application.ports.citas import RepositorioCitas
+from app.application.ports.cobros import RepositorioCobros
 from app.application.ports.historial import RepositorioHistorial
 from app.application.ports.hospital import RepositorioHospital
 from app.application.ports.laboratorio import RepositorioLaboratorio
@@ -46,6 +47,9 @@ class UnidadDeTrabajo(Protocol):
 
     @property
     def hospital(self) -> RepositorioHospital: ...
+
+    @property
+    def cobros(self) -> RepositorioCobros: ...
 
     def __enter__(self) -> Self: ...
 

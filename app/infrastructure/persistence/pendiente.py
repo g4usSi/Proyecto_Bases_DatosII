@@ -9,6 +9,7 @@ from typing import NoReturn
 
 from app.application.errores import OperacionPendiente
 from app.domain.cita import Cita, EstadoCita, NuevaCita
+from app.domain.cobros import Cobro, EstadoCobro, NuevoCargo, NuevoPago, Servicio
 from app.domain.consulta import Adenda, Consulta, Diagnostico, NuevaConsulta
 from app.domain.hospital import (
     Cama,
@@ -299,6 +300,58 @@ class HospitalNoAplica:
         self._no()
 
 
+class CobrosNoAplica:
+    """Cobros y pagos: Hospital General y Centro Pediatrico."""
+
+    def __init__(self, motor: str, operacion: str = "cobros y pagos") -> None:
+        self.motor = motor
+        self.operacion = operacion
+
+    def _no(self) -> NoReturn:
+        pendiente(
+            self.motor,
+            self.operacion + " (solo aplica al Hospital General y al Centro Pediatrico)",
+        )
+
+    def listar_servicios(self) -> list[Servicio]:
+        self._no()
+
+    def abrir(
+        self, id_paciente: str, id_atencion: str, descripcion: str | None, ahora: datetime
+    ) -> Cobro:
+        self._no()
+
+    def obtener(self, id_paciente: str, id_cobro: str) -> Cobro | None:
+        self._no()
+
+    def listar(
+        self,
+        id_paciente: str | None = None,
+        estados: frozenset[EstadoCobro] | None = None,
+        limite: int = 100,
+    ) -> list[Cobro]:
+        self._no()
+
+    def agregar_cargo(
+        self, id_paciente: str, id_cobro: str, cargo: NuevoCargo, ahora: datetime
+    ) -> Cobro:
+        self._no()
+
+    def registrar_pago(
+        self, id_paciente: str, id_cobro: str, pago: NuevoPago, ahora: datetime
+    ) -> Cobro:
+        self._no()
+
+    def anular_pago(self, id_paciente: str, id_cobro: str, id_pago: str) -> Cobro:
+        self._no()
+
+    def cerrar(self, id_paciente: str, id_cobro: str, ahora: datetime) -> Cobro:
+        self._no()
+
+    def anular(self, id_paciente: str, id_cobro: str, ahora: datetime) -> Cobro:
+        self._no()
+
+
 def repositorios_pendientes(motor: str) -> dict[str, object]:
     """Atributos que una unidad de trabajo sin implementacion propia debe exponer."""
     return {
@@ -310,4 +363,5 @@ def repositorios_pendientes(motor: str) -> dict[str, object]:
         "vacunacion": VacunacionNoAplica(motor),
         "laboratorio": LaboratorioNoAplica(motor),
         "hospital": HospitalNoAplica(motor),
+        "cobros": CobrosNoAplica(motor),
     }

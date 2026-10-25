@@ -14,6 +14,9 @@ LABORATORIO_VALIDAR = "laboratorio:validar"  # validar una orden (despues no se 
 PROFESIONALES_ADMINISTRAR = "profesionales:administrar"
 # Hospital General: marcar camas en limpieza/mantenimiento/disponibles (013_camas_ingresos).
 CAMAS_GESTIONAR = "camas:gestionar"
+# Cobros y pagos (Hospital General y Centro Pediatrico): ver montos / registrar movimientos.
+PAGOS_VER = "pagos:ver"
+PAGOS_REGISTRAR = "pagos:registrar"
 
 # Igual que identidad.permisos_clinicos() en 006_rol_secretaria_citas.sql.
 PERMISOS_CLINICOS = frozenset({HISTORIALES_LEER, CONSULTAS_REGISTRAR})

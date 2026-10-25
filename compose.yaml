@@ -25,6 +25,7 @@ services:
       - ./database/postgresql/011_permisos_laboratorio.sql:/docker-entrypoint-initdb.d/011_permisos_laboratorio.sql:ro
       - ./database/postgresql/012_administracion_profesionales.sql:/docker-entrypoint-initdb.d/012_administracion_profesionales.sql:ro
       - ./database/postgresql/013_camas_ingresos.sql:/docker-entrypoint-initdb.d/013_camas_ingresos.sql:ro
+      - ./database/postgresql/014_cobros.sql:/docker-entrypoint-initdb.d/014_cobros.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U historiales_admin -d hospital_general"]
       interval: 5s
@@ -54,6 +55,7 @@ services:
       - ./database/mysql/009_permisos_pediatria.sql:/docker-entrypoint-initdb.d/009_permisos_pediatria.sql:ro
       - ./database/mysql/010_sin_stock_vacunas.sql:/docker-entrypoint-initdb.d/010_sin_stock_vacunas.sql:ro
       - ./database/mysql/011_permisos_profesionales.sql:/docker-entrypoint-initdb.d/011_permisos_profesionales.sql:ro
+      - ./database/mysql/012_permisos_cobros.sql:/docker-entrypoint-initdb.d/012_permisos_cobros.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql -u historiales_app -D hospital_pediatrico -e 'SELECT 1' >/dev/null"]
       interval: 5s

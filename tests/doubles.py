@@ -13,6 +13,7 @@ from app.domain.odontograma import EstadoPieza, Odontograma
 from app.domain.paciente import Alergia, Baja, CambiosPaciente, NuevoPaciente, Paciente
 from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.pendiente import (
+    CobrosNoAplica,
     CrecimientoNoAplica,
     HospitalNoAplica,
     LaboratorioNoAplica,
@@ -231,6 +232,7 @@ class UnidadTrabajoDoble:
         self.vacunacion = VacunacionNoAplica("Doble")
         self.laboratorio = LaboratorioNoAplica("Doble")
         self.hospital = HospitalNoAplica("Doble")
+        self.cobros = CobrosNoAplica("Doble")
         self.confirmaciones = 0
         self.reversiones = 0
         self.finalizada = False

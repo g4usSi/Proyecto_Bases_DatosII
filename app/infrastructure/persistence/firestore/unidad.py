@@ -718,6 +718,7 @@ class UnidadTrabajoFirestore:
         self.vacunacion = pendientes["vacunacion"]
         self.laboratorio = pendientes["laboratorio"]
         self.hospital = pendientes["hospital"]
+        self.cobros = pendientes["cobros"]
 
     def __enter__(self) -> Self:
         self.lote = self.cliente.batch()

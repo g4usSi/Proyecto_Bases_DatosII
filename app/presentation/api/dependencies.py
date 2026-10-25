@@ -128,6 +128,8 @@ ContextoDepartamentos = Annotated[
     Contexto,
     Depends(contexto_con_alguno(permisos.PACIENTES_LEER, permisos.PROFESIONALES_ADMINISTRAR)),
 ]
+ContextoVerPagos = Annotated[Contexto, Depends(_con(permisos.PAGOS_VER))]
+ContextoRegistrarPagos = Annotated[Contexto, Depends(_con(permisos.PAGOS_REGISTRAR))]
 ContextoGestionarCamas = Annotated[Contexto, Depends(_con(permisos.CAMAS_GESTIONAR))]
 ContextoLeerLab = Annotated[
     Contexto,

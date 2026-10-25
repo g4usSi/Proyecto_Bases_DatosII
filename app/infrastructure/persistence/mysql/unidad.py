@@ -52,6 +52,7 @@ from app.infrastructure.persistence.comun import (
     escapar_like,
     utc_ingenuo,
 )
+from app.infrastructure.persistence.mysql.cobros import RepositorioCobrosMySQL
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 MOTOR = "MySQL"
@@ -1010,6 +1011,7 @@ class UnidadTrabajoMySQL:
         self.odontograma = pendientes["odontograma"]
         self.laboratorio = pendientes["laboratorio"]
         self.hospital = pendientes["hospital"]
+        self.cobros = RepositorioCobrosMySQL(self.conexion)
         return self
 
     def __exit__(
