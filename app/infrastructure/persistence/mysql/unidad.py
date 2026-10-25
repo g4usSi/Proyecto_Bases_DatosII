@@ -15,7 +15,7 @@ base con triggers (002_integridad.sql); aqui se comprueban antes para dar el err
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import TracebackType
 from typing import Any, Literal, Self
 from uuid import UUID, uuid4
@@ -24,14 +24,28 @@ import pymysql
 from pymysql.err import IntegrityError, OperationalError
 
 from app.application.errores import IntegracionNoConfigurada
-from app.domain.consulta import Consulta, Diagnostico, NuevaConsulta, Receta, Tratamiento
+from app.domain.cita import TRANSICIONES, Cita, EstadoCita, NuevaCita
+from app.domain.consulta import Adenda, Consulta, Diagnostico, NuevaConsulta, Receta, Tratamiento
 from app.domain.errores import (
+    CitaNoEncontrada,
+    ConflictoAgenda,
+    ConflictoEstado,
+    ConsultaNoEncontrada,
     DatosInvalidos,
     PacienteArchivado,
     PacienteNoEncontrado,
     ProfesionalNoVinculado,
+    RegistroNoEncontrado,
 )
-from app.domain.paciente import Alergia, Baja, Contacto, NuevoPaciente, Paciente
+from app.domain.paciente import Alergia, Baja, CambiosPaciente, Contacto, NuevoPaciente, Paciente
+from app.domain.pediatria import (
+    ControlCrecimiento,
+    DosisVacuna,
+    EstadoDosis,
+    NuevoControl,
+    TipoVacuna,
+)
+from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.comun import (
     con_utc,
     entero_positivo,
@@ -43,6 +57,8 @@ from app.infrastructure.persistence.pendiente import repositorios_pendientes
 MOTOR = "MySQL"
 ER_SIGNAL_EXCEPTION = 1644  # SIGNAL SQLSTATE '45000' de los triggers de 002_integridad.sql
 ER_DUP_ENTRY = 1062
+ER_NO_REFERENCED_ROW = 1452  # clave foranea inexistente
+ER_CHECK_VIOLATED = 3819
 COLACION = "utf8mb4_0900_ai_ci"  # sin mayusculas ni acentos, igual que la regla comun
 
 
@@ -52,13 +68,36 @@ def _traducir_trigger(error: OperationalError) -> Exception | None:
     if codigo != ER_SIGNAL_EXCEPTION or len(error.args) < 2:
         return None
     mensaje = str(error.args[1]).lower()
+    if "ocupado" in mensaje:
+        return ConflictoAgenda("El profesional ya tiene una cita en ese horario.")
     if "archivado" in mensaje:
-        return PacienteArchivado("El historial esta archivado; no admite consultas nuevas.")
+        return PacienteArchivado("El historial esta archivado; no admite cambios.")
     if "inactivo" in mensaje:
         return ProfesionalNoVinculado("Tu cuenta esta inactiva en el Centro Pediatrico.")
     if "nacimiento" in mensaje:
         return DatosInvalidos(str(error.args[1]))
+    if "rectificacion" in mensaje:
+        return ConflictoEstado("Una dosis aplicada no se modifica.")
     return None
+
+
+def _id_medico_activo(
+    filas_de: Callable[[str, tuple], tuple[tuple, ...]], id_profesional: str
+) -> int:
+    try:
+        uuid = str(UUID(id_profesional))
+    except ValueError as error:
+        raise ProfesionalNoVinculado("Tu cuenta no es un profesional de este hospital.") from error
+    filas = filas_de(
+        "SELECT id_medico FROM medico WHERE id_profesional_central = %s AND activo = TRUE",
+        (uuid,),
+    )
+    if not filas:
+        raise ProfesionalNoVinculado(
+            "Tu cuenta no esta vinculada a un medico activo del Centro Pediatrico. "
+            "Pide que ejecuten: python -m scripts.sincronizar_profesionales"
+        )
+    return filas[0][0]
 
 
 class RepositorioPacientesMySQL:
@@ -211,6 +250,67 @@ class RepositorioPacientesMySQL:
                 raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
             raise PacienteArchivado("El historial ya estaba archivado.")
 
+    def actualizar(self, id_paciente: str, cambios: CambiosPaciente) -> None:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        asignaciones, parametros = [], []
+        for columna, valor in (
+            ("nombre", cambios.nombres),
+            ("apellido", cambios.apellidos),
+            ("fecha_nacimiento", cambios.fecha_nacimiento),
+        ):
+            if valor is not None:
+                asignaciones.append(f"{columna} = %s")
+                parametros.append(valor)
+        if cambios.contacto is not None:  # reemplaza el contacto completo
+            asignaciones += ["telefono = %s", "correo_electronico = %s", "direccion = %s"]
+            parametros += [
+                cambios.contacto.telefono,
+                cambios.contacto.correo,
+                cambios.contacto.direccion,
+            ]
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE paciente SET " + ", ".join(asignaciones) + " "
+                    "WHERE id_paciente = %s AND archivado = FALSE",
+                    (*parametros, numero),
+                )
+        except OperationalError as error:
+            traducido = _traducir_trigger(error)
+            if traducido is not None:
+                raise traducido from error
+            raise
+        self._comprobar_activo(numero)
+
+    def agregar_alergias(self, id_paciente: str, alergias: tuple[Alergia, ...]) -> None:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        with self.conexion.cursor() as cursor:
+            cursor.execute(
+                "UPDATE paciente SET alergias_evaluadas = TRUE "
+                "WHERE id_paciente = %s AND archivado = FALSE",
+                (numero,),
+            )
+        self._comprobar_activo(numero)
+        try:
+            for alergia in alergias:
+                self._guardar_alergia(numero, alergia)
+        except IntegrityError as error:
+            if error.args[0] != ER_DUP_ENTRY:
+                raise
+            raise DatosInvalidos("Esa alergia ya estaba registrada.") from error
+
+    def _comprobar_activo(self, numero: int) -> None:
+        """Tras un UPDATE condicional: MySQL cuenta 0 filas si nada cambio, asi que se consulta."""
+        fila = self._una_fila("SELECT archivado FROM paciente WHERE id_paciente = %s", (numero,))
+        if fila is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if fila[0]:
+            raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+
 
 class RepositorioHistorialMySQL:
     def __init__(self, conexion: pymysql.Connection) -> None:
@@ -222,22 +322,7 @@ class RepositorioHistorialMySQL:
             return cursor.fetchall()
 
     def _id_medico(self, id_profesional: str) -> int:
-        try:
-            uuid = str(UUID(id_profesional))
-        except ValueError as error:
-            raise ProfesionalNoVinculado(
-                "Tu cuenta no es un profesional de este hospital."
-            ) from error
-        filas = self._filas(
-            "SELECT id_medico FROM medico WHERE id_profesional_central = %s AND activo = TRUE",
-            (uuid,),
-        )
-        if not filas:
-            raise ProfesionalNoVinculado(
-                "Tu cuenta no esta vinculada a un medico activo del Centro Pediatrico. "
-                "Pide que ejecuten: python -m scripts.sincronizar_profesionales"
-            )
-        return filas[0][0]
+        return _id_medico_activo(self._filas, id_profesional)
 
     def registrar_consulta(
         self, id_paciente: str, id_profesional: str, datos: NuevaConsulta
@@ -312,16 +397,110 @@ class RepositorioHistorialMySQL:
             datos.recetas,
         )
 
+    def obtener_consulta(self, id_paciente: str, id_consulta: str) -> Consulta | None:
+        numero, consulta = entero_positivo(id_paciente), entero_positivo(id_consulta)
+        if numero is None or consulta is None:
+            return None
+        consultas = self._cargar(id_paciente, numero, "AND c.id_consulta = %s ", [consulta], 1)
+        return consultas[0] if consultas else None
+
+    def agregar_a_consulta(
+        self, id_paciente: str, id_consulta: str, id_profesional: str, adenda: Adenda
+    ) -> Consulta:
+        numero, consulta = entero_positivo(id_paciente), entero_positivo(id_consulta)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if consulta is None:
+            raise ConsultaNoEncontrada("La consulta no existe en el historial del paciente.")
+        self._id_medico(id_profesional)  # exige un medico activo vinculado a la cuenta
+        # Una baja concurrente espera a que termine esta adenda (o esta ve la baja).
+        filas = self._filas(
+            "SELECT archivado FROM paciente WHERE id_paciente = %s FOR UPDATE", (numero,)
+        )
+        if not filas:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if filas[0][0]:
+            raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+        # FOR UPDATE: dos adendas a la misma consulta se aplican una tras otra.
+        if not self._filas(
+            "SELECT 1 FROM consulta_medica WHERE id_consulta = %s AND id_paciente = %s FOR UPDATE",
+            (consulta, numero),
+        ):
+            raise ConsultaNoEncontrada("La consulta no existe en el historial del paciente.")
+
+        ahora = datetime.now(UTC)
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM consulta_diagnostico WHERE id_consulta = %s", (consulta,)
+                )
+                previos = cursor.fetchone()[0]
+                for posicion, d in enumerate(adenda.diagnosticos):
+                    cursor.execute(
+                        "INSERT INTO consulta_diagnostico (id_consulta, codigo, sistema_codigo, "
+                        "descripcion, es_principal) VALUES (%s, %s, %s, %s, %s)",
+                        (
+                            consulta,
+                            d.codigo,
+                            d.sistema_codigo,
+                            d.descripcion,
+                            previos == 0 and posicion == 0,
+                        ),
+                    )
+                for t in adenda.tratamientos:
+                    cursor.execute(
+                        "INSERT INTO consulta_tratamiento (id_consulta, descripcion) "
+                        "VALUES (%s, %s)",
+                        (consulta, t.descripcion),
+                    )
+                for r in adenda.recetas:
+                    cursor.execute(
+                        "INSERT INTO recetas_medicamento (id_consulta, medicamento, dosis, "
+                        "frecuencia, duracion_dias, via_administracion, "
+                        "instrucciones_adicionales, fecha_emitida) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (
+                            consulta,
+                            r.medicamento,
+                            r.dosis,
+                            r.frecuencia,
+                            r.duracion_dias,
+                            r.via_administracion,
+                            r.instrucciones,
+                            utc_ingenuo(ahora),
+                        ),
+                    )
+                # Las notas solo crecen por el final (lo exige tambien el trigger de la base).
+                cursor.execute(
+                    "UPDATE consulta_medica SET notas_medicas = "
+                    "CONCAT_WS('\n\n', NULLIF(notas_medicas, ''), %s) WHERE id_consulta = %s",
+                    (adenda.rotular(ahora, id_profesional), consulta),
+                )
+        except OperationalError as error:
+            traducido = _traducir_trigger(error)
+            if traducido is not None:
+                raise traducido from error
+            raise
+        actualizada = self.obtener_consulta(id_paciente, id_consulta)
+        assert actualizada is not None
+        return actualizada
+
     def listar_consultas(
         self, id_paciente: str, limite: int, antes_de: datetime | None = None
     ) -> list[Consulta]:
         numero = entero_positivo(id_paciente)
         if numero is None:
             return []
-        filtro, parametros = "", [numero]
+        filtro, parametros = "", []
         if antes_de is not None:
             filtro = "AND c.fecha_hora < %s "
             parametros.append(utc_ingenuo(antes_de))
+        return self._cargar(id_paciente, numero, filtro, parametros, limite)
+
+    def _cargar(
+        self, id_paciente: str, numero: int, filtro: str, extra: list[Any], limite: int
+    ) -> list[Consulta]:
+        parametros = [numero, *extra]
         filas = self._filas(
             "SELECT c.id_consulta, COALESCE(m.id_profesional_central, "
             "CONCAT('sin-cuenta-', m.id_medico)), c.fecha_hora, c.motivo_consulta, "
@@ -373,6 +552,428 @@ class RepositorioHistorialMySQL:
         ]
 
 
+class RepositorioProfesionalesMySQL:
+    def __init__(self, conexion: pymysql.Connection) -> None:
+        self.conexion = conexion
+
+    def obtener(self, id_profesional: str) -> ProfesionalLocal | None:
+        try:
+            uuid = str(UUID(id_profesional))
+        except ValueError:
+            return None
+        with self.conexion.cursor() as cursor:
+            cursor.execute(
+                "SELECT id_profesional_central, nombre, apellido, activo FROM medico "
+                "WHERE id_profesional_central = %s",
+                (uuid,),
+            )
+            fila = cursor.fetchone()
+        if fila is None:
+            return None
+        return ProfesionalLocal(fila[0], fila[1], fila[2], "medico", bool(fila[3]))
+
+
+class RepositorioCitasMySQL:
+    """Citas del centro. El trigger cita_validar_insert impide los choques de horario."""
+
+    _SELECT = (
+        "SELECT c.id_cita, c.id_paciente, CONCAT(p.nombre, ' ', p.apellido), "
+        "COALESCE(m.id_profesional_central, CONCAT('sin-cuenta-', m.id_medico)), "
+        "c.inicio, c.fin, c.motivo, c.estado, c.creada_por, c.motivo_cambio "
+        "FROM cita c JOIN paciente p ON p.id_paciente = c.id_paciente "
+        "JOIN medico m ON m.id_medico = c.id_medico "
+    )
+
+    def __init__(self, conexion: pymysql.Connection) -> None:
+        self.conexion = conexion
+
+    def _filas(self, sql: str, parametros: tuple | list = ()) -> tuple[tuple, ...]:
+        with self.conexion.cursor() as cursor:
+            cursor.execute(sql, parametros)
+            return cursor.fetchall()
+
+    @staticmethod
+    def _a_cita(fila: tuple) -> Cita:
+        return Cita(
+            id_cita=str(fila[0]),
+            id_paciente=str(fila[1]),
+            nombre_paciente=fila[2],
+            id_profesional=fila[3],
+            inicio=con_utc(fila[4]),
+            fin=con_utc(fila[5]),
+            motivo=fila[6],
+            estado=EstadoCita(fila[7]),
+            creada_por=fila[8],
+            motivo_cambio=fila[9],
+        )
+
+    def obtener(self, id_cita: str) -> Cita | None:
+        numero = entero_positivo(id_cita)
+        if numero is None:
+            return None
+        filas = self._filas(self._SELECT + "WHERE c.id_cita = %s", (numero,))
+        return self._a_cita(filas[0]) if filas else None
+
+    def agendar(self, datos: NuevaCita, nombre_paciente: str, creada_por: str) -> Cita:
+        paciente = entero_positivo(datos.id_paciente)
+        if paciente is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        try:
+            profesional, quien = str(UUID(datos.id_profesional)), str(UUID(creada_por))
+        except ValueError as error:
+            raise ProfesionalNoVinculado("La cuenta o el profesional no son validos.") from error
+        filas = self._filas(
+            "SELECT id_medico FROM medico WHERE id_profesional_central = %s", (profesional,)
+        )
+        if not filas:
+            raise DatosInvalidos("El profesional no existe, no esta activo o no atiende.")
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO cita (id_paciente, id_medico, inicio, duracion_minutos, "
+                    "motivo, creada_por) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (
+                        paciente,
+                        filas[0][0],
+                        utc_ingenuo(datos.inicio),
+                        datos.duracion_minutos,
+                        datos.motivo,
+                        quien,
+                    ),
+                )
+                id_cita = cursor.lastrowid
+        except OperationalError as error:
+            traducido = _traducir_trigger(error)
+            if traducido is not None:
+                raise traducido from error
+            raise
+        cita = self.obtener(str(id_cita))
+        assert cita is not None
+        return cita
+
+    def listar_agenda(
+        self, desde: datetime, hasta: datetime, id_profesional: str | None = None
+    ) -> list[Cita]:
+        filtro, parametros = "", [utc_ingenuo(desde), utc_ingenuo(hasta)]
+        if id_profesional is not None:
+            try:
+                parametros.append(str(UUID(id_profesional)))
+            except ValueError:
+                return []
+            filtro = "AND m.id_profesional_central = %s "
+        filas = self._filas(
+            self._SELECT
+            + "WHERE c.inicio >= %s AND c.inicio < %s "
+            + filtro
+            + "ORDER BY c.inicio, c.id_cita LIMIT 500",
+            parametros,
+        )
+        return [self._a_cita(f) for f in filas]
+
+    def listar_por_paciente(self, id_paciente: str, limite: int) -> list[Cita]:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            return []
+        filas = self._filas(
+            self._SELECT + "WHERE c.id_paciente = %s ORDER BY c.inicio DESC, c.id_cita DESC "
+            "LIMIT %s",
+            (numero, limite),
+        )
+        return [self._a_cita(f) for f in filas]
+
+    def cambiar_estado(
+        self, id_cita: str, estado: EstadoCita, por: str, motivo: str | None
+    ) -> Cita:
+        numero = entero_positivo(id_cita)
+        if numero is None:
+            raise CitaNoEncontrada("La cita no existe en tu institucion.")
+        try:
+            quien = str(UUID(por))
+        except ValueError as error:
+            raise ProfesionalNoVinculado("La cuenta no es valida.") from error
+        # FOR UPDATE: dos cambios simultaneos sobre la misma cita se aplican uno tras otro.
+        filas = self._filas("SELECT estado FROM cita WHERE id_cita = %s FOR UPDATE", (numero,))
+        if not filas:
+            raise CitaNoEncontrada("La cita no existe en tu institucion.")
+        actual = EstadoCita(filas[0][0])
+        if estado not in TRANSICIONES.get(actual, set()):
+            raise ConflictoAgenda(f"Una cita '{actual}' no puede pasar a '{estado}'.")
+        with self.conexion.cursor() as cursor:
+            cursor.execute(
+                "UPDATE cita SET estado = %s, motivo_cambio = %s, actualizada_por = %s "
+                "WHERE id_cita = %s",
+                (estado.value, motivo, quien, numero),
+            )
+        cita = self.obtener(id_cita)
+        assert cita is not None
+        return cita
+
+
+def _numero(valor: float | None) -> float | None:
+    return None if valor is None else float(valor)
+
+
+class RepositorioCrecimientoMySQL:
+    """Controles de crecimiento (control_crecimiento): solo se agregan."""
+
+    _SELECT = (
+        "SELECT id_control, id_paciente_fk, fecha_registro, edad_meses, peso_kg, talla_cm, "
+        "perimetro_cefalico, percentil_peso, percentil_talla, referencia_percentiles, "
+        "observaciones FROM control_crecimiento "
+    )
+
+    def __init__(self, conexion: pymysql.Connection) -> None:
+        self.conexion = conexion
+
+    def _filas(self, sql: str, parametros: tuple = ()) -> tuple[tuple, ...]:
+        with self.conexion.cursor() as cursor:
+            cursor.execute(sql, parametros)
+            return cursor.fetchall()
+
+    @staticmethod
+    def _a_control(fila: tuple) -> ControlCrecimiento:
+        return ControlCrecimiento(
+            str(fila[0]),
+            str(fila[1]),
+            con_utc(fila[2]),
+            fila[3],
+            _numero(fila[4]),
+            _numero(fila[5]),
+            _numero(fila[6]),
+            _numero(fila[7]),
+            _numero(fila[8]),
+            fila[9],
+            fila[10],
+        )
+
+    def registrar(
+        self, id_paciente: str, datos: NuevoControl, fecha: datetime, edad_meses: int | None
+    ) -> ControlCrecimiento:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO control_crecimiento (id_paciente_fk, fecha_registro, edad_meses, "
+                    "peso_kg, talla_cm, perimetro_cefalico, percentil_peso, percentil_talla, "
+                    "referencia_percentiles, observaciones) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        numero,
+                        utc_ingenuo(fecha),
+                        edad_meses,
+                        datos.peso_kg,
+                        datos.talla_cm,
+                        datos.perimetro_cefalico,
+                        datos.percentil_peso,
+                        datos.percentil_talla,
+                        datos.referencia_percentiles,
+                        datos.observaciones,
+                    ),
+                )
+                nuevo = cursor.lastrowid
+        except OperationalError as error:
+            traducido = _traducir_trigger(error)
+            if traducido is not None:
+                raise traducido from error
+            if error.args and error.args[0] == ER_CHECK_VIOLATED:
+                raise DatosInvalidos("Las medidas no cumplen los rangos permitidos.") from error
+            raise
+        except IntegrityError as error:
+            if error.args and error.args[0] == ER_NO_REFERENCED_ROW:
+                raise PacienteNoEncontrado("El paciente no existe en tu institucion.") from error
+            raise
+        fila = self._filas(self._SELECT + "WHERE id_control = %s", (nuevo,))[0]
+        return self._a_control(fila)
+
+    def listar(self, id_paciente: str, limite: int) -> list[ControlCrecimiento]:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            return []
+        filas = self._filas(
+            self._SELECT
+            + "WHERE id_paciente_fk = %s ORDER BY fecha_registro DESC, id_control DESC LIMIT %s",
+            (numero, limite),
+        )
+        return [self._a_control(f) for f in filas]
+
+
+ESTADO_DOSIS_BD = {
+    "Pendiente": EstadoDosis.PENDIENTE,
+    "Aplicada": EstadoDosis.APLICADA,
+    "Cancelada": EstadoDosis.CANCELADA,
+}
+
+
+class RepositorioVacunacionMySQL:
+    """Esquema de vacunacion. El catalogo de tipos es de solo lectura para la API.
+
+    Decision del equipo: no se controlan lotes ni existencias (migracion 010). Aplicar una
+    dosis solo registra quien, cuando y las observaciones.
+    """
+
+    _DOSIS = (
+        "SELECT e.id_esquema, e.id_paciente_fk, e.id_nombre_vacuna_fk, n.nombre, "
+        "e.estado_aplicacion, e.numero_dosis, e.fecha_programada, e.fecha_aplicacion, "
+        "m.id_profesional_central, e.observaciones_reaccion "
+        "FROM esquema_vacunacion e "
+        "JOIN nombre_vacuna n ON n.id_nombre_vacuna = e.id_nombre_vacuna_fk "
+        "LEFT JOIN medico m ON m.id_medico = e.id_medico_aplicador "
+    )
+
+    def __init__(self, conexion: pymysql.Connection) -> None:
+        self.conexion = conexion
+
+    def _filas(self, sql: str, parametros: tuple = ()) -> tuple[tuple, ...]:
+        with self.conexion.cursor() as cursor:
+            cursor.execute(sql, parametros)
+            return cursor.fetchall()
+
+    @staticmethod
+    def _a_dosis(fila: tuple) -> DosisVacuna:
+        return DosisVacuna(
+            id_dosis=str(fila[0]),
+            id_paciente=str(fila[1]),
+            id_vacuna=str(fila[2]),
+            nombre_vacuna=fila[3],
+            estado=ESTADO_DOSIS_BD[fila[4]],
+            numero_dosis=fila[5],
+            fecha_programada=fila[6],
+            fecha_aplicacion=con_utc(fila[7]) if fila[7] else None,
+            id_aplicador=fila[8],
+            observaciones_reaccion=fila[9],
+        )
+
+    def listar_tipos(self) -> list[TipoVacuna]:
+        filas = self._filas(
+            "SELECT id_nombre_vacuna, nombre, enfermedades_que_previene, edad_recomendada_meses, "
+            "dosis_sugerida FROM nombre_vacuna "
+            "ORDER BY edad_recomendada_meses IS NULL, edad_recomendada_meses, nombre"
+        )
+        return [TipoVacuna(str(f[0]), f[1], f[2], f[3], f[4]) for f in filas]
+
+    def listar_esquema(self, id_paciente: str) -> list[DosisVacuna]:
+        numero = entero_positivo(id_paciente)
+        if numero is None:
+            return []
+        filas = self._filas(
+            self._DOSIS + "WHERE e.id_paciente_fk = %s "
+            "ORDER BY e.fecha_programada IS NULL, e.fecha_programada, e.id_esquema",
+            (numero,),
+        )
+        return [self._a_dosis(f) for f in filas]
+
+    def obtener_dosis(self, id_paciente: str, id_dosis: str) -> DosisVacuna | None:
+        paciente, dosis = entero_positivo(id_paciente), entero_positivo(id_dosis)
+        if paciente is None or dosis is None:
+            return None
+        filas = self._filas(
+            self._DOSIS + "WHERE e.id_paciente_fk = %s AND e.id_esquema = %s", (paciente, dosis)
+        )
+        return self._a_dosis(filas[0]) if filas else None
+
+    def programar(
+        self,
+        id_paciente: str,
+        id_vacuna: str,
+        numero_dosis: int | None,
+        fecha_programada: date | None,
+    ) -> DosisVacuna:
+        paciente, vacuna = entero_positivo(id_paciente), entero_positivo(id_vacuna)
+        if paciente is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if vacuna is None:
+            raise DatosInvalidos("La vacuna no existe en el catalogo.")
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO esquema_vacunacion (id_paciente_fk, id_nombre_vacuna_fk, "
+                    "numero_dosis, fecha_programada, estado_aplicacion) "
+                    "VALUES (%s, %s, %s, %s, 'Pendiente')",
+                    (paciente, vacuna, numero_dosis, fecha_programada),
+                )
+                nuevo = cursor.lastrowid
+        except OperationalError as error:
+            traducido = _traducir_trigger(error)
+            if traducido is not None:
+                raise traducido from error
+            raise
+        except IntegrityError as error:
+            if error.args and error.args[0] == ER_NO_REFERENCED_ROW:
+                raise DatosInvalidos("La vacuna no existe en el catalogo.") from error
+            raise
+        dosis = self.obtener_dosis(id_paciente, str(nuevo))
+        assert dosis is not None
+        return dosis
+
+    def aplicar(
+        self,
+        id_paciente: str,
+        id_dosis: str,
+        id_profesional: str,
+        fecha: datetime,
+        observaciones: str | None,
+    ) -> DosisVacuna:
+        paciente, numero = entero_positivo(id_paciente), entero_positivo(id_dosis)
+        if paciente is None or numero is None:
+            raise RegistroNoEncontrado("La dosis no existe en el esquema del paciente.")
+        id_medico = _id_medico_activo(self._filas, id_profesional)
+        # Bloquea la dosis: dos aplicaciones simultaneas de la misma dosis van una tras otra.
+        filas = self._filas(
+            "SELECT estado_aplicacion FROM esquema_vacunacion "
+            "WHERE id_esquema = %s AND id_paciente_fk = %s FOR UPDATE",
+            (numero, paciente),
+        )
+        if not filas:
+            raise RegistroNoEncontrado("La dosis no existe en el esquema del paciente.")
+        if filas[0][0] != "Pendiente":
+            raise ConflictoEstado(
+                f"Una dosis {ESTADO_DOSIS_BD[filas[0][0]].value} no puede aplicarse."
+            )
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE esquema_vacunacion SET estado_aplicacion = 'Aplicada', "
+                    "fecha_aplicacion = %s, id_medico_aplicador = %s, "
+                    "observaciones_reaccion = %s WHERE id_esquema = %s",
+                    (utc_ingenuo(fecha), id_medico, observaciones, numero),
+                )
+        except OperationalError as error:
+            traducido = _traducir_trigger(error)
+            if traducido is not None:
+                raise traducido from error
+            raise
+        dosis = self.obtener_dosis(id_paciente, id_dosis)
+        assert dosis is not None
+        return dosis
+
+    def cancelar(self, id_paciente: str, id_dosis: str) -> DosisVacuna:
+        paciente, numero = entero_positivo(id_paciente), entero_positivo(id_dosis)
+        if paciente is None or numero is None:
+            raise RegistroNoEncontrado("La dosis no existe en el esquema del paciente.")
+        filas = self._filas(
+            "SELECT estado_aplicacion FROM esquema_vacunacion "
+            "WHERE id_esquema = %s AND id_paciente_fk = %s FOR UPDATE",
+            (numero, paciente),
+        )
+        if not filas:
+            raise RegistroNoEncontrado("La dosis no existe en el esquema del paciente.")
+        if filas[0][0] != "Pendiente":
+            raise ConflictoEstado(
+                f"Una dosis {ESTADO_DOSIS_BD[filas[0][0]].value} no puede cancelarse."
+            )
+        with self.conexion.cursor() as cursor:
+            cursor.execute(
+                "UPDATE esquema_vacunacion SET estado_aplicacion = 'Cancelada' "
+                "WHERE id_esquema = %s",
+                (numero,),
+            )
+        dosis = self.obtener_dosis(id_paciente, id_dosis)
+        assert dosis is not None
+        return dosis
+
+
 class UnidadTrabajoMySQL:
     """Cada solicitud abre su conexion y la cierra; sin commit() todo se revierte."""
 
@@ -387,10 +988,14 @@ class UnidadTrabajoMySQL:
             raise IntegracionNoConfigurada("La base clinica no esta disponible.") from error
         self.pacientes = RepositorioPacientesMySQL(self.conexion)
         self.historial = RepositorioHistorialMySQL(self.conexion)
-        # Citas, perfiles y odontograma: pendientes en este motor (HTTP 501).
-        for nombre, repositorio in repositorios_pendientes(MOTOR).items():
-            if nombre not in ("pacientes", "historial"):
-                setattr(self, nombre, repositorio)
+        self.profesionales = RepositorioProfesionalesMySQL(self.conexion)
+        self.citas = RepositorioCitasMySQL(self.conexion)
+        self.crecimiento = RepositorioCrecimientoMySQL(self.conexion)
+        self.vacunacion = RepositorioVacunacionMySQL(self.conexion)
+        # El odontograma es propio de la clinica odontologica (HTTP 501 aqui).
+        pendientes = repositorios_pendientes(MOTOR)
+        self.odontograma = pendientes["odontograma"]
+        self.laboratorio = pendientes["laboratorio"]
         return self
 
     def __exit__(
