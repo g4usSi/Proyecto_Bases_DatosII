@@ -22,9 +22,11 @@ de Git, Docker y las bases antes de basarse en los datos de entorno anotados aqu
 Esta sección corrige lo que dicen las actualizaciones históricas de más abajo.
 
 - Los cuatro motores implementan registrar, leer, **buscar por nombre**, historial,
-  consulta (diagnósticos, tratamientos, recetas) y archivar. Citas y odontograma solo en
-  Firestore. Detalle, migraciones para volúmenes existentes y diseño de consistencia en
-  `docs/operaciones_comunes.md`; porcentajes en `docs/avance.md` (backend ≈ 93 %).
+  consulta (diagnósticos, tratamientos, recetas) y archivar. Citas, adendas y corrección de datos
+  también en los cuatro; odontograma solo en Firestore, crecimiento/vacunas solo en MySQL y
+  órdenes de laboratorio solo en MongoDB (ver `documentacion-backend.md`, que manda sobre
+  lo histórico de abajo). Detalle, migraciones para volúmenes existentes y diseño de consistencia en
+  `docs/operaciones_comunes.md`; porcentajes en `docs/avance.md` (backend ≈ 98 %).
 - Un commit por motor: `feat(postgresql)`, `feat(mysql)`, `feat(mongodb)` (autor HDZaid).
   Archivos nuevos: `app/infrastructure/persistence/{postgresql,mysql,mongodb}/unidad.py`
   (el antiguo `mongodb/lectura.py` pasó a `unidad.py`; `sql.py` solo queda como esqueleto

@@ -7,19 +7,23 @@ La API decide el motor después de autenticar; cada establecimiento conserva sus
 ## Estado y continuidad
 
 El trabajo permanece en `main`; las ramas de motor aún no se han creado.
+**Documentación completa del backend (qué hace cada pieza, rutas, permisos, motores):
+[documentacion-backend.md](documentacion-backend.md).**
 Para retomar decisiones, pendientes, límites conocidos y pasos recomendados, leer
 [contexto para el siguiente agente](docs/CONTEXTO_PARA_OTRO_AGENTE.md).
 
 | Establecimiento | Motor | Estado actual |
 | --- | --- | --- |
 | Hospital General | PostgreSQL | SQL original integrado, identidad central y CRUD clínico completo (migración `008`). |
-| Centro Pediátrico | MySQL 8.4 | Modelo revisado, reglas de integridad, stock y saldos; CRUD clínico completo (migraciones `004` y `005`). |
+| Centro Pediátrico | MySQL 8.4 | Modelo revisado, reglas de integridad y saldos; vacunación sin control de stock; CRUD clínico completo (migraciones `004` y `005`). |
 | Laboratorio Clínico | MongoDB 8 | Colecciones, validadores e índices; CRUD clínico completo (consulta en un solo documento). |
 | Clínica Odontológica | Cloud Firestore | Completo: pacientes, consultas, archivo, citas, odontograma (estados fijos) y rol secretaria. [Modelo](docs/modelo_odontologia.md). |
 
-No se han creado ramas nuevas. Las cinco operaciones del curso y la búsqueda por nombre
-funcionan en **los cuatro motores**; solo citas y odontograma fuera de Firestore responden
-501. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
+No se han creado ramas nuevas. Las cinco operaciones del curso, la búsqueda por nombre,
+las adendas, la corrección de datos/alergias y las **citas con no-solape** funcionan en
+**los cuatro motores**. Los módulos propios de cada establecimiento (odontograma en
+Firestore, crecimiento y vacunación en MySQL, órdenes y resultados de laboratorio en
+MongoDB) responden 501 en los demás. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
 migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
 
 **Frontend:** pendiente. Decisión: HTML/JS sencillo servido por la misma FastAPI (sin
@@ -29,6 +33,11 @@ odontograma interactivo están en [docs/frontend.md](docs/frontend.md).
 ### Decisiones del equipo vigentes
 
 - Cada institución guarda solo sus propios pacientes (no se replican en los cuatro motores).
+- Solo la identidad del personal es central; un mismo paciente se registra por separado en
+  cada establecimiento al que acuda (expedientes independientes).
+- Las citas del Laboratorio Clínico son una función extra: existen en el backend, pero no
+  se priorizan en el frontend. El Centro Pediátrico no controla stock por lote de vacunas.
+  Detalle en [documentacion-backend.md](documentacion-backend.md#0-decisiones-de-diseño-vigentes).
 - `contacto` y `alergias` son campos **opcionales** al registrar un paciente.
 - Rol `secretaria`: **solo en la clínica odontológica**. Registra pacientes (puede anotar
   alergias) y gestiona citas. No ve alergias, consultas, diagnósticos ni odontograma, y
@@ -148,7 +157,10 @@ disponible (por ejemplo, Firestore sin clave).
   mínimos para las escrituras de la API.
 - `database/mysql/original/`: copia intacta del SQL recibido.
 - `database/postgresql/`: esquema del hospital, identidad y cuentas limitadas
-  (`008_escritura_api.sql`: escrituras de la API, `unaccent` y permisos mínimos).
+  (`008`: escrituras de la API; `009`: citas/adendas; `010`: integridad; `011`: permisos de laboratorio).
+- `database/mysql/006`–`010`: citas, adendas, pediatría (crecimiento y vacunas), sus permisos y `010` (sin stock por lote).
+- `scripts/cargar_catalogos.py` y `database/ejemplos/`: carga de catálogos de vacunas y pruebas (datos DEMO).
+- [Documentación del backend](documentacion-backend.md).
 - [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md).
 - [Identidad central](docs/identidad_central.md), [arquitectura](docs/arquitectura.md),
   [trabajo por ramas](docs/ramas.md).
@@ -185,12 +197,12 @@ sin configurar un entorno de pruebas separado.
 
 ## Trabajo siguiente
 
-Los cuatro motores ya implementan registro, lectura, búsqueda, historial, consulta con
-diagnósticos/tratamientos/recetas y archivo. Pendiente: hacer los mockups y el frontend
-([plan](docs/frontend.md)), redactar el documento comparativo, citas en los motores que no
-sean Firestore si el equipo lo decide, y revisar las reglas pendientes del esquema clínico
-original de PostgreSQL (pagos, camas). Agregar auditoría y rectificaciones antes de permitir
-cambios clínicos. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
+El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
+Pendiente: hacer los mockups y el frontend ([plan](docs/frontend.md)), redactar el
+documento comparativo, exponer pagos y camas del Hospital General si el equipo lo decide,
+probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
+aplica las migraciones nuevas (PostgreSQL 009–011, MySQL 006–010 y repetir el JS de MongoDB:
+sección 14 de la documentación). MongoDB corre como servidor único: convertirlo a *replica set* permitiría
 usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja
 simultáneas (ver [operaciones comunes](docs/operaciones_comunes.md)).
 

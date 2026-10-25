@@ -4,7 +4,8 @@ La API completa del curso ya existe y **los cuatro motores implementan las cinco
 operaciones** (registrar, leer, historial, consulta con diagnósticos/tratamientos/recetas
 y archivar) más la búsqueda por nombre. Lo que un motor no ofrece responde **501** con el
 motor y la operación, por ejemplo `MySQL: 'citas' todavia no esta implementado.` Hoy eso
-solo ocurre con citas, odontograma y perfiles fuera de Firestore.
+solo ocurre con los módulos propios de un establecimiento (odontograma, pediatría y
+laboratorio) fuera de su motor. Referencia completa: [documentacion-backend.md](../documentacion-backend.md).
 
 ## Rutas y permisos
 
@@ -15,6 +16,10 @@ solo ocurre con citas, odontograma y perfiles fuera de Firestore.
 | `GET /api/v1/pacientes/{id}` | `ConsultarPaciente` | `pacientes:leer` |
 | `GET /api/v1/pacientes/{id}/historial?limite=20&antes_de=` | `ConsultarHistorial` | `historiales:leer` |
 | `POST /api/v1/pacientes/{id}/consultas` | `RegistrarConsulta` | `consultas:registrar` |
+| `PATCH /api/v1/pacientes/{id}` | `ActualizarPaciente` | `pacientes:registrar` |
+| `POST /api/v1/pacientes/{id}/alergias` | `AgregarAlergias` | `pacientes:registrar` |
+| `GET /api/v1/pacientes/{id}/consultas/{id_consulta}` | `ConsultarConsulta` | `historiales:leer` |
+| `POST /api/v1/pacientes/{id}/consultas/{id_consulta}/adenda` | `AgregarAConsulta` | `consultas:registrar` |
 | `POST /api/v1/pacientes/{id}/archivo` | `ArchivarPaciente` | `historiales:archivar` |
 | `GET /api/v1/pacientes/{id}/citas` | `CitasDePaciente` | `citas:leer` |
 | `POST /api/v1/citas` | `AgendarCita` | `citas:gestionar` |
@@ -22,6 +27,13 @@ solo ocurre con citas, odontograma y perfiles fuera de Firestore.
 | `POST /api/v1/citas/{id}/estado` | `CambiarEstadoCita` | `citas:gestionar` |
 | `GET /api/v1/pacientes/{id}/odontograma` | `ConsultarOdontograma` | `historiales:leer` |
 | `PUT /api/v1/pacientes/{id}/odontograma/piezas/{pieza}` | `ActualizarPieza` | `consultas:registrar` |
+
+Pediatría (solo MySQL): `/pacientes/{id}/crecimiento`, `/vacunas` (solo tipos; sin lotes ni stock),
+`/pacientes/{id}/vacunacion` (+ `esquema-recomendado`, `{id_dosis}/aplicar|cancelar`).
+Laboratorio (solo MongoDB): `/laboratorio/pruebas`, `/pacientes/{id}/ordenes` (+ `muestras`,
+`pruebas/{codigo}/resultados`, `validar`, `cancelar`), con los permisos nuevos
+`laboratorio:resultados` y `laboratorio:validar` (rol `laboratorista`). Detalle por ruta en
+[documentacion-backend.md](../documentacion-backend.md).
 
 Las alergias del paciente solo se muestran a quien tiene `historiales:leer`.
 Los permisos de citas y el rol `secretaria` llegan con `006_rol_secretaria_citas.sql`;
@@ -66,9 +78,9 @@ Al adaptador le toca guardar y leer, de forma atómica.
 
 | Motor | registrar | leer | buscar | historial | consulta | archivar | citas | odontograma |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PostgreSQL (`postgresql/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 501 | no aplica |
-| MySQL (`mysql/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 501 | no aplica |
-| MongoDB (`mongodb/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 501 | no aplica |
+| PostgreSQL (`postgresql/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | no aplica |
+| MySQL (`mysql/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (+ crecimiento y vacunas) | no aplica |
+| MongoDB (`mongodb/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (+ laboratorio) | no aplica |
 | Firestore (`firestore/unidad.py`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### Búsqueda por nombre (regla común)

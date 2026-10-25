@@ -7,7 +7,7 @@ propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
 
 | Parte | Avance |
 | --- | --- |
-| Backend (API + motores) | **≈ 93 %** |
+| Backend (API + motores) | **≈ 98 %** |
 | Frontend (cliente) | **0 %**: tecnología decidida (HTML/JS en FastAPI), faltan mockups |
 | Documento comparativo | **≈ 30 %**: el material está repartido en `docs/`, sin redactar |
 | Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 52 %** |
@@ -31,10 +31,11 @@ Operaciones por motor (✅ hecho, — pendiente):
 | MongoDB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Firestore | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Lo que falta del backend: citas en los otros tres motores (la clínica es la que agenda),
-las reglas pendientes del SQL original de PostgreSQL, auditoría/rectificación clínica y
-probar el arranque desde cero con Docker (los scripts nuevos se probaron en motores locales
-equivalentes).
+Se agregó desde entonces: adendas, corrección de datos y alergias, citas en los cuatro
+motores, pediatría (crecimiento y vacunación), laboratorio (órdenes, resultados,
+validación), integridad del hospital (PostgreSQL `010`), auditoría y `/health/ready`.
+Lo que falta del backend: API de pagos y camas, probar el arranque con Docker y Firestore
+real (lo nuevo se probó con el emulador). Detalle en [documentacion-backend.md](../documentacion-backend.md).
 
 ## Frontend (pendiente completo)
 
