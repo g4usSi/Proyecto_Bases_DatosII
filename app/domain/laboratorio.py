@@ -177,3 +177,40 @@ def construir_resultados(
             )
         )
     return tuple(resultados)
+
+
+@dataclass(frozen=True, slots=True)
+class PruebaEnTablero:
+    codigo: str
+    nombre: str
+    version: int
+    con_resultados: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ResumenOrden:
+    """Una fila del tablero de ordenes de la institucion (sin valores de resultados)."""
+
+    id_orden: str
+    numero_orden: str
+    id_paciente: str
+    nombre_paciente: str
+    id_profesional: str
+    estado: EstadoOrden
+    solicitada_en: datetime
+    pruebas: tuple[PruebaEnTablero, ...]
+    muestras: int = 0
+    validada_en: datetime | None = None
+
+    @property
+    def pruebas_pendientes(self) -> int:
+        return sum(1 for p in self.pruebas if not p.con_resultados)
+
+
+@dataclass(frozen=True, slots=True)
+class VersionPrueba:
+    """Una version publicada de una prueba. Las publicadas no cambian: se agrega otra."""
+
+    prueba: PruebaCatalogo
+    activa: bool
+    vigente: bool  # la version activa mas reciente: la que usan las ordenes nuevas

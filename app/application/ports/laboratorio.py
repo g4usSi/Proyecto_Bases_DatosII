@@ -2,16 +2,38 @@ from datetime import datetime
 from typing import Protocol
 
 from app.domain.laboratorio import (
+    EstadoOrden,
     NuevaMuestra,
     Orden,
     PruebaCatalogo,
     Resultado,
+    ResumenOrden,
+    VersionPrueba,
 )
 
 
 class RepositorioLaboratorio(Protocol):
     def listar_catalogo(self) -> list[PruebaCatalogo]:
         """Pruebas activas (la version mas reciente de cada una)."""
+        ...
+
+    def versiones(self, codigo: str) -> list[VersionPrueba]:
+        """Todas las versiones publicadas de una prueba, de la mas reciente a la mas antigua.
+
+        Lista vacia si el codigo no existe.
+        """
+        ...
+
+    def listar_institucion(
+        self,
+        estados: frozenset[EstadoOrden] | None,
+        limite: int,
+        antes_de: datetime | None = None,
+    ) -> list[ResumenOrden]:
+        """Ordenes de toda la institucion (tablero), de la mas reciente a la mas antigua.
+
+        Paginacion por cursor: `antes_de` es la solicitada_en de la ultima fila recibida.
+        """
         ...
 
     def solicitar(

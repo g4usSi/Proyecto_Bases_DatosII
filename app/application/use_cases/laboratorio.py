@@ -14,10 +14,13 @@ from app.domain.errores import (
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.laboratorio import (
     ESTADOS_ABIERTOS,
+    EstadoOrden,
     NuevaMuestra,
     Orden,
     PruebaCatalogo,
+    ResumenOrden,
     ValorResultado,
+    VersionPrueba,
     construir_resultados,
 )
 
@@ -181,3 +184,31 @@ class CancelarOrden:
             )
             unidad.commit()
             return cancelada
+
+
+class TableroLaboratorio:
+    """Ordenes de toda la institucion: cola de trabajo y atajo "registrar resultados"."""
+
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo) -> None:
+        self.unidad_trabajo = unidad_trabajo
+
+    def ejecutar(
+        self,
+        estados: frozenset[EstadoOrden] | None = None,
+        limite: int = 50,
+        antes_de: datetime | None = None,
+    ) -> list[ResumenOrden]:
+        with self.unidad_trabajo as unidad:
+            return unidad.laboratorio.listar_institucion(estados, limite, antes_de)
+
+
+class VersionesDePrueba:
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo) -> None:
+        self.unidad_trabajo = unidad_trabajo
+
+    def ejecutar(self, codigo: str) -> list[VersionPrueba]:
+        with self.unidad_trabajo as unidad:
+            versiones = unidad.laboratorio.versiones(codigo)
+        if not versiones:
+            raise RegistroNoEncontrado("Esa prueba no existe en el catalogo.")
+        return versiones

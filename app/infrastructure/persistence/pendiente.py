@@ -11,7 +11,15 @@ from app.application.errores import OperacionPendiente
 from app.domain.cita import Cita, EstadoCita, NuevaCita
 from app.domain.consulta import Adenda, Consulta, NuevaConsulta
 from app.domain.hospital import Departamento
-from app.domain.laboratorio import NuevaMuestra, Orden, PruebaCatalogo, Resultado
+from app.domain.laboratorio import (
+    EstadoOrden,
+    NuevaMuestra,
+    Orden,
+    PruebaCatalogo,
+    Resultado,
+    ResumenOrden,
+    VersionPrueba,
+)
 from app.domain.odontograma import EstadoPieza, Odontograma
 from app.domain.pediatria import (
     ControlCrecimiento,
@@ -168,6 +176,17 @@ class LaboratorioNoAplica:
         pendiente(self.motor, "ordenes de laboratorio (solo aplica al Laboratorio Clinico)")
 
     def listar_catalogo(self) -> list[PruebaCatalogo]:
+        self._no()
+
+    def versiones(self, codigo: str) -> list[VersionPrueba]:
+        self._no()
+
+    def listar_institucion(
+        self,
+        estados: frozenset[EstadoOrden] | None,
+        limite: int,
+        antes_de: datetime | None = None,
+    ) -> list[ResumenOrden]:
         self._no()
 
     def solicitar(

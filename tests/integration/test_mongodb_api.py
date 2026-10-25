@@ -1155,3 +1155,84 @@ def test_script_de_carga_de_pruebas_publica_versiones_inmutables(lab):
     with lab.unidad() as unidad:
         activas = [p for p in unidad.laboratorio.listar_catalogo() if p.codigo == codigo]
     assert [p.version for p in activas] == [2]
+
+
+# ---------------------------------------------------------------------------------------
+# Tablero de ordenes de la institucion y versiones del catalogo
+# ---------------------------------------------------------------------------------------
+
+
+def test_tablero_de_ordenes_de_toda_la_institucion(lab):
+    primero, segundo = registrar(lab, "Uno"), registrar(lab, "Dos")
+    codigo, otra = cargar_prueba(lab, "T1"), cargar_prueba(lab, "T2")
+    _, orden_1 = orden_base(lab, primero, (codigo, otra))
+    _, orden_2 = orden_base(lab, segundo, (codigo,))
+    with lab.unidad() as unidad:
+        unidad.laboratorio.registrar_muestra(
+            primero, orden_1.id_orden, NuevaMuestra("sangre"), datetime.now(UTC)
+        )
+        unidad.commit()
+    registrar_hgb(lab, primero, orden_1, codigo, 13.5)
+    propias = {orden_1.id_orden, orden_2.id_orden}
+    with lab.unidad() as unidad:
+        todas = [
+            o for o in unidad.laboratorio.listar_institucion(None, 200) if o.id_orden in propias
+        ]
+        solicitadas = unidad.laboratorio.listar_institucion(
+            frozenset({EstadoOrden.SOLICITADA}), 200
+        )
+        primera_pagina = unidad.laboratorio.listar_institucion(None, 1)
+        siguiente = unidad.laboratorio.listar_institucion(
+            None, 200, primera_pagina[0].solicitada_en
+        )
+    assert [o.id_orden for o in todas] == [orden_2.id_orden, orden_1.id_orden]  # recientes
+    fila_1 = todas[1]
+    assert fila_1.nombre_paciente == f"Uno {lab.marca}"
+    assert fila_1.estado == EstadoOrden.EN_PROCESO and fila_1.muestras == 1
+    assert [(p.codigo, p.con_resultados) for p in fila_1.pruebas] == [(codigo, True), (otra, False)]
+    assert fila_1.pruebas_pendientes == 1
+    assert orden_2.id_orden in {o.id_orden for o in solicitadas}
+    assert orden_1.id_orden not in {o.id_orden for o in solicitadas}
+    assert all(o.solicitada_en < primera_pagina[0].solicitada_en for o in siguiente)
+
+    with TestClient(create_app(Settings())) as client:
+        login = client.post(
+            "/api/v1/auth/login", json={"correo": lab.correo, "password": lab.password}
+        )
+        h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        respuesta = client.get(
+            "/api/v1/laboratorio/ordenes",
+            params=[("estado", "solicitada"), ("estado", "en_proceso"), ("limite", 200)],
+            headers=h,
+        )
+        malo = client.get("/api/v1/laboratorio/ordenes", params={"estado": "x"}, headers=h)
+    assert respuesta.status_code == 200 and malo.status_code == 422
+    fila = next(f for f in respuesta.json() if f["id_orden"] == orden_1.id_orden)
+    assert fila["pruebas_pendientes"] == 1 and fila["nombre_paciente"] == f"Uno {lab.marca}"
+    # Sin valores clinicos en el tablero.
+    assert all("resultados" not in p for p in fila["pruebas"]) and "13.5" not in str(fila)
+
+
+def test_versiones_de_una_prueba_del_catalogo(lab):
+    codigo = cargar_prueba(lab, "VER", version=1, maximo=16.0)
+    cargar_prueba(lab, "VER", version=2, maximo=17.0)
+    cargar_prueba(lab, "VER", version=3, activo=False, maximo=18.0)
+    with lab.unidad() as unidad:
+        versiones = unidad.laboratorio.versiones(codigo)
+        assert unidad.laboratorio.versiones(f"{lab.marca}-NOEXISTE") == []
+        assert unidad.laboratorio.versiones({"$ne": None}) == []  # sin inyeccion de operadores
+    assert [(v.prueba.version, v.activa, v.vigente) for v in versiones] == [
+        (3, False, False),
+        (2, True, True),
+        (1, True, False),
+    ]
+    assert versiones[2].prueba.parametros[0].referencia.maximo == 16.0
+    with TestClient(create_app(Settings())) as client:
+        login = client.post(
+            "/api/v1/auth/login", json={"correo": lab.correo, "password": lab.password}
+        )
+        h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        api = client.get(f"/api/v1/laboratorio/pruebas/{codigo}/versiones", headers=h)
+        ausente = client.get("/api/v1/laboratorio/pruebas/NOEXISTE-X/versiones", headers=h)
+    assert [v["prueba"]["version"] for v in api.json()] == [3, 2, 1]
+    assert api.json()[1]["vigente"] is True and ausente.status_code == 404

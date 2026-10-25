@@ -132,3 +132,38 @@ class OrdenResponse(BaseModel):
     validada_en: datetime | None
     validada_por: str | None
     motivo_cancelacion: str | None
+
+
+class PruebaEnTableroResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    codigo: str
+    nombre: str
+    version: int
+    con_resultados: bool
+
+
+class ResumenOrdenResponse(BaseModel):
+    """Fila del tablero. No incluye valores de resultados (se ven en la orden completa)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_orden: str
+    numero_orden: str
+    id_paciente: str
+    nombre_paciente: str
+    id_profesional: str
+    estado: EstadoOrden
+    solicitada_en: datetime
+    validada_en: datetime | None = None
+    muestras: int
+    pruebas_pendientes: int
+    pruebas: list[PruebaEnTableroResponse]
+
+
+class VersionPruebaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    prueba: PruebaCatalogoResponse
+    activa: bool
+    vigente: bool = Field(description="La version que usan las ordenes nuevas.")

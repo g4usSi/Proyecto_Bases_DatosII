@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Path, Query, status
+from pydantic import AwareDatetime
 
 from app.application.use_cases.laboratorio import (
     CancelarOrden,
@@ -9,9 +10,11 @@ from app.application.use_cases.laboratorio import (
     RegistrarMuestra,
     RegistrarResultados,
     SolicitarOrden,
+    TableroLaboratorio,
     ValidarOrden,
+    VersionesDePrueba,
 )
-from app.domain.laboratorio import NuevaMuestra, ValorResultado
+from app.domain.laboratorio import EstadoOrden, NuevaMuestra, ValorResultado
 from app.presentation.api.dependencies import (
     ContextoLeerLab,
     ContextoRegistrarConsulta,
@@ -25,6 +28,8 @@ from app.presentation.api.schemas.laboratorio import (
     OrdenResponse,
     PruebaCatalogoResponse,
     ResultadosCrear,
+    ResumenOrdenResponse,
+    VersionPruebaResponse,
 )
 
 router = APIRouter(tags=["Laboratorio"])
@@ -39,6 +44,35 @@ def catalogo_de_pruebas(contexto: ContextoLeerLab) -> list[PruebaCatalogoRespons
     """Pruebas activas del catalogo (solo Laboratorio Clinico)."""
     pruebas = ConsultarCatalogoLaboratorio(contexto.unidad).ejecutar()
     return [PruebaCatalogoResponse.model_validate(p) for p in pruebas]
+
+
+@router.get("/laboratorio/pruebas/{codigo}/versiones", response_model=list[VersionPruebaResponse])
+def versiones_de_prueba(
+    codigo: CodigoPrueba, contexto: ContextoLeerLab
+) -> list[VersionPruebaResponse]:
+    """Todas las versiones publicadas de una prueba (la vigente marcada). 404 si no existe."""
+    versiones = VersionesDePrueba(contexto.unidad).ejecutar(codigo)
+    return [VersionPruebaResponse.model_validate(v) for v in versiones]
+
+
+@router.get("/laboratorio/ordenes", response_model=list[ResumenOrdenResponse])
+def tablero_de_ordenes(
+    contexto: ContextoLeerLab,
+    estado: Annotated[
+        list[EstadoOrden] | None,
+        Query(description="Repetible. Por ejemplo estado=solicitada&estado=en_proceso"),
+    ] = None,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+    antes_de: Annotated[
+        AwareDatetime | None,
+        Query(description="Cursor: solicitada_en de la ultima fila recibida"),
+    ] = None,
+) -> list[ResumenOrdenResponse]:
+    """Ordenes de toda tu institucion, de la mas reciente a la mas antigua (tablero)."""
+    filas = TableroLaboratorio(contexto.unidad).ejecutar(
+        frozenset(estado) if estado else None, limite, antes_de
+    )
+    return [ResumenOrdenResponse.model_validate(f) for f in filas]
 
 
 @router.post(

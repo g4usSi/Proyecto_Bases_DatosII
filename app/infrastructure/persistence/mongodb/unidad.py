@@ -59,10 +59,13 @@ from app.domain.laboratorio import (
     Orden,
     ParametroPrueba,
     PruebaCatalogo,
+    PruebaEnTablero,
     PruebaOrden,
     Referencia,
     Resultado,
+    ResumenOrden,
     TipoValor,
+    VersionPrueba,
 )
 from app.domain.paciente import (
     Alergia,
@@ -920,16 +923,106 @@ class RepositorioLaboratorioMongo:
             if actual is None or doc["version"] > actual["version"]:
                 ultimas[doc["codigo"]] = doc
         return [
-            PruebaCatalogo(
-                doc["codigo"],
-                doc["nombre"],
-                doc["version"],
-                tuple(_parametro(p) for p in doc["parametros"]),
-                doc.get("tipo_muestra"),
-                doc.get("indicaciones"),
-            )
+            self._a_prueba(doc)
             for doc in sorted(ultimas.values(), key=lambda d: (d["nombre"].lower(), d["codigo"]))
         ]
+
+    @staticmethod
+    def _a_prueba(doc: dict) -> PruebaCatalogo:
+        return PruebaCatalogo(
+            doc["codigo"],
+            doc["nombre"],
+            doc["version"],
+            tuple(_parametro(p) for p in doc["parametros"]),
+            doc.get("tipo_muestra"),
+            doc.get("indicaciones"),
+        )
+
+    def versiones(self, codigo: str) -> list[VersionPrueba]:
+        # El codigo se compara por igualdad exacta (nunca se arma un filtro con texto libre).
+        docs = list(
+            self.unidad.database.catalogo_pruebas.find({"codigo": str(codigo)}).sort("version", -1)
+        )
+        vigente = next((d["version"] for d in docs if d.get("activo")), None)
+        return [
+            VersionPrueba(self._a_prueba(d), bool(d.get("activo")), d["version"] == vigente)
+            for d in docs
+        ]
+
+    def listar_institucion(
+        self,
+        estados: frozenset[EstadoOrden] | None,
+        limite: int,
+        antes_de: datetime | None = None,
+    ) -> list[ResumenOrden]:
+        filtro: dict[str, Any] = {}
+        if estados:
+            filtro["estado"] = {"$in": sorted(ESTADO_ORDEN_BD[e] for e in estados)}
+        if antes_de is not None:
+            filtro["solicitada_en"] = {"$lt": _milisegundos(con_utc(antes_de))}
+        tuberia = [
+            {"$match": filtro},
+            {"$sort": {"solicitada_en": -1, "_id": -1}},
+            {"$limit": limite},
+            {
+                "$lookup": {
+                    "from": "pacientes",
+                    "localField": "id_paciente",
+                    "foreignField": "_id",
+                    "as": "paciente",
+                    "pipeline": [{"$project": {"nombres": 1, "apellidos": 1}}],
+                }
+            },
+            # Solo lo que muestra el tablero: nunca los valores de los resultados.
+            {
+                "$project": {
+                    "numero_orden": 1,
+                    "id_paciente": 1,
+                    "id_profesional_central": 1,
+                    "estado": 1,
+                    "solicitada_en": 1,
+                    "validada_en": 1,
+                    "paciente": 1,
+                    "muestras": {"$size": {"$ifNull": ["$muestras", []]}},
+                    "pruebas": {
+                        "$map": {
+                            "input": "$pruebas",
+                            "as": "p",
+                            "in": {
+                                "codigo": "$$p.codigo",
+                                "nombre": "$$p.nombre",
+                                "version": "$$p.version",
+                                "con_resultados": {
+                                    "$gt": [{"$size": {"$ifNull": ["$$p.resultados", []]}}, 0]
+                                },
+                            },
+                        }
+                    },
+                }
+            },
+        ]
+        filas = []
+        for doc in self.coleccion.aggregate(tuberia):
+            paciente = (doc.get("paciente") or [{}])[0]
+            nombre = " ".join(x for x in (paciente.get("nombres"), paciente.get("apellidos")) if x)
+            filas.append(
+                ResumenOrden(
+                    id_orden=str(doc["_id"]),
+                    numero_orden=doc["numero_orden"],
+                    id_paciente=str(doc["id_paciente"]),
+                    nombre_paciente=nombre or "(paciente no encontrado)",
+                    id_profesional=doc["id_profesional_central"],
+                    estado=ESTADO_ORDEN_DOMINIO[doc["estado"]],
+                    solicitada_en=con_utc(doc["solicitada_en"]),
+                    pruebas=tuple(
+                        PruebaEnTablero(p["codigo"], p["nombre"], p["version"], p["con_resultados"])
+                        for p in doc["pruebas"]
+                    ),
+                    muestras=doc["muestras"],
+                    validada_en=con_utc(doc["validada_en"]) if doc.get("validada_en") else None,
+                )
+            )
+        return filas
 
     @staticmethod
     def _a_orden(doc: dict) -> Orden:
