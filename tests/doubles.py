@@ -4,13 +4,18 @@ from types import TracebackType
 from typing import Literal, Self
 
 from app.domain import busqueda
-from app.domain.cita import Cita, EstadoCita, NuevaCita
-from app.domain.consulta import Consulta, NuevaConsulta
+from app.domain.cita import ESTADOS_OCUPAN_HORARIO, Cita, EstadoCita, NuevaCita
+from app.domain.consulta import Adenda, Consulta, NuevaConsulta
 from app.domain.errores import ConflictoAgenda, TokenInvalido
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.odontograma import EstadoPieza, Odontograma
-from app.domain.paciente import Baja, NuevoPaciente, Paciente
+from app.domain.paciente import Alergia, Baja, CambiosPaciente, NuevoPaciente, Paciente
 from app.domain.profesional import ProfesionalLocal
+from app.infrastructure.persistence.pendiente import (
+    CrecimientoNoAplica,
+    LaboratorioNoAplica,
+    VacunacionNoAplica,
+)
 
 
 @dataclass
@@ -53,6 +58,22 @@ class RepositorioDoble:
         encontrados.sort(key=lambda p: (p.apellidos, p.nombres, p.id_paciente))
         return encontrados[:limite]
 
+    def actualizar(self, id_paciente: str, cambios: CambiosPaciente) -> None:
+        actual = self.registros[id_paciente]
+        self.registros[id_paciente] = replace(
+            actual,
+            nombres=cambios.nombres or actual.nombres,
+            apellidos=cambios.apellidos or actual.apellidos,
+            fecha_nacimiento=cambios.fecha_nacimiento or actual.fecha_nacimiento,
+            contacto=cambios.contacto if cambios.contacto is not None else actual.contacto,
+        )
+
+    def agregar_alergias(self, id_paciente: str, alergias: tuple[Alergia, ...]) -> None:
+        actual = self.registros[id_paciente]
+        self.registros[id_paciente] = replace(
+            actual, alergias=(actual.alergias or ()) + tuple(alergias)
+        )
+
     def archivar(self, id_paciente: str, baja: Baja) -> None:
         self.registros[id_paciente] = replace(self.registros[id_paciente], archivado=True)
         self.bajas[id_paciente] = baja
@@ -92,6 +113,28 @@ class HistorialDoble:
         self.consultas.append(consulta)
         return consulta
 
+    def obtener_consulta(self, id_paciente: str, id_consulta: str) -> Consulta | None:
+        for c in self.consultas:
+            if c.id_paciente == id_paciente and c.id_consulta == id_consulta:
+                return c
+        return None
+
+    def agregar_a_consulta(
+        self, id_paciente: str, id_consulta: str, id_profesional: str, adenda: Adenda
+    ) -> Consulta:
+        previa = self.obtener_consulta(id_paciente, id_consulta)
+        assert previa is not None
+        rotulo = adenda.rotular(datetime(2026, 1, 2, tzinfo=UTC), id_profesional)
+        nueva = replace(
+            previa,
+            notas=f"{previa.notas}\n\n{rotulo}" if previa.notas else rotulo,
+            diagnosticos=previa.diagnosticos + adenda.diagnosticos,
+            tratamientos=previa.tratamientos + adenda.tratamientos,
+            recetas=previa.recetas + adenda.recetas,
+        )
+        self.consultas[self.consultas.index(previa)] = nueva
+        return nueva
+
 
 @dataclass
 class ProfesionalesDoble:
@@ -111,7 +154,7 @@ class CitasDoble:
     def agendar(self, datos: NuevaCita, nombre_paciente: str, creada_por: str) -> Cita:
         for cita in self.registros.values():
             if (
-                cita.estado == EstadoCita.PROGRAMADA
+                cita.estado in ESTADOS_OCUPAN_HORARIO
                 and cita.id_profesional == datos.id_profesional
                 and cita.inicio < datos.fin
                 and datos.inicio < cita.fin
@@ -179,6 +222,9 @@ class UnidadTrabajoDoble:
         self.profesionales = ProfesionalesDoble(profesionales or {})
         self.citas = CitasDoble()
         self.odontograma = OdontogramaDoble()
+        self.crecimiento = CrecimientoNoAplica("Doble")
+        self.vacunacion = VacunacionNoAplica("Doble")
+        self.laboratorio = LaboratorioNoAplica("Doble")
         self.confirmaciones = 0
         self.reversiones = 0
         self.finalizada = False

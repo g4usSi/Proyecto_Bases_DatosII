@@ -4,6 +4,8 @@ Se ejecuta solo con HISTORIALES_TEST_INTEGRATION=1 y si existe la clave. Crea un
 paciente sintetico y lo borra al terminar.
 """
 
+import os
+import threading
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
@@ -17,6 +19,18 @@ from app.domain.paciente import NuevoPaciente
 
 @pytest.fixture
 def cliente_firestore():
+    emulador = os.environ.get("FIRESTORE_EMULATOR_HOST")
+    if emulador:
+        # Emulador local de Firestore (sin proyecto real ni clave): datos desechables.
+        from google.auth.credentials import AnonymousCredentials
+        from google.cloud import firestore
+
+        cliente = firestore.Client(project="prueba-local", credentials=AnonymousCredentials())
+        try:
+            yield cliente
+        finally:
+            cliente.close()
+        return
     settings = Settings()
     if settings.firestore_credentials is None or not settings.firestore_credentials.is_file():
         pytest.skip("Sin clave de Firebase configurada.")
@@ -247,3 +261,156 @@ def test_busqueda_por_nombre_en_firestore(cliente_firestore, unidad_firestore):
     finally:
         for identificador in ids:
             _borrar_paciente(cliente_firestore, identificador)
+
+
+# --- Adendas, correccion de datos y citas confirmadas ---
+
+
+def _consulta_base(unidad_firestore, id_paciente):
+    from app.domain.consulta import Diagnostico, NuevaConsulta
+
+    with unidad_firestore() as unidad:
+        creada = unidad.historial.registrar_consulta(
+            id_paciente,
+            "00000000-0000-0000-0000-000000000000",
+            NuevaConsulta("Dolor", notas="Primera", diagnosticos=(Diagnostico("Caries"),)),
+        )
+        unidad.commit()
+    return creada.id_consulta
+
+
+def test_adenda_agrega_sin_reemplazar_y_se_lee(unidad_firestore, paciente_sintetico):
+    from app.domain.consulta import Adenda, Diagnostico, Receta, Tratamiento
+    from app.domain.errores import ConsultaNoEncontrada
+
+    id_consulta = _consulta_base(unidad_firestore, paciente_sintetico)
+    adenda = Adenda(
+        nota="Radiografia revisada",
+        diagnosticos=(Diagnostico("Pulpitis", "K04", "CIE-10"),),
+        tratamientos=(Tratamiento("Endodoncia"),),
+        recetas=(Receta("Amoxicilina", "500 mg", "c/8h"),),
+    )
+    with unidad_firestore() as unidad:
+        devuelta = unidad.historial.agregar_a_consulta(
+            paciente_sintetico, id_consulta, "profesional-1", adenda
+        )
+        leida = unidad.historial.obtener_consulta(paciente_sintetico, id_consulta)
+        assert unidad.historial.obtener_consulta(paciente_sintetico, "no-existe") is None
+        assert unidad.historial.obtener_consulta("a/b", id_consulta) is None
+        with pytest.raises(ConsultaNoEncontrada):
+            unidad.historial.agregar_a_consulta(
+                paciente_sintetico, "no-existe", "profesional-1", adenda
+            )
+    assert leida == devuelta
+    assert [d.descripcion for d in leida.diagnosticos] == ["Caries", "Pulpitis"]
+    assert leida.notas.startswith("Primera\n\n[Adenda ") and "profesional-1" in leida.notas
+    assert leida.recetas[0].medicamento == "Amoxicilina"
+
+
+def test_adendas_simultaneas_no_se_pierden_en_firestore(unidad_firestore, paciente_sintetico):
+    from app.domain.consulta import Adenda, Diagnostico
+
+    id_consulta = _consulta_base(unidad_firestore, paciente_sintetico)
+    errores = []
+
+    def agregar(n):
+        try:
+            with unidad_firestore() as unidad:
+                unidad.historial.agregar_a_consulta(
+                    paciente_sintetico,
+                    id_consulta,
+                    "p",
+                    Adenda(diagnosticos=(Diagnostico(f"Dx {n}"),)),
+                )
+        except Exception as error:  # noqa: BLE001 - se reporta en la asercion
+            errores.append(error)
+
+    hilos = [threading.Thread(target=agregar, args=(n,)) for n in range(4)]
+    [h.start() for h in hilos]
+    [h.join(timeout=60) for h in hilos]
+    with unidad_firestore() as unidad:
+        leida = unidad.historial.obtener_consulta(paciente_sintetico, id_consulta)
+    assert errores == [] and len(leida.diagnosticos) == 5
+
+
+def test_corregir_datos_alergias_y_busqueda_con_el_nombre_nuevo(
+    cliente_firestore, unidad_firestore, paciente_sintetico
+):
+    from app.domain import busqueda
+    from app.domain.errores import DatosInvalidos, PacienteArchivado
+    from app.domain.paciente import Alergia, Baja, CambiosPaciente, Contacto, MotivoBaja
+
+    with unidad_firestore() as unidad:
+        unidad.pacientes.actualizar(
+            paciente_sintetico,
+            CambiosPaciente(
+                nombres="Zzcorregido Maria",
+                fecha_nacimiento=date(2001, 4, 5),
+                contacto=Contacto(correo="nuevo@example.invalid"),
+            ),
+        )
+        unidad.pacientes.agregar_alergias(paciente_sintetico, (Alergia("Polen", "Tos"),))
+    with unidad_firestore() as unidad:
+        p = unidad.pacientes.obtener_por_id(paciente_sintetico)
+        assert (p.nombres, p.fecha_nacimiento) == ("Zzcorregido Maria", date(2001, 4, 5))
+        assert p.contacto == Contacto(None, "nuevo@example.invalid", None)
+        assert [a.sustancia for a in p.alergias] == ["Latex", "Polen"]
+        assert [
+            x.id_paciente for x in unidad.pacientes.buscar(busqueda.palabras("zzcorreg"), 5)
+        ] == [paciente_sintetico]
+        with pytest.raises(DatosInvalidos):
+            unidad.pacientes.agregar_alergias(paciente_sintetico, (Alergia("LATEX"),))
+        with pytest.raises(DatosInvalidos):
+            unidad.pacientes.actualizar(
+                paciente_sintetico, CambiosPaciente(fecha_nacimiento=date.today() + timedelta(1))
+            )
+        unidad.pacientes.archivar(
+            paciente_sintetico, Baja(MotivoBaja.TRASLADO, "p", datetime.now(UTC))
+        )
+        with pytest.raises(PacienteArchivado):
+            unidad.pacientes.actualizar(paciente_sintetico, CambiosPaciente(nombres="X"))
+        with pytest.raises(PacienteArchivado):
+            unidad.pacientes.agregar_alergias(paciente_sintetico, (Alergia("Nueva"),))
+
+
+def test_cita_confirmada_ocupa_y_atendida_libera(
+    cliente_firestore, unidad_firestore, paciente_sintetico
+):
+    from app.domain.cita import EstadoCita, NuevaCita
+    from app.domain.errores import ConflictoAgenda, PacienteArchivado
+    from app.domain.paciente import Baja, MotivoBaja
+
+    profesional = f"prueba-{uuid4()}"
+    inicio = datetime(2030, 2, 15, 15, 0, tzinfo=UTC)
+    try:
+        with unidad_firestore() as unidad:
+            cita = unidad.citas.agendar(
+                NuevaCita(paciente_sintetico, profesional, inicio, 30, "x"), "P F", "s"
+            )
+            unidad.citas.cambiar_estado(cita.id_cita, EstadoCita.CONFIRMADA, "s", None)
+            with pytest.raises(ConflictoAgenda):  # confirmada sigue ocupando
+                unidad.citas.agendar(
+                    NuevaCita(paciente_sintetico, profesional, inicio, 30, "y"), "P F", "s"
+                )
+            unidad.citas.cambiar_estado(cita.id_cita, EstadoCita.ATENDIDA, "s", None)
+            unidad.citas.agendar(  # atendida libera el horario
+                NuevaCita(paciente_sintetico, profesional, inicio, 30, "z"), "P F", "s"
+            )
+            unidad.pacientes.archivar(
+                paciente_sintetico, Baja(MotivoBaja.TRASLADO, "p", datetime.now(UTC))
+            )
+            with pytest.raises(PacienteArchivado):
+                unidad.citas.agendar(
+                    NuevaCita(
+                        paciente_sintetico, profesional, inicio + timedelta(hours=3), 30, "w"
+                    ),
+                    "P F",
+                    "s",
+                )
+    finally:
+        for agenda in (
+            cliente_firestore.collection("agendas")
+            .where(filter=FieldFilter("id_profesional", "==", profesional))
+            .stream()
+        ):
+            agenda.reference.delete()

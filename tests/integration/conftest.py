@@ -62,6 +62,9 @@ def mysql_pruebas(config_local):
             "001_hospital_pediatrico.sql",
             "002_integridad.sql",
             "004_escritura_api.sql",
+            "006_citas_adendas_edicion.sql",
+            "008_pediatria.sql",
+            "010_sin_stock_vacunas.sql",
         ):
             ejecutar_script(admin, PROJECT_ROOT / "database/mysql" / archivo, nombre)
         yield ConfiguracionPrivada({**opciones, "database": nombre, "autocommit": False})

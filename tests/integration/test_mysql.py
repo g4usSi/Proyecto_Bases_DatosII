@@ -78,7 +78,8 @@ def test_archivo_requiere_motivo_y_conserva_consultas(mysql_datos):
         assert c.fetchone()[0] == consulta
 
 
-def test_vacuna_stock_atomicidad_y_lote(mysql_datos):
+def test_vacuna_aplicada_no_maneja_stock_y_se_conserva(mysql_datos):
+    """Decision del equipo (migracion 010): aplicar no exige lote ni descuenta existencias."""
     conn, pacientes, medico, _ = mysql_datos
     with conn.cursor() as c:
         c.execute("INSERT INTO nombre_vacuna(nombre) VALUES (%s)", (uuid4().hex,))
@@ -90,20 +91,22 @@ def test_vacuna_stock_atomicidad_y_lote(mysql_datos):
         )
         lote = c.lastrowid
         sql = (
-            "INSERT INTO esquema_vacunacion(id_paciente_fk,id_nombre_vacuna_fk,id_vacuna_fk,"
+            "INSERT INTO esquema_vacunacion(id_paciente_fk,id_nombre_vacuna_fk,"
             "fecha_aplicacion,estado_aplicacion,id_medico_aplicador) "
-            "VALUES (%s,%s,%s,NOW(),'Aplicada',%s)"
+            "VALUES (%s,%s,NOW(),'Aplicada',%s)"
         )
-        c.execute(sql, (pacientes[0], tipo, lote, medico))
+        c.execute(sql, (pacientes[0], tipo, medico))
         aplicacion = c.lastrowid
-        with pytest.raises(pymysql.OperationalError):
-            c.execute(sql, (pacientes[1], tipo, lote, medico))
+        c.execute(sql, (pacientes[1], tipo, medico))  # sin tope por existencias
         c.execute("SELECT cantidad FROM catalogo_vacunas WHERE id_vacuna=%s", (lote,))
-        assert c.fetchone()[0] == 0
+        assert c.fetchone()[0] == 1
         with pytest.raises(pymysql.OperationalError):
             c.execute("DELETE FROM esquema_vacunacion WHERE id_esquema=%s", (aplicacion,))
-        c.execute("SELECT COUNT(*) FROM esquema_vacunacion WHERE id_vacuna_fk=%s", (lote,))
-        assert c.fetchone()[0] == 1
+        with pytest.raises(pymysql.OperationalError):  # una aplicada no se reescribe
+            c.execute(
+                "UPDATE esquema_vacunacion SET estado_aplicacion='Pendiente' WHERE id_esquema=%s",
+                (aplicacion,),
+            )
 
 
 def test_saldos_insert_update_delete_y_cargos(mysql_datos):
