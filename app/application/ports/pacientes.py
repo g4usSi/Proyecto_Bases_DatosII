@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.domain.paciente import Baja, NuevoPaciente, Paciente
+from app.domain.paciente import Alergia, Baja, CambiosPaciente, NuevoPaciente, Paciente
 
 
 class RepositorioPacientes(Protocol):
@@ -29,5 +29,20 @@ class RepositorioPacientes(Protocol):
         Debe ser condicional en el motor (p. ej. UPDATE ... WHERE estado = 'Activo' o
         una transaccion de Firestore): si otra solicitud lo archivo primero, lanzar
         PacienteArchivado en vez de sobrescribir la baja anterior.
+        """
+        ...
+
+    def actualizar(self, id_paciente: str, cambios: CambiosPaciente) -> None:
+        """Aplica correcciones de datos demograficos a un historial NO archivado.
+
+        Debe ser condicional en el motor (p. ej. UPDATE ... WHERE estado = 'Activo'): si
+        otra solicitud lo archivo primero, lanzar PacienteArchivado.
+        """
+        ...
+
+    def agregar_alergias(self, id_paciente: str, alergias: tuple[Alergia, ...]) -> None:
+        """Agrega alergias (nunca borra) y deja el historial como "alergias evaluadas".
+
+        Condicional como `actualizar`. La regla de "no repetir" ya la valida el caso de uso.
         """
         ...

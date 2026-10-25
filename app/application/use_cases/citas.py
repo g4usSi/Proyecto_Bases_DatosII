@@ -84,7 +84,9 @@ class CambiarEstadoCita:
                 raise CitaNoEncontrada("La cita no existe en tu institucion.")
             if estado not in TRANSICIONES.get(actual.estado, set()):
                 raise ConflictoAgenda(f"Una cita '{actual.estado}' no puede pasar a '{estado}'.")
-            if estado != EstadoCita.CANCELADA and actual.inicio > datetime.now(UTC):
+            if estado in (EstadoCita.ATENDIDA, EstadoCita.NO_ASISTIO) and actual.inicio > (
+                datetime.now(UTC)
+            ):
                 raise DatosInvalidos("Solo se marca atendida o no asistio despues de su hora.")
             # El adaptador vuelve a comprobar el estado dentro de su transaccion.
             cita = unidad.citas.cambiar_estado(id_cita, estado, usuario.id_usuario, motivo)

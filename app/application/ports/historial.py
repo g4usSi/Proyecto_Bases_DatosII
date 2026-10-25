@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
-from app.domain.consulta import Consulta, NuevaConsulta
+from app.domain.consulta import Adenda, Consulta, NuevaConsulta
 
 
 class RepositorioHistorial(Protocol):
@@ -23,5 +23,21 @@ class RepositorioHistorial(Protocol):
         """Prepara consulta + diagnosticos + tratamientos + recetas como un todo.
 
         La escritura debe ser atomica: se confirma completa en commit() o no se guarda.
+        """
+        ...
+
+    def obtener_consulta(self, id_paciente: str, id_consulta: str) -> Consulta | None:
+        """Una consulta con todo lo que tiene, o None si no es de ese paciente."""
+        ...
+
+    def agregar_a_consulta(
+        self, id_paciente: str, id_consulta: str, id_profesional: str, adenda: Adenda
+    ) -> Consulta:
+        """Agrega diagnosticos, tratamientos, recetas y/o una nota a una consulta existente.
+
+        Solo agrega: no modifica ni borra lo ya guardado. Es atomica (todo o nada) y se
+        confirma en commit(). Debe anexar `adenda.rotular(...)` a las notas de la consulta.
+        Lanzar ConsultaNoEncontrada, PacienteArchivado o DatosInvalidos segun corresponda.
+        Devuelve la consulta completa y actualizada.
         """
         ...
