@@ -1,0 +1,23 @@
+{
+  "_aviso": "DEMOSTRACION para pruebas. Las edades y dosis NO son el esquema oficial: el Centro Pediatrico debe cargar el suyo (el del Ministerio de Salud) antes de usarlo con pacientes.",
+  "vacunas": [
+    {
+      "nombre": "DEMO BCG",
+      "enfermedades_que_previene": "Tuberculosis",
+      "edad_recomendada_meses": 0,
+      "dosis_sugerida": "0.05 ml"
+    },
+    {
+      "nombre": "DEMO Pentavalente",
+      "enfermedades_que_previene": "Difteria, tos ferina, tetanos, hepatitis B, Hib",
+      "edad_recomendada_meses": 2,
+      "dosis_sugerida": "0.5 ml"
+    },
+    {
+      "nombre": "DEMO SPR",
+      "enfermedades_que_previene": "Sarampion, paperas, rubeola",
+      "edad_recomendada_meses": 12,
+      "dosis_sugerida": "0.5 ml"
+    }
+  ]
+}

@@ -31,7 +31,8 @@ def main() -> None:
         default=[],
         help=(
             "Repetir por permiso. Por defecto: pacientes:leer; secretaria: pacientes:leer, "
-            "pacientes:registrar, citas:leer y citas:gestionar."
+            "pacientes:registrar, citas:leer y citas:gestionar; laboratorista: pacientes:leer, "
+            "laboratorio:resultados y laboratorio:validar."
         ),
     )
     args = parser.parse_args()

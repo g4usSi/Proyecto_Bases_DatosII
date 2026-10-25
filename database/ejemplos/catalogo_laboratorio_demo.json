@@ -1,0 +1,37 @@
+{
+  "_aviso": "DEMOSTRACION para pruebas. Los rangos de referencia son ilustrativos: el Laboratorio Clinico debe cargar y validar los suyos (por metodo, equipo y poblacion) antes de usarlos con pacientes.",
+  "pruebas": [
+    {
+      "codigo": "DEMO-GLU",
+      "nombre": "DEMO Glucosa en ayunas",
+      "version": 1,
+      "tipo_muestra": "sangre",
+      "indicaciones": "Ayuno de 8 horas",
+      "parametros": [
+        {
+          "codigo": "GLU",
+          "nombre": "Glucosa",
+          "unidad": "mg/dL",
+          "tipo_valor": "numerico",
+          "referencia": { "minimo": 70, "maximo": 99, "poblacion": "adultos, ayuno" }
+        }
+      ]
+    },
+    {
+      "codigo": "DEMO-HB",
+      "nombre": "DEMO Hemoglobina",
+      "version": 1,
+      "tipo_muestra": "sangre",
+      "parametros": [
+        {
+          "codigo": "HGB",
+          "nombre": "Hemoglobina",
+          "unidad": "g/dL",
+          "tipo_valor": "numerico",
+          "referencia": { "minimo": 12, "maximo": 17.5, "poblacion": "adultos" }
+        },
+        { "codigo": "ASPECTO", "nombre": "Aspecto de la muestra", "tipo_valor": "texto" }
+      ]
+    }
+  ]
+}

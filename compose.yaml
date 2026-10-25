@@ -20,6 +20,9 @@ services:
       - ./database/postgresql/006_rol_secretaria_citas.sql:/docker-entrypoint-initdb.d/006_rol_secretaria_citas.sql:ro
       - ./database/postgresql/007_secretaria_restricciones.sql:/docker-entrypoint-initdb.d/007_secretaria_restricciones.sql:ro
       - ./database/postgresql/008_escritura_api.sql:/docker-entrypoint-initdb.d/008_escritura_api.sql:ro
+      - ./database/postgresql/009_citas_adendas_edicion.sql:/docker-entrypoint-initdb.d/009_citas_adendas_edicion.sql:ro
+      - ./database/postgresql/010_integridad_hospital.sql:/docker-entrypoint-initdb.d/010_integridad_hospital.sql:ro
+      - ./database/postgresql/011_permisos_laboratorio.sql:/docker-entrypoint-initdb.d/011_permisos_laboratorio.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U historiales_admin -d hospital_general"]
       interval: 5s
@@ -43,6 +46,11 @@ services:
       - ./database/mysql/003_permisos.sql:/docker-entrypoint-initdb.d/003_permisos.sql:ro
       - ./database/mysql/004_escritura_api.sql:/docker-entrypoint-initdb.d/004_escritura_api.sql:ro
       - ./database/mysql/005_permisos_escritura.sql:/docker-entrypoint-initdb.d/005_permisos_escritura.sql:ro
+      - ./database/mysql/006_citas_adendas_edicion.sql:/docker-entrypoint-initdb.d/006_citas_adendas_edicion.sql:ro
+      - ./database/mysql/007_permisos_extensiones.sql:/docker-entrypoint-initdb.d/007_permisos_extensiones.sql:ro
+      - ./database/mysql/008_pediatria.sql:/docker-entrypoint-initdb.d/008_pediatria.sql:ro
+      - ./database/mysql/009_permisos_pediatria.sql:/docker-entrypoint-initdb.d/009_permisos_pediatria.sql:ro
+      - ./database/mysql/010_sin_stock_vacunas.sql:/docker-entrypoint-initdb.d/010_sin_stock_vacunas.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql -u historiales_app -D hospital_pediatrico -e 'SELECT 1' >/dev/null"]
       interval: 5s
