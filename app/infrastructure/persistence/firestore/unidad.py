@@ -30,17 +30,34 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.application.errores import IntegracionNoConfigurada
 from app.domain import busqueda
-from app.domain.cita import TRANSICIONES, Cita, EstadoCita, NuevaCita
-from app.domain.consulta import Consulta, Diagnostico, NuevaConsulta, Receta, Tratamiento
+from app.domain.cita import ESTADOS_OCUPAN_HORARIO, TRANSICIONES, Cita, EstadoCita, NuevaCita
+from app.domain.consulta import (
+    Adenda,
+    Consulta,
+    Diagnostico,
+    NuevaConsulta,
+    Receta,
+    Tratamiento,
+)
 from app.domain.errores import (
     CitaNoEncontrada,
     ConflictoAgenda,
+    ConsultaNoEncontrada,
+    DatosInvalidos,
     PacienteArchivado,
     PacienteNoEncontrado,
 )
 from app.domain.odontograma import EstadoDental, EstadoPieza, Odontograma, Superficie
-from app.domain.paciente import Alergia, Baja, Contacto, NuevoPaciente, Paciente
+from app.domain.paciente import (
+    Alergia,
+    Baja,
+    CambiosPaciente,
+    Contacto,
+    NuevoPaciente,
+    Paciente,
+)
 from app.domain.profesional import ProfesionalLocal
+from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +197,66 @@ class RepositorioPacientesFirestore:
         )
         return coinciden[:limite]
 
+    def actualizar(self, id_paciente: str, cambios: CambiosPaciente) -> None:
+        referencia = self.referencia(id_paciente)
+        if referencia is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if cambios.fecha_nacimiento is not None and cambios.fecha_nacimiento > date.today():
+            raise DatosInvalidos("La fecha de nacimiento no puede ser futura.")
+
+        @firestore.transactional
+        def corregir(transaccion: Transaction) -> None:
+            documento = referencia.get(transaction=transaccion)
+            if not documento.exists:
+                raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+            datos = documento.to_dict() or {}
+            if datos.get("estado") == "Archivado":
+                raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+            nombres = cambios.nombres if cambios.nombres is not None else datos.get("nombres", "")
+            apellidos = (
+                cambios.apellidos if cambios.apellidos is not None else datos.get("apellidos", "")
+            )
+            poner: dict[str, Any] = {"actualizado_en": firestore.SERVER_TIMESTAMP}
+            if cambios.nombres is not None or cambios.apellidos is not None:
+                poner["nombres"], poner["apellidos"] = nombres, apellidos
+                # La busqueda usa los prefijos guardados: se recalculan con el nombre nuevo.
+                poner["prefijos_nombre"] = busqueda.prefijos_de_nombre(nombres, apellidos)
+            if cambios.fecha_nacimiento is not None:
+                poner["fecha_nacimiento"] = cambios.fecha_nacimiento.isoformat()
+            if cambios.contacto is not None:  # reemplaza el contacto completo
+                poner["contacto"] = _sin_nulos(asdict(cambios.contacto)) or firestore.DELETE_FIELD
+            transaccion.update(referencia, poner)
+
+        corregir(self.unidad.cliente.transaction())
+
+    def agregar_alergias(self, id_paciente: str, alergias: tuple[Alergia, ...]) -> None:
+        referencia = self.referencia(id_paciente)
+        if referencia is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+
+        @firestore.transactional
+        def agregar(transaccion: Transaction) -> None:
+            documento = referencia.get(transaction=transaccion)
+            if not documento.exists:
+                raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+            datos = documento.to_dict() or {}
+            if datos.get("estado") == "Archivado":
+                raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+            actuales = list(datos.get("alergias", []))
+            ya = {busqueda.normalizar(a["sustancia"]).strip() for a in actuales}
+            if ya & {busqueda.normalizar(a.sustancia).strip() for a in alergias}:
+                raise DatosInvalidos("Esa alergia ya estaba registrada.")
+            transaccion.update(
+                referencia,
+                {
+                    "alergias": actuales + [_sin_nulos(asdict(a)) for a in alergias],
+                    "alergias_evaluadas": True,
+                    "actualizado_en": firestore.SERVER_TIMESTAMP,
+                },
+            )
+
+        agregar(self.unidad.cliente.transaction())
+
     def archivar(self, id_paciente: str, baja: Baja) -> None:
         referencia = self.referencia(id_paciente)
         if referencia is None:
@@ -247,6 +324,68 @@ class RepositorioHistorialFirestore:
             self._a_consulta(d.id, id_paciente, d.to_dict())
             for d in consulta.stream(timeout=self.unidad.timeout)
         ]
+
+    def obtener_consulta(self, id_paciente: str, id_consulta: str) -> Consulta | None:
+        if not _id_valido(id_paciente) or not _id_valido(id_consulta):
+            return None
+        documento = (
+            self._consultas(id_paciente).document(id_consulta).get(timeout=self.unidad.timeout)
+        )
+        if not documento.exists:
+            return None
+        return self._a_consulta(documento.id, id_paciente, documento.to_dict() or {})
+
+    def agregar_a_consulta(
+        self, id_paciente: str, id_consulta: str, id_profesional: str, adenda: Adenda
+    ) -> Consulta:
+        paciente = self.unidad.pacientes.referencia(id_paciente)
+        if paciente is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        if not _id_valido(id_consulta):
+            raise ConsultaNoEncontrada("La consulta no existe en el historial del paciente.")
+        referencia = self._consultas(id_paciente).document(id_consulta)
+        ahora = datetime.now(UTC)
+        rotulo = adenda.rotular(ahora, id_profesional)
+
+        @firestore.transactional
+        def agregar(transaccion: Transaction) -> Consulta:
+            # Un solo documento leido y reescrito en una transaccion: dos adendas
+            # simultaneas se aplican una tras otra sin perderse.
+            actual = paciente.get(transaction=transaccion)
+            if not actual.exists:
+                raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+            if (actual.to_dict() or {}).get("estado") == "Archivado":
+                raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+            documento = referencia.get(transaction=transaccion)
+            if not documento.exists:
+                raise ConsultaNoEncontrada("La consulta no existe en el historial del paciente.")
+            previa = self._a_consulta(documento.id, id_paciente, documento.to_dict() or {})
+            notas = f"{previa.notas}\n\n{rotulo}" if previa.notas else rotulo
+            diagnosticos = previa.diagnosticos + adenda.diagnosticos
+            tratamientos = previa.tratamientos + adenda.tratamientos
+            recetas = previa.recetas + adenda.recetas
+            transaccion.update(
+                referencia,
+                {
+                    "notas": notas,
+                    "diagnosticos": [_sin_nulos(asdict(d)) for d in diagnosticos],
+                    "tratamientos": [_sin_nulos(asdict(t)) for t in tratamientos],
+                    "recetas": [_sin_nulos(asdict(r)) for r in recetas],
+                },
+            )
+            return Consulta(
+                previa.id_consulta,
+                id_paciente,
+                previa.id_profesional,
+                previa.fecha_hora,
+                previa.motivo,
+                notas,
+                diagnosticos,
+                tratamientos,
+                recetas,
+            )
+
+        return agregar(self.unidad.cliente.transaction())
 
     def registrar_consulta(
         self, id_paciente: str, id_profesional: str, datos: NuevaConsulta
@@ -359,11 +498,19 @@ class RepositorioCitasFirestore:
         referencia = self._citas.document()
         inicio, fin = datos.inicio.astimezone(UTC), datos.fin.astimezone(UTC)
         agendas = [self._agenda(datos.id_profesional, dia) for dia in self._dias(inicio, fin)]
+        paciente = self.unidad.pacientes.referencia(datos.id_paciente)
+        if paciente is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
 
         @firestore.transactional
         def reservar(transaccion: Transaction) -> None:
             # Leer los documentos de agenda dentro de la transaccion los "bloquea":
             # si otra secretaria reserva el mismo dia, Firestore repite esta funcion.
+            actual = paciente.get(transaction=transaccion)
+            if not actual.exists:
+                raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+            if (actual.to_dict() or {}).get("estado") == "Archivado":
+                raise PacienteArchivado("El historial esta archivado; no admite citas nuevas.")
             leidas = [agenda.get(transaction=transaccion) for agenda in agendas]
             for leida in leidas:
                 ocupado = (leida.to_dict() or {}).get("ocupado", {}) if leida.exists else {}
@@ -458,8 +605,8 @@ class RepositorioCitasFirestore:
                     "actualizada_en": firestore.SERVER_TIMESTAMP,
                 },
             )
-            if estado == EstadoCita.CANCELADA:
-                # Liberar el horario en cada dia que ocupaba.
+            if estado not in ESTADOS_OCUPAN_HORARIO:
+                # Cancelada, atendida o no asistio: liberar el horario en cada dia que ocupaba.
                 for dia in self._dias(actual.inicio, actual.fin):
                     transaccion.update(
                         self._agenda(actual.id_profesional, dia),
@@ -550,6 +697,11 @@ class UnidadTrabajoFirestore:
         self.profesionales = RepositorioProfesionalesFirestore(self)
         self.citas = RepositorioCitasFirestore(self)
         self.odontograma = RepositorioOdontogramaFirestore(self)
+        # Crecimiento y vacunacion son del Centro Pediatrico: aqui responden 501.
+        pendientes = repositorios_pendientes(MOTOR)
+        self.crecimiento = pendientes["crecimiento"]
+        self.vacunacion = pendientes["vacunacion"]
+        self.laboratorio = pendientes["laboratorio"]
 
     def __enter__(self) -> Self:
         self.lote = self.cliente.batch()
