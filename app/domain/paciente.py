@@ -52,6 +52,29 @@ class NuevoPaciente:
     alergias: tuple[Alergia, ...] | None = field(default=None)
 
 
+@dataclass(frozen=True, slots=True)
+class CambiosPaciente:
+    """Correcciones de datos demograficos. None = no cambia.
+
+    `contacto` reemplaza el contacto completo: lo que no se envie queda vacio.
+    No incluye alergias (se agregan aparte) ni el estado del historial (se archiva aparte).
+    """
+
+    nombres: str | None = None
+    apellidos: str | None = None
+    fecha_nacimiento: date | None = None
+    contacto: Contacto | None = None
+
+    @property
+    def vacio(self) -> bool:
+        return (
+            self.nombres is None
+            and self.apellidos is None
+            and self.fecha_nacimiento is None
+            and self.contacto is None
+        )
+
+
 class MotivoBaja(StrEnum):
     """Causas de archivo indicadas en el enunciado del curso."""
 

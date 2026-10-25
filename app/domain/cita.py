@@ -7,15 +7,20 @@ from enum import StrEnum
 
 class EstadoCita(StrEnum):
     PROGRAMADA = "programada"
+    CONFIRMADA = "confirmada"
     ATENDIDA = "atendida"
     CANCELADA = "cancelada"
     NO_ASISTIO = "no_asistio"
 
 
-# Una cita solo puede salir de "programada"; los estados finales no cambian.
+# Una cita sale de "programada" (o de "confirmada") y los estados finales no cambian.
+_FINALES = {EstadoCita.ATENDIDA, EstadoCita.CANCELADA, EstadoCita.NO_ASISTIO}
 TRANSICIONES = {
-    EstadoCita.PROGRAMADA: {EstadoCita.ATENDIDA, EstadoCita.CANCELADA, EstadoCita.NO_ASISTIO},
+    EstadoCita.PROGRAMADA: {EstadoCita.CONFIRMADA} | _FINALES,
+    EstadoCita.CONFIRMADA: _FINALES,
 }
+# Estados que ocupan el horario del profesional (una cita cancelada lo libera).
+ESTADOS_OCUPAN_HORARIO = frozenset({EstadoCita.PROGRAMADA, EstadoCita.CONFIRMADA})
 
 
 @dataclass(frozen=True, slots=True)

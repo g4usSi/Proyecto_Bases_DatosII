@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 
+# Roles administrativos: pueden agendar, pero no tienen agenda propia de pacientes.
+ROLES_SIN_ATENCION = frozenset({"secretaria", "administrativo"})
+
 
 @dataclass(frozen=True, slots=True)
 class ProfesionalLocal:
@@ -17,4 +20,4 @@ class ProfesionalLocal:
 
     @property
     def atiende_pacientes(self) -> bool:
-        return self.activo and self.rol != "secretaria"
+        return self.activo and self.rol not in ROLES_SIN_ATENCION

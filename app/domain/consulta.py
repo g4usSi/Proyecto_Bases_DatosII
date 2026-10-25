@@ -52,3 +52,36 @@ class Consulta:
     diagnosticos: tuple[Diagnostico, ...] = field(default_factory=tuple)
     tratamientos: tuple[Tratamiento, ...] = field(default_factory=tuple)
     recetas: tuple[Receta, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class Adenda:
+    """Material que se AGREGA a una consulta ya guardada (nunca reemplaza ni borra).
+
+    Es la forma de "agregar un diagnostico" o "recetar un medicamento" despues de la
+    consulta, y tambien de rectificar: un error se aclara con una `nota`, no se edita.
+    Quien agrega y cuando queda anotado en las notas de la consulta (ver `rotular`).
+    """
+
+    nota: str | None = None
+    diagnosticos: tuple[Diagnostico, ...] = field(default_factory=tuple)
+    tratamientos: tuple[Tratamiento, ...] = field(default_factory=tuple)
+    recetas: tuple[Receta, ...] = field(default_factory=tuple)
+
+    @property
+    def vacia(self) -> bool:
+        return not (self.nota or self.diagnosticos or self.tratamientos or self.recetas)
+
+    def rotular(self, fecha: datetime, id_profesional: str) -> str:
+        """Linea que se anexa a las notas de la consulta, igual en los cuatro motores."""
+        partes = []
+        for cantidad, singular, plural in (
+            (len(self.diagnosticos), "diagnostico", "diagnosticos"),
+            (len(self.tratamientos), "tratamiento", "tratamientos"),
+            (len(self.recetas), "receta", "recetas"),
+        ):
+            if cantidad:
+                partes.append(f"{cantidad} {singular if cantidad == 1 else plural}")
+        resumen = f" Se agregaron: {', '.join(partes)}." if partes else ""
+        nota = f" Nota: {self.nota}" if self.nota else ""
+        return f"[Adenda {fecha:%Y-%m-%d %H:%M} UTC, profesional {id_profesional}]{resumen}{nota}"

@@ -32,3 +32,15 @@ class ConflictoAgenda(ErrorDominio):
 
 class DatosInvalidos(ErrorDominio):
     """Regla de negocio incumplida por los datos enviados (HTTP 422)."""
+
+
+class ConsultaNoEncontrada(ErrorDominio):
+    """La consulta no existe en el historial de ese paciente (HTTP 404)."""
+
+
+class RegistroNoEncontrado(ErrorDominio):
+    """Vacuna, orden de laboratorio u otro registro inexistente en la institucion (HTTP 404)."""
+
+
+class ConflictoEstado(ErrorDominio):
+    """La operacion no es valida para el estado actual del registro (HTTP 409)."""
