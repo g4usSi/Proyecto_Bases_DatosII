@@ -8,7 +8,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.application.errores import IntegracionNoConfigurada
 from app.application.ports.unidad_trabajo import UnidadDeTrabajo
 from app.bootstrap.container import Contenedor
+from app.core import auditoria
 from app.domain import permisos
+from app.domain.errores import AccesoDenegado
 from app.domain.identidad import UsuarioAutenticado
 
 bearer = HTTPBearer(auto_error=False)
@@ -56,20 +58,42 @@ class Contexto:
     unidad: UnidadDeTrabajo
 
 
+def _auditar(request: Request, usuario: UsuarioAutenticado, permiso: str, permitido: bool) -> None:
+    ruta = request.scope.get("route")
+    plantilla = getattr(ruta, "path", request.url.path)  # sin ids reales: /pacientes/{id_paciente}
+    paciente = request.path_params.get("id_paciente")
+    registrar = auditoria.acceso if permitido else auditoria.denegado
+    registrar(usuario, request.method, plantilla, permiso, paciente)
+
+
 def contexto_con_permiso(permiso: str) -> Callable[..., Contexto]:
     """Dependencia que exige un permiso y abre el motor de la institucion del token."""
 
+    return contexto_con_alguno(permiso)
+
+
+def contexto_con_alguno(*permisos_validos: str) -> Callable[..., Contexto]:
+    """Exige UNO de los permisos y abre el motor de la institucion del token.
+
+    Cada decision (permitida o denegada) queda en la bitacora de auditoria.
+    """
+
     def dependencia(
+        request: Request,
         usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
         contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
     ) -> Contexto:
-        usuario.exigir_permiso(permiso)
+        elegido = next((p for p in permisos_validos if p in usuario.permisos), None)
+        if elegido is None:
+            _auditar(request, usuario, permisos_validos[0], permitido=False)
+            raise AccesoDenegado("No tienes permiso para realizar esta operacion.")
+        _auditar(request, usuario, elegido, permitido=True)
         return Contexto(usuario, contenedor.crear_unidad_trabajo(usuario.institucion))
 
     return dependencia
 
 
-# Permisos de identidad.permiso (database/postgresql/002 y 006).
+# Permisos de identidad.permiso (database/postgresql/002, 006 y 011).
 _con = contexto_con_permiso
 ContextoLeerPaciente = Annotated[Contexto, Depends(_con(permisos.PACIENTES_LEER))]
 ContextoRegistrarPaciente = Annotated[Contexto, Depends(_con(permisos.PACIENTES_REGISTRAR))]
@@ -78,3 +102,9 @@ ContextoRegistrarConsulta = Annotated[Contexto, Depends(_con(permisos.CONSULTAS_
 ContextoArchivar = Annotated[Contexto, Depends(_con(permisos.HISTORIALES_ARCHIVAR))]
 ContextoLeerCitas = Annotated[Contexto, Depends(_con(permisos.CITAS_LEER))]
 ContextoGestionarCitas = Annotated[Contexto, Depends(_con(permisos.CITAS_GESTIONAR))]
+ContextoResultadosLab = Annotated[Contexto, Depends(_con(permisos.LABORATORIO_RESULTADOS))]
+ContextoValidarLab = Annotated[Contexto, Depends(_con(permisos.LABORATORIO_VALIDAR))]
+ContextoLeerLab = Annotated[
+    Contexto,
+    Depends(contexto_con_alguno(permisos.HISTORIALES_LEER, permisos.LABORATORIO_RESULTADOS)),
+]

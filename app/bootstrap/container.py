@@ -14,6 +14,8 @@ class Contenedor:
     inicio_sesion: InicioSesion | None = None
     unidades_trabajo: dict[Institucion, Callable[[], UnidadDeTrabajo]] = field(default_factory=dict)
     cierres: list[Callable[[], None]] = field(default_factory=list)
+    # Una por institucion: abre una conexion y hace un ping; lanza si el motor no responde.
+    verificaciones: dict[Institucion, Callable[[], None]] = field(default_factory=dict)
 
     def cerrar(self) -> None:
         for cierre in self.cierres:

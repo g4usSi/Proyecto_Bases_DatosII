@@ -4,6 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query, status
 
+from app.application.use_cases.actualizar_paciente import ActualizarPaciente, AgregarAlergias
+from app.application.use_cases.agregar_a_consulta import AgregarAConsulta, ConsultarConsulta
 from app.application.use_cases.archivar_paciente import ArchivarPaciente
 from app.application.use_cases.buscar_pacientes import BuscarPacientes
 from app.application.use_cases.citas import CitasDePaciente
@@ -12,9 +14,9 @@ from app.application.use_cases.consultar_paciente import ConsultarPaciente
 from app.application.use_cases.registrar_consulta import RegistrarConsulta
 from app.application.use_cases.registrar_paciente import RegistrarPaciente
 from app.domain import permisos
-from app.domain.consulta import Diagnostico, NuevaConsulta, Receta, Tratamiento
+from app.domain.consulta import Adenda, Diagnostico, NuevaConsulta, Receta, Tratamiento
 from app.domain.identidad import UsuarioAutenticado
-from app.domain.paciente import NuevoPaciente, Paciente
+from app.domain.paciente import CambiosPaciente, NuevoPaciente, Paciente
 from app.presentation.api.dependencies import (
     ContextoArchivar,
     ContextoLeerCitas,
@@ -25,13 +27,16 @@ from app.presentation.api.dependencies import (
 )
 from app.presentation.api.schemas.cita import CitaResponse
 from app.presentation.api.schemas.historial import (
+    AdendaCrear,
     ConsultaCrear,
     ConsultaResponse,
     HistorialResponse,
 )
 from app.presentation.api.schemas.paciente import (
+    AlergiasAgregar,
     ArchivoCrear,
     ArchivoResponse,
+    PacienteActualizar,
     PacienteCrear,
     PacienteResponse,
     PacienteResumen,
@@ -40,6 +45,7 @@ from app.presentation.api.schemas.paciente import (
 router = APIRouter(prefix="/pacientes", tags=["Pacientes"])
 
 IdPaciente = Annotated[str, Path(min_length=1, max_length=128)]
+IdConsulta = Annotated[str, Path(min_length=1, max_length=128)]
 
 
 def respuesta_paciente(paciente: Paciente, usuario: UsuarioAutenticado) -> PacienteResponse:
@@ -80,6 +86,34 @@ def buscar_pacientes(
 @router.get("/{id_paciente}", response_model=PacienteResponse)
 def consultar_paciente(id_paciente: IdPaciente, contexto: ContextoLeerPaciente) -> PacienteResponse:
     paciente = ConsultarPaciente(contexto.unidad).ejecutar(id_paciente)
+    return respuesta_paciente(paciente, contexto.usuario)
+
+
+@router.patch("/{id_paciente}", response_model=PacienteResponse)
+def actualizar_paciente(
+    id_paciente: IdPaciente, datos: PacienteActualizar, contexto: ContextoRegistrarPaciente
+) -> PacienteResponse:
+    """Corrige nombre, fecha de nacimiento o contacto. 409 si el historial esta archivado."""
+    paciente = ActualizarPaciente(contexto.unidad).ejecutar(
+        id_paciente,
+        CambiosPaciente(
+            datos.nombres,
+            datos.apellidos,
+            datos.fecha_nacimiento,
+            datos.contacto.a_dominio() if datos.contacto else None,
+        ),
+    )
+    return respuesta_paciente(paciente, contexto.usuario)
+
+
+@router.post("/{id_paciente}/alergias", response_model=PacienteResponse)
+def agregar_alergias(
+    id_paciente: IdPaciente, datos: AlergiasAgregar, contexto: ContextoRegistrarPaciente
+) -> PacienteResponse:
+    """Agrega alergias al historial. Nunca borra ni edita las ya registradas."""
+    paciente = AgregarAlergias(contexto.unidad).ejecutar(
+        id_paciente, tuple(a.a_dominio() for a in datos.alergias)
+    )
     return respuesta_paciente(paciente, contexto.usuario)
 
 
@@ -126,6 +160,38 @@ def registrar_consulta(
         recetas=tuple(Receta(**r.model_dump()) for r in datos.recetas),
     )
     consulta = RegistrarConsulta(contexto.unidad).ejecutar(contexto.usuario, id_paciente, nueva)
+    return ConsultaResponse.model_validate(consulta)
+
+
+@router.get("/{id_paciente}/consultas/{id_consulta}", response_model=ConsultaResponse)
+def consultar_consulta(
+    id_paciente: IdPaciente, id_consulta: IdConsulta, contexto: ContextoLeerHistorial
+) -> ConsultaResponse:
+    consulta = ConsultarConsulta(contexto.unidad).ejecutar(id_paciente, id_consulta)
+    return ConsultaResponse.model_validate(consulta)
+
+
+@router.post("/{id_paciente}/consultas/{id_consulta}/adenda", response_model=ConsultaResponse)
+def agregar_a_consulta(
+    id_paciente: IdPaciente,
+    id_consulta: IdConsulta,
+    datos: AdendaCrear,
+    contexto: ContextoRegistrarConsulta,
+) -> ConsultaResponse:
+    """Agrega diagnosticos, tratamientos, recetas o una nota a una consulta ya guardada.
+
+    Solo agrega (nunca edita ni borra) y es atomica. Quien agrega y cuando queda anotado
+    en las notas de la consulta; asi se rectifica sin perder lo original.
+    """
+    adenda = Adenda(
+        nota=datos.nota,
+        diagnosticos=tuple(Diagnostico(**d.model_dump()) for d in datos.diagnosticos),
+        tratamientos=tuple(Tratamiento(**t.model_dump()) for t in datos.tratamientos),
+        recetas=tuple(Receta(**r.model_dump()) for r in datos.recetas),
+    )
+    consulta = AgregarAConsulta(contexto.unidad).ejecutar(
+        contexto.usuario, id_paciente, id_consulta, adenda
+    )
     return ConsultaResponse.model_validate(consulta)
 
 

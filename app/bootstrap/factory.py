@@ -1,6 +1,7 @@
 import logging
 from zoneinfo import ZoneInfo
 
+import psycopg
 import pymysql
 from pymongo import MongoClient
 
@@ -30,11 +31,18 @@ def crear_contenedor(settings: Settings) -> Contenedor:
         contenedor.autenticador = autenticador
         contenedor.inicio_sesion = autenticador
         contenedor.unidades_trabajo[Institucion.HOSPITAL_GENERAL] = lambda: UnidadTrabajoPostgreSQL(
-            dsn
+            dsn, zona=ZoneInfo(settings.zona_horaria)
         )
+
+        def ping_postgresql() -> None:
+            with psycopg.connect(dsn, connect_timeout=3) as conexion:
+                conexion.execute("SELECT 1")
+
+        contenedor.verificaciones[Institucion.HOSPITAL_GENERAL] = ping_postgresql
     if settings.mysql_host and settings.mysql_password:
-        contenedor.unidades_trabajo[Institucion.CENTRO_PEDIATRICO] = lambda: UnidadTrabajoMySQL(
-            lambda: pymysql.connect(
+
+        def conectar_mysql() -> pymysql.Connection:
+            return pymysql.connect(
                 host=settings.mysql_host,
                 port=settings.mysql_port,
                 user=settings.mysql_user,
@@ -46,7 +54,18 @@ def crear_contenedor(settings: Settings) -> Contenedor:
                 write_timeout=10,
                 init_command="SET time_zone = '+00:00'",
             )
+
+        def ping_mysql() -> None:
+            conexion = conectar_mysql()
+            try:
+                conexion.ping(reconnect=False)
+            finally:
+                conexion.close()
+
+        contenedor.unidades_trabajo[Institucion.CENTRO_PEDIATRICO] = lambda: UnidadTrabajoMySQL(
+            conectar_mysql
         )
+        contenedor.verificaciones[Institucion.CENTRO_PEDIATRICO] = ping_mysql
     if settings.mongodb_uri:
         cliente = MongoClient(
             settings.mongodb_uri.get_secret_value(), serverSelectionTimeoutMS=5000
@@ -55,6 +74,9 @@ def crear_contenedor(settings: Settings) -> Contenedor:
         contenedor.unidades_trabajo[Institucion.LABORATORIO_CLINICO] = lambda: UnidadTrabajoMongo(
             cliente[settings.mongodb_database]
         )
+        contenedor.verificaciones[Institucion.LABORATORIO_CLINICO] = lambda: cliente[
+            settings.mongodb_database
+        ].command("ping")
     registrar_firestore(contenedor, settings)
     return contenedor
 
@@ -81,5 +103,8 @@ def registrar_firestore(contenedor: Contenedor, settings: Settings) -> None:
     zona = ZoneInfo(settings.zona_horaria)
     contenedor.unidades_trabajo[Institucion.CLINICA_ODONTOLOGICA] = lambda: UnidadTrabajoFirestore(
         cliente, zona
+    )
+    contenedor.verificaciones[Institucion.CLINICA_ODONTOLOGICA] = lambda: (
+        cliente.collection("_salud").document("ping").get(timeout=3)
     )
     logger.info("Firestore conectado para la clinica odontologica (proyecto %s).", cliente.project)

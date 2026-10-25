@@ -41,6 +41,15 @@ class ConsultaCrear(Entrada):
     recetas: list[RecetaSchema] = Field(default_factory=list, max_length=100)
 
 
+class AdendaCrear(Entrada):
+    """Lo que se agrega a una consulta ya guardada. Al menos un elemento."""
+
+    nota: str | None = Field(default=None, max_length=2000)
+    diagnosticos: list[DiagnosticoSchema] = Field(default_factory=list, max_length=100)
+    tratamientos: list[TratamientoSchema] = Field(default_factory=list, max_length=100)
+    recetas: list[RecetaSchema] = Field(default_factory=list, max_length=100)
+
+
 class ConsultaResponse(Entrada):
     id_consulta: str
     id_paciente: str

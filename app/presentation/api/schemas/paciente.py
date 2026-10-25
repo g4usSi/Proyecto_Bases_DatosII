@@ -78,6 +78,28 @@ class PacienteCrear(Entrada):
         return value
 
 
+class PacienteActualizar(Entrada):
+    """Correccion de datos demograficos. Los campos omitidos no cambian."""
+
+    nombres: str | None = Field(default=None, min_length=1, max_length=120)
+    apellidos: str | None = Field(default=None, min_length=1, max_length=120)
+    fecha_nacimiento: date | None = None
+    contacto: ContactoSchema | None = Field(
+        default=None, description="Si se envia, REEMPLAZA el contacto completo."
+    )
+
+    @field_validator("fecha_nacimiento")
+    @classmethod
+    def no_futura(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("La fecha de nacimiento no puede ser futura.")
+        return value
+
+
+class AlergiasAgregar(Entrada):
+    alergias: list[AlergiaSchema] = Field(min_length=1, max_length=50)
+
+
 class ArchivoCrear(Entrada):
     motivo: MotivoBaja
     detalle: str | None = Field(default=None, max_length=500)

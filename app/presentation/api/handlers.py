@@ -7,10 +7,13 @@ from app.domain.errores import (
     AccesoDenegado,
     CitaNoEncontrada,
     ConflictoAgenda,
+    ConflictoEstado,
+    ConsultaNoEncontrada,
     DatosInvalidos,
     PacienteArchivado,
     PacienteNoEncontrado,
     ProfesionalNoVinculado,
+    RegistroNoEncontrado,
     TokenInvalido,
 )
 
@@ -27,6 +30,8 @@ def registrar_manejadores(app: FastAPI) -> None:
 
     @app.exception_handler(PacienteNoEncontrado)
     @app.exception_handler(CitaNoEncontrada)
+    @app.exception_handler(ConsultaNoEncontrada)
+    @app.exception_handler(RegistroNoEncontrado)
     async def no_encontrado(request: Request, error: Exception) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(error)})
 
@@ -53,6 +58,7 @@ def registrar_manejadores(app: FastAPI) -> None:
 
     @app.exception_handler(PacienteArchivado)
     @app.exception_handler(ConflictoAgenda)
+    @app.exception_handler(ConflictoEstado)
     async def conflicto(request: Request, error: Exception) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(error)})
 
