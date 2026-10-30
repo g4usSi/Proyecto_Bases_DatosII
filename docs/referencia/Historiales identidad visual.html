@@ -388,6 +388,10 @@ table.nw td.wrap{white-space:normal;min-width:200px}
   --ground-img:none;--ground-size:auto;
   --border:#E7D8CB;--border-strong:#C9B09C;--r-card:22px;--r-btn:13px;--r-in:13px;--th:#E4F0F0}
 
+/* Administración general (propuesta): sin institución propia, usa el acento neutro de la plataforma */
+.app[data-tema=plataforma]{--ink:#172B3A;--ground:#F4F7FA;--bd:#DCE5EC;--side:#172B3A;--side-ink:#fff;--ground-img:none;--ground-size:auto;--th:#EEF3F8}
+.app[data-tema=plataforma] .nav button[aria-current="page"]{background:#EEF3F8;color:#172B3A}
+
 /* ---------- Barra lateral: el color de la institución ---------- */
 .app .side{background:var(--side);border-right:0;color:var(--side-ink);overflow:hidden;isolation:isolate}
 .app .strip{display:none}
@@ -843,7 +847,7 @@ tr.clic:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 <li><b>Centro Pediátrico:</b> tutores en la ficha, lotes con vencimiento, facturación y percentiles de peso y talla a lo largo del tiempo.</li>
 <li><b>Laboratorio Clínico:</b> vuelve al estilo anterior: barra superior, fondo liso, etiqueta de muestra con la franja de tubos, tablero de órdenes y catálogo con historial de versiones.</li>
 <li><b>Clínica Odontológica:</b> la ficha cuenta las piezas registradas y la agenda resume la semana y la carga de cada profesional.</li>
-<li><b>Administrador del hospital:</b> la cuenta de administración (propuesta) ve “Profesionales”: lista, alta con correo único, contraseña inicial, área y permisos, y gestión de la cuenta. <b>Laboratorio:</b> botón “Registrar resultados” en el tablero, en la ficha y dentro de cada orden.</li>
+<li><b>Administración en dos niveles (propuesta):</b> un superusuario de plataforma crea cuentas en cualquier entidad (incluido su administrador), es el único que elimina y consulta el resumen de las cuatro entidades y los pagos en solo lectura. Cada entidad conserva un administrador que crea, deshabilita y rehabilita cuentas de su entidad. Ninguno tiene permisos clínicos. <b>Laboratorio:</b> botón “Registrar resultados” en el tablero, en la ficha y dentro de cada orden.</li>
 <li><b>Pulido final:</b> fondos más calmados, un solo nivel de borde en Camas, pestañas de la ficha pediátrica en una línea, sin filos laterales gruesos, Emergencias con la cama en tinte y no en bloque rojo, y selección de texto, casillas y barras con el color de cada institución.</li>
 <li><b>Propuesta · requiere API:</b> lo que el API todavía no ofrece lleva el ícono de destello en el menú y una nota punteada en la pantalla. Todo lo demás sale de campos que ya existen.</li>
 </ul>
@@ -879,7 +883,7 @@ function ic(n,sz=18,cls=''){
 const TOOTH='M20 10C28 6 36 14 44 10C54 8 58 20 52 34C49 44 49 56 43 56C38 56 37 44 32 44C27 44 26 56 21 56C15 56 15 44 12 34C6 20 10 8 20 10Z';
 function emblema(tema,sz=20){
   if(tema==='dental')return sv('svg',{viewBox:'0 0 64 64',width:sz,height:sz,'aria-hidden':'true'},sv('path',{d:TOOTH,fill:'currentColor',transform:'translate(0 2)'}));
-  return ic({hospital:'hospital',pediatrico:'baby',laboratorio:'flask-conical'}[tema],sz);
+  return ic({hospital:'hospital',pediatrico:'baby',laboratorio:'flask-conical',plataforma:'shield-check'}[tema],sz);
 }
 function marca(){return h('span',{class:'mark','aria-hidden':'true'},h('i'),h('i'),h('i'),h('i'))}
 
@@ -903,7 +907,7 @@ const quien=id=>id===meId()?'Tú':`Profesional ·${id.slice(-4)}`;
 /* ---------- estado de la maqueta ---------- */
 const S={vista:'login',esc:'den',sesion:'normal',datos:'normal',login:'normal',nav:'pacientes',q:'',sel:null,tab:'resumen',semana:0,soloMias:false,ficha:{}};
 const cuenta=()=>ESCENARIOS[S.esc];
-const DBI=()=>DB[cuenta().inst];
+const DBI=()=>DB[cuenta().inst]||{pacientes:[],citas:[],consultas:{},ordenes:{},odonto:{}};/* la administración general no tiene datos clínicos propios */
 const can=p=>cuenta().perm.includes(p);
 const tema=()=>cuenta().tema;
 
@@ -1803,6 +1807,14 @@ const mismoDia=(iso,ref=NOW.toISOString())=>fmt(iso,{year:'numeric',month:'2-dig
 function navItems(){
   const it=[],i=cuenta().inst;
   const P_=(k,ico,t,o)=>it.push([k,ico,t,o||null]),sep=t=>it.push(['~'+t,'',t,null]);
+  if(i==='plataforma'){
+    P_('panel','house','Resumen',{prop:1});
+    if(can('plataforma:administrar')){P_('usuarios','user-cog','Usuarios y accesos',{prop:1});P_('bitacora','history','Bitácora',{prop:1})}
+    if(can('pagos:ver')){sep('Hospital General');P_('pagos','banknote','Pagos',{prop:1});sep('Centro Pediátrico');P_('facturacion','receipt','Facturación',{prop:1})}
+    return it;
+  }
+  /* administrador de una entidad: solo gestiona al personal de esa entidad */
+  if(can('profesionales:administrar')){P_('panel','house','Resumen',{prop:1});P_('usuarios','user-cog','Usuarios y accesos',{prop:1});P_('bitacora','history','Bitácora',{prop:1});return it}
   if(i==='hospital_general'){
     P_('inicio','house','Inicio',{prop:1});
     sep('Atención');
@@ -1813,7 +1825,6 @@ function navItems(){
     P_('atenciones','activity','Atenciones',{prop:1});
     sep('Administración');
     P_('pagos','banknote','Pagos',{prop:1});
-    if(can('profesionales:administrar'))P_('profesionales','user-cog','Profesionales',{prop:1});
     if(can('pacientes:registrar'))P_('registrar','user-plus','Registrar paciente');
     return it;
   }
@@ -1836,7 +1847,7 @@ function navItems(){
   return it;
 }
 const primeraVista=()=>navItems().find(x=>x[0][0]!=='~')[0];
-const TITULOS={inicio:'Inicio',pacientes:'Pacientes',registrar:'Registrar paciente',agenda:'Agenda de citas',pruebas:'Catálogo de pruebas',vacunas:'Catálogo de vacunas',emergencias:'Emergencias',camas:'Camas',atenciones:'Atenciones',pagos:'Pagos',lotes:'Lotes y vencimientos',facturacion:'Facturación',ordenes:'Órdenes de laboratorio',profesionales:'Profesionales'};
+const TITULOS={inicio:'Inicio',pacientes:'Pacientes',registrar:'Registrar paciente',agenda:'Agenda de citas',pruebas:'Catálogo de pruebas',vacunas:'Catálogo de vacunas',emergencias:'Emergencias',camas:'Camas',atenciones:'Atenciones',pagos:'Pagos',lotes:'Lotes y vencimientos',facturacion:'Facturación',ordenes:'Órdenes de laboratorio',panel:'Resumen',usuarios:'Usuarios y accesos',bitacora:'Bitácora'};
 const tituloNav=k=>TITULOS[k];
 
 /* búsqueda global: botón de lupa en la barra superior que abre un combobox; "/" lo abre desde cualquier pantalla */
@@ -1890,7 +1901,7 @@ function appView(){
   const sesChip=S.sesion==='pronto'?chip('warn','timer','Vence en 4 min'):S.sesion==='vencida'?chip('crit','clock','Sesión vencida'):chip('neu','clock','Sesión · 24 min');
   const salir=h('button',{class:'btn sec sm',type:'button',onclick:()=>{S.vista='login';render()}},ic('log-out',15),'Cerrar sesión');
   const who=h('div',{class:'who'},can('pacientes:leer')&&buscadorGlobal(),sesChip,h('span',{class:'mail',text:c.correo}),!lab&&chip('info',null,c.nombre),salir);
-  const V={inicio:inicioView,pacientes:pacientesView,registrar:registrarView,agenda:agendaView,pruebas:pruebasView,vacunas:vacunasCatView,emergencias:emergenciasView,camas:camasView,atenciones:atencionesView,pagos:pagosView,lotes:lotesView,facturacion:facturacionView,ordenes:ordenesBoardView,profesionales:profesionalesView};
+  const V={inicio:inicioView,pacientes:pacientesView,registrar:registrarView,agenda:agendaView,pruebas:pruebasView,vacunas:vacunasCatView,emergencias:emergenciasView,camas:camasView,atenciones:atencionesView,pagos:pagosView,lotes:lotesView,facturacion:facturacionView,ordenes:ordenesBoardView,panel:panelView,usuarios:usuariosView,bitacora:bitacoraView};
   const vista=V[S.nav]||pacientesView;
   const bannerSes=S.sesion==='pronto'?banner('warn','timer',h('b',{text:'Tu sesión vence en 4 minutos. '}),'Termina lo que estás haciendo: después tendrás que iniciar sesión de nuevo. Lo que escribas en un formulario abierto se guarda como borrador en esta pestaña.'):null;
   if(lab){
@@ -1902,9 +1913,9 @@ function appView(){
   const hayProp=items.some(x=>x[3]&&x[3].prop);
   const side=h('aside',{class:'side'},h('div',{class:'strip'}),
     h('div',{class:'logo'},marca(),'Historiales'),
-    h('div',{class:'inst'},h('span',{class:'emb'},emblema(c.tema,20)),h('div',null,h('b',{text:c.nombre}),h('small',{text:'Tu institución'}))),
+    h('div',{class:'inst'},h('span',{class:'emb'},emblema(c.tema,20)),h('div',null,h('b',{text:c.nombre}),h('small',{text:c.inst==='plataforma'?'Las cuatro entidades':'Tu institución'}))),
     h('nav',{class:'nav','aria-label':'Principal'},menu()),
-    hosp&&h('button',{class:'me',type:'button',onclick:perfilDrawer},h('span',{class:'av'},ic('user-round',18)),h('span',null,h('b',{text:c.correo}),h('small',{text:'Mi perfil'})),h('span',{class:'ptag',title:'Propuesta: requiere API nueva'},ic('sparkles',12))),
+    hosp&&!can('profesionales:administrar')&&h('button',{class:'me',type:'button',onclick:perfilDrawer},/* el perfil de ejemplo es clínico; no aplica a la administración */h('span',{class:'av'},ic('user-round',18)),h('span',null,h('b',{text:c.correo}),h('small',{text:'Mi perfil'})),h('span',{class:'ptag',title:'Propuesta: requiere API nueva'},ic('sparkles',12))),
     h('div',{class:'side-foot'},hayProp&&h('span',{class:'ley-prop'},ic('sparkles',13),'Propuesta, requiere API nueva'),h('span',{text:'Datos de ejemplo sintéticos'})));
   const top=h('header',{class:'top'},h('span',{class:'muted',text:`${c.nombre} · ${tituloNav(S.nav)}`}),who);
   app.append(side,h('div',{class:'main'},top,h('main',{class:'content',id:'contenido'},bannerSes,vista())));
@@ -1994,8 +2005,17 @@ function fichaView(p){
 /* ============ Hospital General · pantallas propuestas (basadas en 001_hospital_general.sql) ============ */
 /* El API actual solo expone pacientes, historiales y citas. Camas, ingresos, atenciones y cobros son propuesta. */
 Object.assign(S,{fCama:'T',fAtn:'T',fCob:'T',fOrd:'T'});
-ESCENARIOS.hospadm={k:'hospadm',inst:'hospital_general',tema:'hospital',nombre:'Hospital General',correo:'administracion@example.com',id:'7a2d5e90-14cb-4f63-b8d7-e03a91c6f258',perm:['pacientes:leer','pacientes:registrar','citas:leer','pagos:ver'],etq:'Hospital General · administración (propuesta)'};
-DEMO.hospadm=['ma','10482','resumen'];
+/* Administración (PROPUESTA), en dos niveles y sin permisos clínicos:
+   - superusuario (uno, sin institución): crea usuarios en cualquier entidad, incluido su administrador; es el único que elimina; ve el resumen y los pagos en solo lectura.
+   - administrador de cada entidad (uno por entidad): crea usuarios de SU entidad y los deshabilita o rehabilita; no elimina. */
+ESCENARIOS.admin={k:'admin',inst:'plataforma',tema:'plataforma',nombre:'Administración general',correo:'superusuario@example.com',id:'7a2d5e90-14cb-4f63-b8d7-e03a91c6f258',perm:['plataforma:administrar','pagos:ver'],etq:'Administración general · superusuario (propuesta)'};
+DEMO.admin=['',null,'resumen'];
+[['hospadm','hospital_general','hospital','Hospital General','admin.hospital@example.com','2c41f7a0-6d1e-4b3a-9f52-8e07c3a1d6b4'],
+ ['pedadm','centro_pediatrico','pediatrico','Centro Pediátrico','admin.pediatrico@example.com','5e93b1c8-0a47-4d26-b8f1-3c6d2e90a7f5'],
+ ['labadm','laboratorio_clinico','laboratorio','Laboratorio Clínico','admin.laboratorio@example.com','a8d05e3f-72c1-4e98-a613-9b4f1d7c20e6'],
+ ['denadm','clinica_odontologica','dental','Clínica Odontológica','admin.clinica@example.com','d17c6a92-3e58-4f0b-b2d4-61a8e5c9f307']]
+  .forEach(([k,inst,tm,nombre,correo,id])=>{ESCENARIOS[k]={k,inst,tema:tm,nombre,correo,id,perm:['profesionales:administrar'],etq:`${nombre} · administración (propuesta)`};DEMO[k]=['',null,'resumen']});
+const esPlataforma=()=>cuenta().inst==='plataforma';
 const verMontos=()=>can('pagos:ver');
 const moneda=n=>'Q '+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const mt=n=>verMontos()?moneda(n):h('span',{class:'oculto',title:'Montos restringidos para tu cuenta'},'Q ••••');
@@ -2255,12 +2275,14 @@ function cobroDrawer(cb){
   const ok=verMontos();
   const a=ATN.find(x=>x.id===cb.atn);
   drawer(`Cobro ${cb.id}`,[h('div',{class:'row'},chipM(COB_P,cb.estado),propChip()),
-    h('dl',{class:'dl'},h('dt',{text:'Paciente'}),h('dd',{text:cb.pac}),h('dt',{text:'Atención'}),h('dd',null,a?h('button',{class:'lnk mono',type:'button',onclick:()=>atnDrawer(a)},String(a.id)):String(cb.atn)),h('dt',{text:'Apertura'}),h('dd',{text:fFH(cb.f)}),cb.cierre&&h('dt',{text:'Cierre'}),cb.cierre&&h('dd',{text:fFH(cb.cierre)})),
+    esPlataforma()&&banner('neu','eye','Solo lectura: los pagos los registra el personal del hospital con el permiso pagos:registrar.'),
+    /* la administración general no abre el detalle clínico de la atención */
+    h('dl',{class:'dl'},h('dt',{text:'Paciente'}),h('dd',{text:cb.pac}),h('dt',{text:'Atención'}),h('dd',null,a&&!esPlataforma()?h('button',{class:'lnk mono',type:'button',onclick:()=>atnDrawer(a)},String(a.id)):String(cb.atn)),h('dt',{text:'Apertura'}),h('dd',{text:fFH(cb.f)}),cb.cierre&&h('dt',{text:'Cierre'}),cb.cierre&&h('dd',{text:fFH(cb.cierre)})),
     !ok?banner('neu','lock',h('b',{text:'Montos restringidos. '}),'Tu cuenta ve el estado de los cobros, no los importes.'):
     [h('section',null,h('h3',{style:'margin-bottom:8px',text:'Detalle'}),h('div',{class:'tw'},h('table',null,h('thead',null,h('tr',null,['Concepto','Cant.','P. unitario','Subtotal'].map(t=>h('th',{text:t})))),h('tbody',null,cb.lineas.map(l=>h('tr',null,h('td',{text:l.d}),h('td',{text:String(l.cant)}),h('td',{text:moneda(l.pu)}),h('td',{text:moneda(l.cant*l.pu)}))),h('tr',null,h('td',{colspan:3},h('b',{text:'Total'})),h('td',null,h('b',{text:moneda(totC(cb))}))))))),
      h('section',null,h('h3',{style:'margin-bottom:8px',text:'Pagos'}),cb.pagos.length?h('div',{style:'display:grid;gap:6px'},cb.pagos.map(p=>h('div',{class:'row banner neu',style:'justify-content:space-between;flex-wrap:nowrap'},h('span',null,h('b',{text:p.m}),h('small',{class:'hint',text:` · ${fFH(p.f)}`})),h('span',{class:'row'},p.estado==='Anulado'?chip('neu','ban','Anulado'):null,h('b',{style:p.estado==='Anulado'?'text-decoration:line-through':null,text:moneda(p.monto)}))))):h('p',{class:'muted',text:'Todavía no hay pagos.'}),
        h('div',{class:'row',style:'justify-content:space-between;margin-top:10px'},h('b',{text:'Saldo'}),h('b',{style:'font-size:18px',text:moneda(saldoC(cb))})))]],
-    ok&&cb.estado==='Abierto'?[h('button',{class:'btn',type:'button',onclick:()=>pagoModal(cb)},ic('plus',16),'Registrar pago')]:null);
+    ok&&cb.estado==='Abierto'&&!esPlataforma()?[h('button',{class:'btn',type:'button',onclick:()=>pagoModal(cb)},ic('plus',16),'Registrar pago')]:null);
 }
 function pagosView(){
   if(S.datos==='cargando')return h('div',null,cabeza('Pagos','Cargando…'),skeleton(6));
@@ -2280,7 +2302,7 @@ function pagosView(){
     h('div',{class:'tw'},h('table',{class:'nw'},h('thead',null,h('tr',null,['Cobro','Paciente','Apertura','Estado','Total','Pagado','Avance','Saldo'].map(t=>h('th',{text:t})))),
       h('tbody',null,vis.map(c=>h('tr',null,h('td',null,h('button',{class:'lnk mono',type:'button',onclick:()=>cobroDrawer(c),text:String(c.id)})),h('td',{class:'wrap'},h('div',null,c.pac),h('small',{class:'hint',text:`Atención ${c.atn}`})),h('td',{text:fFechaC(c.f)}),h('td',null,chipM(COB_P,c.estado)),
         h('td',null,ok?moneda(totC(c)):mt(0)),h('td',null,ok?moneda(pagC(c)):mt(0)),h('td',null,ok&&c.estado!=='Anulado'?h('div',{class:'prog',role:'img','aria-label':`${Math.round(pagC(c)/totC(c)*100)} % pagado`},h('i',{style:`width:${pagC(c)/totC(c)*100}%`})):'—'),h('td',null,ok?(c.estado==='Anulado'?'—':h('b',{text:moneda(saldoC(c))})):mt(0))))))),
-    propNota('Se necesitan cobros, líneas de cobro y pagos, con un permiso propio para ver montos. Esta cuenta de médico/a no los ve; cambia a “administración” en el panel para verlos.'));
+    propNota('Se necesitan cobros, líneas de cobro y pagos, con un permiso propio para ver montos (pagos:ver). Las cuentas sin ese permiso no ven los importes; la administración general los ve en solo lectura.'));
 }
 
 /* ---------- Mi perfil ---------- */
@@ -2290,29 +2312,68 @@ function perfilDrawer(){
     propNota('Hoy solo se conoce el correo y la institución (D6). Nombre, colegiado y especialidad exigen enlazar el usuario con su profesional.')]);
 }
 
-/* ============ Administración de profesionales · Hospital General (PROPUESTA) ============
-   El API actual no ofrece nada de esto: las cuentas se crean con scripts/crear_profesional.py,
-   no hay listado de profesionales ni cambio de contraseña (documentación del backend, §15).
-   Se dibuja para decidir el contrato antes de construirlo. */
-ESCENARIOS.hospadm.perm.push('profesionales:administrar');
-Object.assign(S,{fProf:'T'});
+/* ============ Administración en dos niveles · usuarios y accesos (PROPUESTA) ============
+   Hoy existe un administrador por institución (012_administracion_profesionales.sql). La propuesta lo conserva y
+   agrega un superusuario de plataforma:
+   - superusuario: crea en cualquier entidad (incluido su administrador, uno por entidad), deshabilita, rehabilita
+     y es el único que elimina (baja definitiva lógica: el historial y la bitácora se conservan).
+   - administrador de la entidad: crea, deshabilita y rehabilita cuentas de SU entidad; no elimina ni toca a otros
+     administradores. Las reglas de roles y permisos son las de app/domain/administracion.py. */
+Object.assign(S,{fUsr:'T',fEst:'T'});
 
-const ROLES_H=[['medico','Médico/a'],['enfermeria','Enfermería']];
-const rolTxt=r=>(ROLES_H.find(x=>x[0]===r)||[0,r])[1];
-const PERMS_H=[['pacientes:leer','Ver pacientes','Base: todo profesional puede buscar y ver fichas.'],['pacientes:registrar','Registrar y corregir pacientes'],['historiales:leer','Ver historiales y alergias'],['consultas:registrar','Registrar consultas y adendas'],['historiales:archivar','Archivar historiales'],['citas:leer','Ver citas'],['citas:gestionar','Agendar y cambiar citas']];
-const PERM_SUG={medico:['pacientes:leer','pacientes:registrar','historiales:leer','consultas:registrar','citas:leer','citas:gestionar'],enfermeria:['pacientes:leer','historiales:leer','citas:leer']};
-const HPROF=[
-  {id:'h1',tit:'Dra.',nombre:'Karla Ixcoy',correo:'karla.ixcoy@example.com',rol:'medico',area:'Emergencias',estado:'activa',alta:'2024-03-04',perm:PERM_SUG.medico},
-  {id:'h2',tit:'Dr.',nombre:'Hugo Menéndez',correo:'hugo.menendez@example.com',rol:'medico',area:'Medicina interna',estado:'activa',alta:'2024-03-04',perm:PERM_SUG.medico},
-  {id:'h3',tit:'Dra.',nombre:'Rebeca Salazar',correo:'rebeca.salazar@example.com',rol:'medico',area:'Medicina interna',estado:'activa',alta:'2024-08-19',perm:[...PERM_SUG.medico,'historiales:archivar']},
-  {id:'h4',tit:'Dr.',nombre:'Marvin Osorio',correo:'marvin.osorio@example.com',rol:'medico',area:'Cirugía',estado:'activa',alta:'2025-01-13',perm:PERM_SUG.medico},
-  {id:'h5',tit:'',nombre:'Lucía Morales',correo:'lucia.morales@example.com',rol:'enfermeria',area:'Cuidados intensivos',estado:'activa',alta:'2025-02-03',perm:PERM_SUG.enfermeria},
-  {id:'h6',tit:'',nombre:'Pedro Caal',correo:'pedro.caal@example.com',rol:'enfermeria',area:'Emergencias',estado:'activa',alta:'2025-06-30',perm:PERM_SUG.enfermeria},
-  {id:'h7',tit:'',nombre:'Sofía Batz',correo:'sofia.batz@example.com',rol:'enfermeria',area:'Cirugía',estado:'bloqueada',alta:'2025-09-15',perm:PERM_SUG.enfermeria},
-  {id:'h8',tit:'Dr.',nombre:'Iván Choc',correo:'ivan.choc@example.com',rol:'medico',area:'Medicina interna',estado:'inactiva',alta:'2023-11-20',perm:PERM_SUG.medico}];
-const CORREOS_USADOS=['medico@example.com','administracion@example.com','laboratorista@example.com','odontologa@example.com','pediatra@example.com'];
-const EST_P={activa:['ok','circle-check','Activa'],bloqueada:['crit','ban','Bloqueada'],inactiva:['neu','ban','Inactiva']};
+const ENTIDADES=[['hospital_general','Hospital General','hospital','PostgreSQL','Hospital'],['centro_pediatrico','Centro Pediátrico','pediatrico','MySQL','Pediátrico'],
+  ['laboratorio_clinico','Laboratorio Clínico','laboratorio','MongoDB','Laboratorio'],['clinica_odontologica','Clínica Odontológica','dental','Firestore','Clínica']];
+const entDe=k=>ENTIDADES.find(e=>e[0]===k)||[k,k,'plataforma','',k];
+const chipEnt=k=>h('span',{class:'chip neu'},emblema(entDe(k)[2],13),entDe(k)[1]);
+/* mismas reglas que app/domain/administracion.py y app/domain/permisos.py */
+const ROLES_ENT={hospital_general:[['medico','Médico/a'],['enfermeria','Enfermería']],centro_pediatrico:[['medico','Médico/a'],['enfermeria','Enfermería']],
+  laboratorio_clinico:[['laboratorista','Laboratorista'],['medico','Médico/a solicitante']],clinica_odontologica:[['odontologo','Odontólogo/a'],['secretaria','Secretaría']]};
+const rolTxt=r=>({medico:'Médico/a',enfermeria:'Enfermería',laboratorista:'Laboratorista',odontologo:'Odontólogo/a',secretaria:'Secretaría',administrador:'Administrador/a'})[r]||r;
+const PERMS=[['pacientes:leer','Ver pacientes','Base: todo profesional puede buscar y ver fichas.'],['pacientes:registrar','Registrar y corregir pacientes'],['historiales:leer','Ver historiales y alergias'],['consultas:registrar','Registrar consultas y adendas'],['historiales:archivar','Archivar historiales'],['citas:leer','Ver citas'],['citas:gestionar','Agendar y cambiar citas'],
+  ['camas:gestionar','Gestionar camas','Limpieza, mantenimiento y disponibilidad.'],['pagos:ver','Ver montos de cobros y pagos'],['pagos:registrar','Registrar pagos'],['laboratorio:resultados','Tomar muestras y registrar resultados'],['laboratorio:validar','Validar órdenes','Una orden validada ya no se modifica.']];
+const COMUNES=['pacientes:leer','pacientes:registrar','historiales:leer','consultas:registrar','historiales:archivar','citas:leer','citas:gestionar'];
+const ASIGNABLES={hospital_general:[...COMUNES,'camas:gestionar','pagos:ver','pagos:registrar'],centro_pediatrico:[...COMUNES,'pagos:ver','pagos:registrar'],
+  laboratorio_clinico:[...COMUNES,'laboratorio:resultados','laboratorio:validar'],clinica_odontologica:COMUNES};
+const VEDADOS_SEC=['historiales:leer','consultas:registrar','historiales:archivar','laboratorio:resultados','laboratorio:validar'];
+const PERM_SUG={medico:['pacientes:leer','pacientes:registrar','historiales:leer','consultas:registrar','citas:leer','citas:gestionar'],enfermeria:['pacientes:leer','historiales:leer','citas:leer'],
+  odontologo:['pacientes:leer','pacientes:registrar','historiales:leer','consultas:registrar','citas:leer','citas:gestionar'],
+  laboratorista:['pacientes:leer','laboratorio:resultados','laboratorio:validar'],secretaria:['pacientes:leer','pacientes:registrar','citas:leer','citas:gestionar'],
+  administrador:['profesionales:administrar']};
+const U=(id,inst,tit,nombre,correo,rol,area,estado,alta,perm)=>({id,inst,tit,nombre,correo,rol,area,estado,alta,perm:perm||PERM_SUG[rol]});
+const USUARIOS=[
+  U('ha','hospital_general','','Mario Gálvez','admin.hospital@example.com','administrador',null,'activa','2024-02-01'),
+  U('h1','hospital_general','Dra.','Karla Ixcoy','karla.ixcoy@example.com','medico','Emergencias','activa','2024-03-04'),
+  U('h2','hospital_general','Dr.','Hugo Menéndez','hugo.menendez@example.com','medico','Medicina interna','activa','2024-03-04'),
+  U('h3','hospital_general','Dra.','Rebeca Salazar','rebeca.salazar@example.com','medico','Medicina interna','activa','2024-08-19',[...PERM_SUG.medico,'historiales:archivar']),
+  U('h4','hospital_general','Dr.','Marvin Osorio','marvin.osorio@example.com','medico','Cirugía','activa','2025-01-13'),
+  U('h5','hospital_general','','Lucía Morales','lucia.morales@example.com','enfermeria','Cuidados intensivos','activa','2025-02-03'),
+  U('h6','hospital_general','','Pedro Caal','pedro.caal@example.com','enfermeria','Emergencias','activa','2025-06-30',[...PERM_SUG.enfermeria,'pagos:ver','pagos:registrar']),
+  U('h7','hospital_general','','Sofía Batz','sofia.batz@example.com','enfermeria','Cirugía','bloqueada','2025-09-15'),
+  U('h8','hospital_general','Dr.','Iván Choc','ivan.choc@example.com','medico','Medicina interna','inactiva','2023-11-20'),
+  U('pa','centro_pediatrico','','Claudia Ordóñez','admin.pediatrico@example.com','administrador',null,'activa','2024-02-01'),
+  U('p1','centro_pediatrico','Dra.','Valeria Cifuentes','pediatra@example.com','medico',null,'activa','2024-05-06'),
+  U('p2','centro_pediatrico','Dr.','Óscar Pineda','oscar.pineda@example.com','medico',null,'activa','2025-02-17'),
+  U('p3','centro_pediatrico','','Andrea Xoyón','andrea.xoyon@example.com','enfermeria',null,'activa','2025-04-01',[...PERM_SUG.enfermeria,'pagos:ver','pagos:registrar']),
+  U('p4','centro_pediatrico','','Byron Tum','byron.tum@example.com','enfermeria',null,'bloqueada','2025-07-21'),
+  U('la','laboratorio_clinico','','Rodrigo Pac','admin.laboratorio@example.com','administrador',null,'activa','2024-02-01'),
+  U('l1','laboratorio_clinico','','Fernando Coyoy','laboratorista@example.com','laboratorista',null,'activa','2024-06-10'),
+  U('l2','laboratorio_clinico','','Gabriela Sic','gabriela.sic@example.com','laboratorista',null,'activa','2025-03-03',['pacientes:leer','laboratorio:resultados']),
+  U('l3','laboratorio_clinico','Dr.','Ernesto Ajú','medico.lab@example.com','medico',null,'activa','2024-09-09'),
+  U('da','clinica_odontologica','','Silvia Tojín','admin.clinica@example.com','administrador',null,'activa','2024-02-01'),
+  U('d1','clinica_odontologica','Dra.','Paola Quiñónez','odontologa@example.com','odontologo',null,'activa','2024-04-15'),
+  U('d2','clinica_odontologica','Dr.','Julio Monterroso','julio.monterroso@example.com','odontologo',null,'inactiva','2023-10-02'),
+  U('d3','clinica_odontologica','','Ana Lucía Raxón','recepcion@example.com','secretaria',null,'activa','2025-01-08')];
+const CORREOS_USADOS=['medico@example.com','superusuario@example.com'];
+const EST_P={activa:['ok','circle-check','Activa'],bloqueada:['crit','ban','Bloqueada'],inactiva:['neu','ban','Deshabilitada']};
 const chipP=e=>chip(...EST_P[e]);
+const sinAcceso=x=>x.estado!=='activa';
+const esSuper=()=>can('plataforma:administrar');
+/* las cuentas eliminadas no se listan; el superusuario ve todas las entidades, el administrador solo la suya */
+const vigentes=()=>USUARIOS.filter(x=>x.estado!=='eliminada');
+const visibles=()=>vigentes().filter(x=>esSuper()||x.inst===cuenta().inst);
+const adminActivo=inst=>vigentes().find(x=>x.inst===inst&&x.rol==='administrador'&&x.estado==='activa');
+/* quién puede gestionar a quién: el administrador no toca cuentas de administración ni otras entidades */
+const puedeGestionar=p=>esSuper()||(p.inst===cuenta().inst&&p.rol!=='administrador');
 
 function copiar(t,msg='Copiado'){
   const ok=()=>toast(msg,'copy');
@@ -2329,84 +2390,221 @@ function fuerza(t){
 }
 const FZ=['','Muy débil','Débil','Aceptable','Fuerte'];
 
-function profesionalesView(){
-  const l=HPROF,n=e=>l.filter(x=>x.estado===e).length,med=l.filter(x=>x.rol==='medico'&&x.estado==='activa').length,enf=l.filter(x=>x.rol==='enfermeria'&&x.estado==='activa').length;
-  const f=S.fProf,vis=l.filter(x=>f==='T'||(f==='medico'&&x.rol==='medico')||(f==='enfermeria'&&x.rol==='enfermeria')||(f==='sin'&&x.estado!=='activa'));
+/* ---------- Resumen general (superusuario): conteos de las cuatro entidades, sin datos de pacientes ---------- */
+function panelView(){
+  if(!esSuper())return resumenEntidadView();
+  const enSemana=c=>{const t=+new Date(c.inicio);return t>=LUN0&&t<LUN0+7*864e5};
+  const hoy=c=>mismoDia(c.inicio)&&c.estado!=='cancelada';
+  const ordAb=Object.values(DB.laboratorio_clinico.ordenes).flat().filter(o=>o.estado==='solicitada'||o.estado==='en_proceso').length;
+  const propias={
+    hospital_general:[['Camas ocupadas',`${CAMAS.filter(c=>c.est==='O').length} de ${CAMAS.length}`],['Emergencias activas',emergActivas().length],['Cobros abiertos',COBROS.filter(c=>c.estado==='Abierto').length],['Saldo pendiente',moneda(COBROS.reduce((s,c)=>s+saldoC(c),0))]],
+    centro_pediatrico:[['Facturas por cobrar',FACT.filter(f=>f.estado==='Emitida').length],['Monto por cobrar',moneda(FACT.filter(f=>f.estado==='Emitida').reduce((s,f)=>s+totF(f),0))],['Lotes por vencer o vencidos',LOTES.filter(l=>['Por vencer','Vencido'].includes(estLote(l))).length]],
+    laboratorio_clinico:[['Órdenes abiertas',ordAb]],
+    clinica_odontologica:[['Citas de la semana',DB.clinica_odontologica.citas.filter(enSemana).length]]};
+  const irUsuarios=k=>()=>{S.fUsr=k;S.fEst='T';navegar('usuarios')};
+  const tarjeta=([k,nombre,tm,motor])=>{const per=vigentes().filter(x=>x.inst===k),db=DB[k],adm=adminActivo(k);
+    return h('section',{class:'card','data-tema':tm,style:'display:grid;gap:12px;align-content:start'},
+      h('div',{class:'row',style:'justify-content:space-between'},h('div',{class:'row'},h('span',{class:'emb'},emblema(tm,20)),h('div',null,h('h2',{text:nombre}),h('small',{class:'muted',text:`Base de datos: ${motor}`})))),
+      h('div',{style:'height:6px;border-radius:99px;background:var(--strip)'}),
+      h('dl',{class:'dl',style:'grid-template-columns:1fr auto'},
+        [['Administración',adm?adm.nombre:'Sin administrador'],['Personal activo',`${per.filter(x=>!sinAcceso(x)).length}${per.some(sinAcceso)?` · ${per.filter(sinAcceso).length} sin acceso`:''}`],['Pacientes registrados',db.pacientes.length],['Citas de hoy',db.citas.filter(hoy).length],...propias[k]]
+          .flatMap(([t,v])=>[h('dt',{text:t}),h('dd',null,h('b',{class:'val',text:String(v)}))])),
+      h('div',{class:'row'},h('button',{class:'btn sec sm',type:'button',onclick:irUsuarios(k)},ic('user-cog',15),'Ver usuarios'),
+        k==='hospital_general'&&h('button',{class:'btn ghost sm',type:'button',onclick:()=>navegar('pagos')},ic('banknote',15),'Ver pagos'),
+        k==='centro_pediatrico'&&h('button',{class:'btn ghost sm',type:'button',onclick:()=>navegar('facturacion')},ic('receipt',15),'Ver facturación')))};
+  const vs=vigentes(),act=vs.filter(x=>!sinAcceso(x)).length,sin=vs.filter(sinAcceso).length;
   return h('div',{style:'display:grid;gap:16px'},
-    cabeza('Profesionales','Quién atiende en el Hospital General, en qué área y con qué permisos.',h('button',{class:'btn',type:'button',onclick:()=>profNuevoDrawer()},ic('user-plus',16),'Registrar profesional')),
-    h('div',{class:'kpis'},kpi('Médicos activos',med,'#0068FF'),kpi('Enfermería activa',enf,'#43A971'),kpi('Áreas con personal',new Set(l.filter(x=>x.estado==='activa').map(x=>x.area)).size+' de '+DEPS.length,'#E3B23C'),kpi('Sin acceso',n('bloqueada')+n('inactiva'),'#B42318','Bloqueadas o inactivas')),
-    h('div',{class:'seg',role:'group','aria-label':'Filtrar'},[['T','Todos',l.length],['medico','Médicos',l.filter(x=>x.rol==='medico').length],['enfermeria','Enfermería',l.filter(x=>x.rol==='enfermeria').length],['sin','Sin acceso',n('bloqueada')+n('inactiva')]].map(([k,t,v])=>h('button',{type:'button','aria-pressed':f===k?'true':'false',onclick:()=>{S.fProf=k;render()}},`${t} ${v}`))),
-    h('div',{class:'tw'},h('table',{class:'nw'},h('thead',null,h('tr',null,['Profesional','Correo','Rol','Área','Estado','Alta'].map(t=>h('th',{text:t})))),
-      h('tbody',null,vis.map(x=>h('tr',{class:'clic',tabindex:'0',onclick:()=>profDrawer(x.id),onkeydown:e=>{if(e.key==='Enter')profDrawer(x.id)}},
-        h('td',null,h('button',{class:'lnk',type:'button',onclick:e=>{e.stopPropagation();profDrawer(x.id)},text:`${x.tit?x.tit+' ':''}${x.nombre}`})),h('td',{text:x.correo}),h('td',{text:rolTxt(x.rol)}),h('td',{text:x.area}),h('td',null,chipP(x.estado)),h('td',{text:fFechaN(x.alta)})))))),
-    h('p',{class:'hint'},'Tu cuenta de administración no aparece en esta lista y no tiene permisos clínicos.'),
-    propNota('Hoy las cuentas se crean con scripts/crear_profesional.py: no hay API para listarlas, crearlas, cambiarles el área ni la contraseña. Haría falta un permiso propio (por ejemplo profesionales:administrar) solo para esta cuenta, y que la institución salga siempre del token del administrador, nunca del formulario.'));
+    cabeza('Resumen','Las cuatro entidades de un vistazo. Solo conteos: ningún dato clínico ni de pacientes.'),
+    h('div',{class:'kpis'},kpi('Usuarios activos',act,'var(--brand)'),kpi('Cuentas sin acceso',sin,'#B42318','Bloqueadas o deshabilitadas'),
+      kpi('Pacientes registrados',ENTIDADES.reduce((s,[k])=>s+DB[k].pacientes.length,0),'#43A971','En las cuatro entidades'),kpi('Citas de hoy',ENTIDADES.reduce((s,[k])=>s+DB[k].citas.filter(hoy).length,0),'#E3B23C')),
+    h('div',{class:'g2'},ENTIDADES.map(tarjeta)),
+    propNota('Cada número sale de una base distinta (PostgreSQL, MySQL, MongoDB y Firestore). Haría falta un endpoint de resumen solo para el superusuario, que devuelva conteos y nunca datos de pacientes.'));
 }
 
-function profNuevoDrawer(){
-  const nom=inp('pf-n',{max:120}),ape=inp('pf-a',{max:120}),cor=inp('pf-c',{type:'email',max:254,ph:'nombre.apellido@hospital.gt'});
-  const rol=sel('pf-r',ROLES_H),area=sel('pf-ar',[['','Elige un área'],...DEPS.map(d=>[d.n,d.n])]);
-  const clave=inp('pf-p',{type:'password',max:128});clave.autocomplete='new-password';
+/* ---------- Usuarios y accesos (superusuario: todas las entidades · administrador: la suya) ---------- */
+function usuariosView(){
+  const sup=esSuper(),L=visibles(),fE=sup?S.fUsr:'T',fS=S.fEst,deEnt=L.filter(x=>fE==='T'||x.inst===fE);
+  const vis=deEnt.filter(x=>fS==='T'||(fS==='activa'&&!sinAcceso(x))||(fS==='sin'&&sinAcceso(x)))
+    .sort((a,b)=>ENTIDADES.findIndex(e=>e[0]===a.inst)-ENTIDADES.findIndex(e=>e[0]===b.inst)||(a.rol==='administrador'?-1:b.rol==='administrador'?1:0)||a.nombre.localeCompare(b.nombre));
+  const seg=(etq,opts,val,fn)=>h('div',{class:'seg',role:'group','aria-label':etq},opts.map(([k,t,v])=>h('button',{type:'button','aria-pressed':val===k?'true':'false',onclick:()=>{fn(k);render()}},`${t} ${v}`)));
+  const pagos=sup||['hospital_general','centro_pediatrico'].includes(cuenta().inst);
+  return h('div',{style:'display:grid;gap:16px'},
+    cabeza('Usuarios y accesos',sup?'Quién entra a cada entidad, con qué rol y con qué permisos. Cada cuenta pertenece a una sola entidad.':`Personal de ${cuenta().nombre}: altas, roles, permisos y acceso. Eliminar una cuenta o crearla en otra entidad lo hace la administración general.`,
+      h('button',{class:'btn',type:'button',onclick:()=>usuarioNuevoDrawer()},ic('user-plus',16),'Crear usuario')),
+    h('div',{class:'kpis'},kpi('Cuentas activas',L.filter(x=>!sinAcceso(x)).length,'var(--brand)'),kpi('Sin acceso',L.filter(sinAcceso).length,'#B42318','Bloqueadas o deshabilitadas'),
+      pagos&&kpi('Con acceso a pagos',L.filter(x=>!sinAcceso(x)&&x.perm.includes('pagos:ver')).length,'#E3B23C',sup?'Hospital y Pediátrico':null),
+      sup?kpi('Entidades',ENTIDADES.length,'#43A971','Una por cuenta'):kpi('Administración',adminActivo(cuenta().inst)?.nombre||'—','#43A971','Tu cuenta')),
+    h('div',{class:'row',style:'gap:10px 16px'},
+      sup&&seg('Filtrar por entidad',[['T','Todas',L.length],...ENTIDADES.map(e=>[e[0],e[4],L.filter(x=>x.inst===e[0]).length])],fE,k=>S.fUsr=k),
+      seg('Filtrar por estado',[['T','Todos',deEnt.length],['activa','Activas',deEnt.filter(x=>!sinAcceso(x)).length],['sin','Sin acceso',deEnt.filter(sinAcceso).length]],fS,k=>S.fEst=k)),
+    !vis.length?vacio('users','Sin usuarios','No hay cuentas con estos filtros.'):
+    h('div',{class:'tw'},h('table',{class:'nw'},h('thead',null,h('tr',null,['Usuario','Correo',sup&&'Entidad','Rol','Área','Estado','Alta'].filter(Boolean).map(t=>h('th',{text:t})))),
+      h('tbody',null,vis.map(x=>h('tr',{class:'clic',tabindex:'0',onclick:()=>usuarioDrawer(x.id),onkeydown:e=>{if(e.key==='Enter')usuarioDrawer(x.id)}},
+        h('td',null,h('button',{class:'lnk',type:'button',onclick:e=>{e.stopPropagation();usuarioDrawer(x.id)},text:`${x.tit?x.tit+' ':''}${x.nombre}`})),h('td',{text:x.correo}),sup&&h('td',null,chipEnt(x.inst)),
+        h('td',null,x.rol==='administrador'?chip('info','shield-check','Administrador/a'):rolTxt(x.rol)),h('td',{text:x.area||'—'}),h('td',null,chipP(x.estado)),h('td',{text:fFechaN(x.alta)})))))),
+    h('p',{class:'hint'},sup?'La cuenta de superusuario no aparece en esta lista: no pertenece a ninguna entidad y no tiene permisos clínicos.':'Las cuentas de administración solo las gestiona la administración general. Ninguna tiene permisos clínicos.'),
+    propNota(sup?'Hoy solo existe el administrador de cada entidad y la entidad sale de su token (012_administracion_profesionales.sql). El superusuario necesita endpoints que reciban la entidad, crear administradores y un DELETE lógico.'
+      :'Así funciona hoy el administrador de cada entidad (POST, GET y PATCH /profesionales con la entidad del token). Lo nuevo es que no puede eliminar ni tocar otras cuentas de administración.'));
+}
+
+/* casillas de permisos válidas para la entidad y el rol elegidos (secretaría: sin permisos clínicos) */
+function casillasPermisos(inst,rol,marcados){
+  if(rol==='administrador')return [h('p',{class:'hint',text:'Una cuenta de administración tiene un único permiso (profesionales:administrar) y ningún permiso clínico.'})];
+  return ASIGNABLES[inst].map(k=>{const [,t,d]=PERMS.find(x=>x[0]===k),vedado=rol==='secretaria'&&VEDADOS_SEC.includes(k);
+    const i=h('input',{type:'checkbox',value:k,checked:(k==='pacientes:leer'||(!vedado&&marcados.includes(k)))||null,disabled:(k==='pacientes:leer'||vedado)||null});
+    return h('label',{class:'check'},i,h('span',null,h('b',{text:t,style:'font-weight:560'}),(vedado?'No aplica a secretaría.':d)&&h('div',{class:'hint',text:vedado?'No aplica a secretaría.':d})))});
+}
+function usuarioNuevoDrawer(){
+  const sup=esSuper(),fija=sup?null:cuenta().inst;
+  const nom=inp('us-n',{max:120}),ape=inp('us-a',{max:120}),cor=inp('us-c',{type:'email',max:254,ph:'nombre.apellido@entidad.gt'});
+  const ent=sel('us-e',[['','Elige la entidad'],...ENTIDADES.map(e=>[e[0],e[1]])]),rol=sel('us-r',[['','Primero elige la entidad']]);
+  const instDe=()=>fija||ent.value;
+  const area=sel('us-ar',[['','Elige un área'],...DEPS.map(d=>[d.n,d.n])]),areaCampo=h('div',{hidden:true},campo('Área asignada',area,{id:'us-ar'}));
+  const clave=inp('us-p',{type:'password',max:128});clave.autocomplete='new-password';
   const verB=h('button',{class:'btn sec',type:'button','aria-label':'Mostrar contraseña',title:'Mostrar u ocultar'},ic('eye',16));
   verB.onclick=()=>{const v=clave.type==='password';clave.type=v?'text':'password';verB.replaceChildren(ic(v?'eye-off':'eye',16))};
   const genB=h('button',{class:'btn sec',type:'button',onclick:()=>{clave.value=genClave();clave.type='text';verB.replaceChildren(ic('eye-off',16));medidor()}},ic('wand-sparkles',16),'Generar');
   const med=h('div',{class:'pwmeter','aria-hidden':'true'},[0,1,2,3].map(()=>h('i'))),medT=h('span',{class:'hint'});
   function medidor(){const n=fuerza(clave.value);[...med.children].forEach((e,i)=>e.className=i<n?'on s'+n:'');medT.textContent=clave.value?`Seguridad: ${FZ[n]}`:''}
   clave.oninput=medidor;
-  const checks=PERMS_H.map(([k,t,d])=>{const i=h('input',{type:'checkbox',value:k,checked:PERM_SUG.medico.includes(k)||null,disabled:k==='pacientes:leer'||null});if(k==='pacientes:leer')i.checked=true;return h('label',{class:'check'},i,h('span',null,h('b',{text:t,style:'font-weight:560'}),d&&h('div',{class:'hint',text:d})))});
-  const sug=()=>{const s=PERM_SUG[rol.value];checks.forEach(l=>{const i=l.querySelector('input');i.checked=s.includes(i.value)})};
-  rol.onchange=sug;
-  const errs={n:h('div'),a:h('div'),c:h('div'),r:h('div'),p:h('div')};
+  const aviso='Elige primero la entidad: solo se muestran los permisos que aplican a ella.';
+  const permisos=h('div',{style:'display:grid;gap:10px'},h('p',{class:'hint',text:aviso}));
+  const pintarPermisos=()=>{const i=instDe();areaCampo.hidden=i!=='hospital_general'||rol.value==='administrador';
+    permisos.replaceChildren(...(i&&rol.value?casillasPermisos(i,rol.value,PERM_SUG[rol.value]):[h('p',{class:'hint',text:aviso})]))};
+  /* solo el superusuario crea administradores, y solo si la entidad aún no tiene uno activo */
+  const pintarRoles=()=>{const i=instDe();
+    const rs=!i?[['','Primero elige la entidad']]:[...ROLES_ENT[i],...(sup?[['administrador',adminActivo(i)?'Administrador/a (ya tiene uno activo)':'Administrador/a de la entidad']]:[])];
+    rol.replaceChildren(...rs.map(([k,t])=>h('option',{value:k,disabled:(k==='administrador'&&!!adminActivo(i))||null},t)));pintarPermisos()};
+  ent.onchange=pintarRoles;rol.onchange=pintarPermisos;
+  const errs={n:h('div'),a:h('div'),c:h('div'),e:h('div'),r:h('div'),p:h('div')};
   const msg=(el,t)=>el.replaceChildren(h('div',{class:'err',role:'alert'},ic('circle-alert',15),t));
   function guardar(){
-    Object.values(errs).forEach(e=>e.replaceChildren());[nom,ape,cor,area,clave].forEach(x=>x.classList.remove('bad'));let ok=true;
+    Object.values(errs).forEach(e=>e.replaceChildren());[nom,ape,cor,ent,area,clave].forEach(x=>x.classList.remove('bad'));let ok=true;const i=instDe();
     if(!nom.value.trim()){msg(errs.n,'Escribe los nombres.');nom.classList.add('bad');ok=false}
     if(!ape.value.trim()){msg(errs.a,'Escribe los apellidos.');ape.classList.add('bad');ok=false}
     const em=cor.value.trim().toLowerCase();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){msg(errs.c,'Escribe un correo válido.');cor.classList.add('bad');ok=false}
-    else if(HPROF.some(x=>x.correo===em)||CORREOS_USADOS.includes(em)){msg(errs.c,'Ya existe una cuenta con ese correo. El servidor responde 409; cada profesional necesita uno propio.');cor.classList.add('bad');ok=false}
-    if(!area.value){msg(errs.r,'Asigna el área donde trabajará.');area.classList.add('bad');ok=false}
+    else if(USUARIOS.some(x=>x.correo===em)||CORREOS_USADOS.includes(em)){msg(errs.c,'Ya existe una cuenta con ese correo. El servidor responde 409; cada persona necesita uno propio.');cor.classList.add('bad');ok=false}
+    if(!i){msg(errs.e,'Elige la entidad a la que tendrá acceso.');ent.classList.add('bad');ok=false}
+    else if(rol.value==='administrador'&&adminActivo(i)){msg(errs.e,'Esa entidad ya tiene un administrador activo. Deshabilítalo o elimínalo antes de crear otro (409).');ok=false}
+    else if(i==='hospital_general'&&rol.value!=='administrador'&&!area.value){msg(errs.r,'Asigna el área donde trabajará.');area.classList.add('bad');ok=false}
     if(fuerza(clave.value)<3){msg(errs.p,clave.value.length<12?'Usa al menos 12 caracteres.':'Mezcla mayúsculas, minúsculas, números o símbolos.');clave.classList.add('bad');ok=false}
     if(!ok)return;
-    const perm=checks.map(l=>l.querySelector('input')).filter(i=>i.checked).map(i=>i.value);
-    const nuevo={id:'h'+(HPROF.length+1),tit:'',nombre:`${nom.value.trim()} ${ape.value.trim()}`,correo:em,rol:rol.value,area:area.value,estado:'activa',alta:'2026-10-23',perm};
-    HPROF.unshift(nuevo);S.fProf='T';render();credencialesModal(nuevo,clave.value,'Cuenta creada');
+    const perm=rol.value==='administrador'?['profesionales:administrar']:[...permisos.querySelectorAll('input:checked')].map(x=>x.value);
+    const nuevo=U('n'+(USUARIOS.length+1),i,'',`${nom.value.trim()} ${ape.value.trim()}`,em,rol.value,i==='hospital_general'&&rol.value!=='administrador'?area.value:null,'activa','2026-10-23',perm);
+    nuevo.cambiar=true;USUARIOS.unshift(nuevo);anotar('alta',nuevo,`${rolTxt(nuevo.rol)}${nuevo.area?' · '+nuevo.area:''} · ${nuevo.perm.length} permisos`);S.fUsr='T';S.fEst='T';render();credencialesModal(nuevo,clave.value,'Cuenta creada');
   }
-  drawer('Registrar profesional',[
-    banner('info','building-2',h('b',{text:'Se crea en el Hospital General. '}),'La institución es siempre la tuya; no se puede elegir otra.'),
-    h('div',{class:'grid2'},campo('Nombres',nom,{id:'pf-n',err:null}),campo('Apellidos',ape,{id:'pf-a'})),errs.n,errs.a,
-    campo('Correo de ingreso',cor,{id:'pf-c',hint:'Será su usuario. No se puede repetir en todo el sistema.'}),errs.c,
-    h('div',{class:'grid2'},campo('Rol',rol,{id:'pf-r'}),campo('Área asignada',area,{id:'pf-ar'})),errs.r,
-    campo('Contraseña inicial',h('div',{class:'pw'},clave,verB,genB),{id:'pf-p',hint:'Mínimo 12 caracteres. Se guarda cifrada (Argon2): nadie podrá volver a verla.'}),med,medT,errs.p,
-    h('fieldset',{style:'border:0;padding:0;margin:0;display:grid;gap:10px'},h('legend',{class:'lbl',style:'padding:0;margin-bottom:8px',text:'Permisos'}),
-      h('p',{class:'hint',text:'Los permisos se dan uno por uno, no por rol. Al cambiar el rol se sugiere un conjunto que puedes ajustar.'}),checks),
-    propNota('Crear cuentas, asignar área y dar permisos hoy se hace con scripts. Esta pantalla supone un POST /profesionales protegido por un permiso propio.')],
+  drawer('Crear usuario',[
+    sup?banner('info','shield-check',h('b',{text:'Tú eliges la entidad. '}),'La cuenta solo podrá entrar a esa entidad; para trabajar en otra hace falta una cuenta distinta.')
+       :banner('info','building-2',h('b',{text:`Se crea en ${cuenta().nombre}. `}),'Es siempre tu entidad. Para crear una cuenta en otra, pídelo a la administración general.'),
+    h('div',{class:'grid2'},campo('Nombres',nom,{id:'us-n'}),campo('Apellidos',ape,{id:'us-a'})),errs.n,errs.a,
+    campo('Correo de ingreso',cor,{id:'us-c',hint:'Será su usuario. No se puede repetir en todo el sistema.'}),errs.c,
+    sup?h('div',{class:'grid2'},campo('Entidad',ent,{id:'us-e'}),campo('Rol',rol,{id:'us-r',hint:'Los roles dependen de la entidad.'})):campo('Rol',rol,{id:'us-r'}),errs.e,
+    areaCampo,errs.r,
+    campo('Contraseña inicial',h('div',{class:'pw'},clave,verB,genB),{id:'us-p',hint:'Mínimo 12 caracteres. Se guarda cifrada (Argon2): nadie podrá volver a verla.'}),med,medT,errs.p,
+    h('fieldset',{style:'border:0;padding:0;margin:0;display:grid;gap:10px'},h('legend',{class:'lbl',style:'padding:0;margin-bottom:8px',text:'Permisos'}),permisos),
+    propNota(sup?'Supone POST /profesionales con el campo establecimiento, solo para el superusuario. El servidor sigue validando roles y permisos por entidad y que haya un solo administrador activo en cada una.'
+      :'Así funciona hoy POST /profesionales: la entidad sale de tu token y el servidor valida roles y permisos.')],
     [h('button',{class:'btn sec',type:'button',onclick:cerrar},'Cancelar'),h('button',{class:'btn',type:'button',onclick:guardar},ic('user-plus',16),'Crear cuenta')]);
+  if(fija)pintarRoles();
 }
 
 function credencialesModal(p,clave,titulo){
   const campoCopia=(etq,val,mono)=>h('div',{class:'cred'},h('small',{text:etq}),h('div',{class:'row',style:'justify-content:space-between;flex-wrap:nowrap'},h('b',{class:mono?'mono':null,style:'overflow-wrap:anywhere',text:val}),h('button',{class:'btn sec sm',type:'button',onclick:()=>copiar(val,`${etq} copiado`)},ic('copy',14),'Copiar')));
   modal(titulo,h('div',{style:'display:grid;gap:12px'},
-    h('p',{text:`${p.tit?p.tit+' ':''}${p.nombre} · ${rolTxt(p.rol)} · ${p.area}`}),
+    h('p',{text:`${p.tit?p.tit+' ':''}${p.nombre} · ${rolTxt(p.rol)} · ${entDe(p.inst)[1]}${p.area?' · '+p.area:''}`}),
     campoCopia('Correo',p.correo,false),campoCopia('Contraseña',clave,true),
     banner('warn','triangle-alert',h('b',{text:'Esta contraseña se muestra una sola vez. '}),'Entrégala por un canal seguro. Si se pierde, hay que restablecerla.'),
-    h('p',{class:'hint',text:'Hoy el API no tiene cambio de contraseña: la persona seguirá usando esta hasta que exista ese endpoint.'})),
+    h('p',{class:'hint',text:'Al entrar por primera vez, la persona debe elegir su propia contraseña.'})),
     [h('button',{class:'btn',type:'button',onclick:cerrar},'Listo, ya la entregué')],true);
 }
 
-function profDrawer(id){
-  const p=HPROF.find(x=>x.id===id);if(!p)return;
-  const area=sel('pd-ar',DEPS.map(d=>[d.n,d.n]),{value:p.area,onchange:e=>{p.area=e.target.value;render();profDrawer(id);toast('Área actualizada')}});
+function usuarioDrawer(id){
+  const p=USUARIOS.find(x=>x.id===id);if(!p||p.estado==='eliminada'||!visibles().includes(p))return;/* el administrador no abre cuentas de otra entidad */
+  const gestiona=puedeGestionar(p);
+  const area=gestiona&&p.inst==='hospital_general'&&p.rol!=='administrador'&&sel('ud-ar',DEPS.map(d=>[d.n,d.n]),{value:p.area,onchange:e=>{anotar('cambio',p,`Área: ${p.area} → ${e.target.value}`);p.area=e.target.value;render();usuarioDrawer(id);toast('Área actualizada')}});
   const acc=[];
-  if(p.estado==='activa')acc.push(h('button',{class:'btn danger',type:'button',onclick:()=>modal('Desactivar cuenta',h('div',{style:'display:grid;gap:10px'},h('p',{text:`${p.nombre} ya no podrá iniciar sesión.`}),banner('info','shield-check','El API relee la cuenta en cada petición: el acceso se corta de inmediato, sin esperar a que venza su token. Nada se borra del historial.')),[h('button',{class:'btn sec',type:'button',onclick:()=>profDrawer(id)},'Volver'),h('button',{class:'btn danger solid',type:'button',onclick:()=>{p.estado='inactiva';render();profDrawer(id);toast('Cuenta desactivada')}},'Desactivar')])},ic('ban',16),'Desactivar cuenta'));
-  else acc.push(h('button',{class:'btn',type:'button',onclick:()=>{p.estado='activa';render();profDrawer(id);toast('Cuenta reactivada')}},ic('circle-check',16),p.estado==='bloqueada'?'Desbloquear cuenta':'Reactivar cuenta'));
+  if(gestiona){
+    /* eliminar: solo el superusuario; baja definitiva lógica */
+    if(esSuper())acc.push(h('button',{class:'btn danger',type:'button',onclick:()=>modal('Eliminar cuenta',h('div',{style:'display:grid;gap:10px'},
+      h('p',{text:`${p.nombre} dejará de existir para ${entDe(p.inst)[1]}: no podrá iniciar sesión ni volver a habilitarse.`}),
+      banner('info','shield-check','Es una baja definitiva lógica: sus consultas, citas y la bitácora de administración se conservan con su nombre. El correo queda reservado.')),
+      [h('button',{class:'btn sec',type:'button',onclick:()=>usuarioDrawer(id)},'Volver'),h('button',{class:'btn danger solid',type:'button',onclick:()=>{p.estado='eliminada';anotar('eliminar',p,'Baja definitiva');cerrar();render();toast('Cuenta eliminada')}},'Eliminar cuenta')])},ic('trash-2',16),'Eliminar'));
+    if(p.estado==='activa')acc.push(h('button',{class:'btn danger',type:'button',onclick:()=>modal('Deshabilitar cuenta',h('div',{style:'display:grid;gap:10px'},h('p',{text:`${p.nombre} no podrá iniciar sesión hasta que alguien la vuelva a habilitar.`}),banner('info','shield-check','El API relee la cuenta en cada petición: el acceso se corta de inmediato, sin esperar a que venza su token. Nada se borra.')),[h('button',{class:'btn sec',type:'button',onclick:()=>usuarioDrawer(id)},'Volver'),h('button',{class:'btn danger solid',type:'button',onclick:()=>{p.estado='inactiva';anotar('cambio',p,'Estado: deshabilitada');render();usuarioDrawer(id);toast('Cuenta deshabilitada')}},'Deshabilitar')])},ic('ban',16),'Deshabilitar'));
+    else acc.push(h('button',{class:'btn',type:'button',onclick:()=>{anotar('cambio',p,p.estado==='bloqueada'?'Desbloqueada':'Estado: habilitada');p.estado='activa';render();usuarioDrawer(id);toast('Cuenta habilitada')}},ic('circle-check',16),p.estado==='bloqueada'?'Desbloquear':'Habilitar'));
+  }
   drawer(`${p.tit?p.tit+' ':''}${p.nombre}`,[
-    h('div',{class:'row'},chipP(p.estado),propChip()),
-    h('dl',{class:'dl'},h('dt',{text:'Correo'}),h('dd',{text:p.correo}),h('dt',{text:'Rol'}),h('dd',{text:rolTxt(p.rol)}),h('dt',{text:'Alta'}),h('dd',{text:fFechaN(p.alta)})),
-    campo('Área asignada',area,{id:'pd-ar'}),
+    h('div',{class:'row'},chipP(p.estado),p.cambiar&&p.estado==='activa'&&chip('warn','key-round','Debe cambiar su contraseña'),propChip()),
+    !gestiona&&banner('neu','lock',h('b',{text:'Solo lectura. '}),'Las cuentas de administración solo las gestiona la administración general.'),
+    h('dl',{class:'dl'},h('dt',{text:'Correo'}),h('dd',{text:p.correo}),h('dt',{text:'Entidad'}),h('dd',null,chipEnt(p.inst)),h('dt',{text:'Rol'}),h('dd',{text:rolTxt(p.rol)}),h('dt',{text:'Alta'}),h('dd',{text:fFechaN(p.alta)})),
+    gestiona&&h('p',{class:'hint',text:'La entidad no se cambia: para que alguien trabaje en otra, se crea una cuenta nueva en esa entidad.'}),
+    area&&campo('Área asignada',area,{id:'ud-ar'}),
     h('section',null,h('h3',{style:'margin-bottom:8px',text:'Permisos'}),h('div',{class:'row',style:'flex-wrap:wrap;gap:6px'},p.perm.map(k=>h('span',{class:'chip neu mono',text:k})))),
-    h('section',null,h('h3',{style:'margin-bottom:8px',text:'Contraseña'}),h('button',{class:'btn sec',type:'button',onclick:()=>{const c=genClave();credencialesModal(p,c,'Contraseña restablecida')}},ic('key-round',16),'Restablecer contraseña'),h('p',{class:'hint',style:'margin-top:6px',text:'Genera una nueva y la muestra una sola vez.'})),
-    propNota('Cambiar área, permisos o estado y restablecer contraseñas necesitan endpoints nuevos (PATCH /profesionales/{id}).')],acc);
+    gestiona&&h('section',null,h('h3',{style:'margin-bottom:8px',text:'Contraseña'}),h('button',{class:'btn sec',type:'button',onclick:()=>{const c=genClave();p.cambiar=true;anotar('restablecer_contrasena',p,'Contraseña nueva entregada; debe cambiarla al entrar');credencialesModal(p,c,'Contraseña restablecida')}},ic('key-round',16),'Restablecer contraseña'),h('p',{class:'hint',style:'margin-top:6px',text:'Genera una nueva y la muestra una sola vez.'})),
+    propNota(esSuper()?'PATCH /profesionales/{id} con la entidad como parámetro y un DELETE /profesionales/{id} lógico, solo para el superusuario.':'PATCH /profesionales/{id} existe hoy para la entidad de tu token. Eliminar no está disponible para el administrador.')],acc.length?acc:null);
+}
+
+/* ---------- Bitácora de administración (identidad.bitacora_profesionales, 012): solo se agrega ---------- */
+Object.assign(S,{fBit:'T',fBitE:'T'});
+['h4','p2','l2'].forEach(id=>{USUARIOS.find(x=>x.id===id).cambiar=true});/* debe_cambiar_contrasena */
+const BIT=(f,actor,accion,obj,det)=>({f,actor,accion,obj,inst:USUARIOS.find(x=>x.id===obj).inst,det});
+const BITACORA=[
+  BIT('2026-10-22T16:40:00-06:00','ha','restablecer_contrasena','h4','Contraseña nueva entregada; debe cambiarla al entrar'),
+  BIT('2026-10-22T11:05:00-06:00','pa','cambio','p3','Permisos: + pagos:ver, + pagos:registrar'),
+  BIT('2026-10-21T09:30:00-06:00','la','alta','l2','Laboratorista · 2 permisos'),
+  BIT('2026-10-20T15:12:00-06:00','super','cambio','d2','Estado: deshabilitada'),
+  BIT('2026-10-19T10:00:00-06:00','pa','restablecer_contrasena','p2','Contraseña nueva entregada; debe cambiarla al entrar'),
+  BIT('2026-10-17T08:45:00-06:00','d3','cambiar_contrasena','d3','Eligió su propia contraseña'),
+  BIT('2026-10-16T14:20:00-06:00','ha','cambio','h6','Permisos: + pagos:ver, + pagos:registrar'),
+  BIT('2026-10-15T09:10:00-06:00','ha','cambio','h8','Estado: deshabilitada'),
+  BIT('2026-10-14T13:00:00-06:00','super','alta','da','Administrador/a · Clínica Odontológica'),
+  BIT('2026-10-13T10:35:00-06:00','ha','cambio','h3','Permisos: + historiales:archivar')];
+const ACC_B={alta:['ok','user-plus','Alta'],cambio:['info','pencil','Cambio'],restablecer_contrasena:['warn','key-round','Contraseña restablecida'],cambiar_contrasena:['neu','key-round','Cambió su contraseña'],eliminar:['crit','trash-2','Eliminación']};
+/* quién actúa: el superusuario o el administrador de la cuenta actual */
+const actorId=()=>esSuper()?'super':(USUARIOS.find(x=>x.correo===cuenta().correo)||{}).id;
+let BIT_N=0;
+function anotar(accion,p,det){BITACORA.unshift({f:new Date(NOW.getTime()+(++BIT_N)*60000).toISOString(),actor:actorId(),accion,obj:p.id,inst:p.inst,det})}
+const nombreDe=id=>id==='super'?'Superusuario':(u=>u?`${u.nombre}${u.estado==='eliminada'?' (eliminada)':''}`:'—')(USUARIOS.find(x=>x.id===id));
+
+function bitacoraView(){
+  const sup=esSuper(),fA=S.fBit,fE=sup?S.fBitE:'T';
+  const base=BITACORA.filter(b=>sup||b.inst===cuenta().inst),deEnt=base.filter(b=>fE==='T'||b.inst===fE);
+  const grupo={T:()=>true,alta:b=>b.accion==='alta',cambio:b=>b.accion==='cambio',clave:b=>b.accion.endsWith('contrasena'),eliminar:b=>b.accion==='eliminar'};
+  const vis=deEnt.filter(grupo[fA]).sort((a,b)=>b.f.localeCompare(a.f));
+  const seg=(etq,opts,val,fn)=>h('div',{class:'seg',role:'group','aria-label':etq},opts.map(([k,t,v])=>h('button',{type:'button','aria-pressed':val===k?'true':'false',onclick:()=>{fn(k);render()}},`${t} ${v}`)));
+  return h('div',{style:'display:grid;gap:16px'},
+    cabeza('Bitácora',sup?'Quién hizo qué en la administración de las cuatro entidades.':`Quién hizo qué en la administración de ${cuenta().nombre}.`),
+    h('div',{class:'row',style:'gap:10px 16px'},
+      sup&&seg('Filtrar por entidad',[['T','Todas',base.length],...ENTIDADES.map(e=>[e[0],e[4],base.filter(b=>b.inst===e[0]).length])],fE,k=>S.fBitE=k),
+      seg('Filtrar por acción',[['T','Todas',deEnt.length],['alta','Altas',deEnt.filter(grupo.alta).length],['cambio','Cambios',deEnt.filter(grupo.cambio).length],['clave','Contraseñas',deEnt.filter(grupo.clave).length],['eliminar','Eliminaciones',deEnt.filter(grupo.eliminar).length]],fA,k=>S.fBit=k)),
+    !vis.length?vacio('history','Sin movimientos','No hay movimientos con estos filtros.'):
+    h('div',{class:'tw'},h('table',{class:'nw'},h('thead',null,h('tr',null,['Fecha','Quién','Acción','Cuenta',sup&&'Entidad','Detalle'].filter(Boolean).map(t=>h('th',{text:t})))),
+      h('tbody',null,vis.map(b=>h('tr',null,h('td',{text:fFH(b.f)}),h('td',{text:nombreDe(b.actor)}),h('td',null,chipM(ACC_B,b.accion)),h('td',{text:nombreDe(b.obj)}),sup&&h('td',null,chipEnt(b.inst)),h('td',{class:'wrap',text:b.det})))))),
+    h('p',{class:'hint'},'Solo se agrega: nadie la edita ni la borra. Nunca guarda contraseñas ni sus hashes.'),
+    propNota('La tabla identidad.bitacora_profesionales ya existe (012), pero ningún endpoint la lee. Haría falta GET /profesionales/bitacora con el mismo alcance que el listado: el superusuario todas las entidades, el administrador la suya.'));
+}
+
+/* ---------- Resumen del administrador de una entidad: lo que tiene que atender ---------- */
+function resumenEntidadView(){
+  const inst=cuenta().inst,L=visibles(),per=L.filter(x=>x.rol!=='administrador');
+  const bloq=per.filter(x=>x.estado==='bloqueada'),desh=per.filter(x=>x.estado==='inactiva'),cambiar=per.filter(x=>x.estado==='activa'&&x.cambiar);
+  const fila=(x,motivo)=>h('div',{class:'emrow'},chipP(x.estado),h('div',{class:'m'},h('b',{text:`${x.tit?x.tit+' ':''}${x.nombre}`}),h('small',{text:`${rolTxt(x.rol)} · ${motivo}`})),
+    h('button',{class:'btn sec sm',type:'button',onclick:()=>usuarioDrawer(x.id)},'Abrir'));
+  const atender=[...bloq.map(x=>fila(x,'Bloqueada por intentos fallidos: desbloquéala si la persona lo pide')),...cambiar.map(x=>fila(x,'Todavía no elige su propia contraseña'))];
+  const activos=per.filter(x=>!sinAcceso(x));
+  const movs=BITACORA.filter(b=>b.inst===inst).sort((a,b)=>b.f.localeCompare(a.f)).slice(0,4);
+  return h('div',{style:'display:grid;gap:16px'},
+    cabeza('Resumen',`Personal de ${cuenta().nombre} y lo que necesita tu atención.`),
+    h('div',{class:'kpis'},kpi('Personal activo',activos.length,'var(--brand)'),kpi('Bloqueadas',bloq.length,'#B42318','Por intentos fallidos'),kpi('Deshabilitadas',desh.length,'#8A93A6'),kpi('Deben cambiar su contraseña',cambiar.length,'#E3B23C')),
+    h('div',{class:'g2'},
+      h('section',{class:'card'},h('div',{class:'ch'},h('h2',{text:'Requieren atención'}),h('small',{text:`${atender.length} ${atender.length===1?'cuenta':'cuentas'}`})),
+        atender.length?h('div',{class:'emlist'},atender):h('p',{class:'muted',text:'Nada pendiente.'})),
+      h('section',{class:'card'},h('div',{class:'ch'},h('h2',{text:'Personal activo'}),h('small',{text:'Por rol'+(inst==='hospital_general'?' y por área':'')})),
+        h('div',{class:'legrow'},ROLES_ENT[inst].map(([k,t])=>h('div',null,h('span',{text:t}),h('span',{class:'v',text:String(activos.filter(x=>x.rol===k).length)})))),
+        inst==='hospital_general'&&h('div',{class:'legrow',style:'margin-top:12px'},DEPS.map(d=>h('div',null,h('span',{text:d.n}),h('span',{class:'v',text:String(activos.filter(x=>x.area===d.n).length)})))))),
+    h('section',{class:'card'},h('div',{class:'ch'},h('h2',{text:'Últimos movimientos'}),h('button',{class:'btn ghost sm',type:'button',onclick:()=>navegar('bitacora')},ic('history',15),'Ver bitácora')),
+      movs.length?h('div',{class:'emlist'},movs.map(b=>h('div',{class:'emrow'},chipM(ACC_B,b.accion),h('div',{class:'m'},h('b',{text:nombreDe(b.obj)}),h('small',{text:`${b.det} · ${nombreDe(b.actor)}`})),h('small',{class:'muted',text:fFechaC(b.f)})))):h('p',{class:'muted',text:'Sin movimientos todavía.'})),
+    propNota('Sale de identidad.profesional (estado, bloqueado_hasta y debe_cambiar_contrasena) y de la bitácora. Haría falta GET /profesionales/resumen con el alcance del administrador; nada de esto toca datos clínicos.'));
 }
 
 /* ============ Centro Pediátrico · tutores, lotes de vacunas, facturación y percentiles ============ */
@@ -2469,10 +2667,11 @@ const totF=f=>f.lineas.reduce((s,l)=>s+l[1]*l[2],0);
 const FAC_P={Emitida:['warn','clock','Por cobrar'],Pagada:['ok','check','Pagada'],Anulada:['neu','ban','Anulada']};
 function factDrawer(f){
   drawer(`Factura ${f.no}`,[h('div',{class:'row'},chipM(FAC_P,f.estado),propChip()),
+    esPlataforma()&&banner('neu','eye','Solo lectura: las facturas las cobra o anula el personal del Centro Pediátrico.'),
     h('dl',{class:'dl'},h('dt',{text:'Paciente'}),h('dd',{text:f.pac}),h('dt',{text:'Facturada a'}),h('dd',{text:`${f.tutor} (tutor)`}),h('dt',{text:'Fecha'}),h('dd',{text:fFH(f.f)}),f.pago&&h('dt',{text:'Pago'}),f.pago&&h('dd',{text:f.pago})),
     h('div',{class:'tw'},h('table',null,h('thead',null,h('tr',null,['Concepto','Cant.','P. unitario','Subtotal'].map(t=>h('th',{text:t})))),
       h('tbody',null,f.lineas.map(l=>h('tr',null,h('td',{text:l[0]}),h('td',{text:String(l[1])}),h('td',{text:moneda(l[2])}),h('td',{text:moneda(l[1]*l[2])}))),h('tr',null,h('td',{colspan:3},h('b',{text:'Total'})),h('td',null,h('b',{text:moneda(totF(f))}))))))],
-    f.estado==='Emitida'?[h('button',{class:'btn sec',type:'button',onclick:()=>{f.estado='Anulada';cerrar();render();toast('Factura anulada')}},'Anular'),h('button',{class:'btn',type:'button',onclick:()=>{f.estado='Pagada';f.pago='Efectivo';cerrar();render();toast('Pago registrado')}},ic('check',16),'Marcar como pagada')]:null);
+    f.estado==='Emitida'&&!esPlataforma()?[h('button',{class:'btn sec',type:'button',onclick:()=>{f.estado='Anulada';cerrar();render();toast('Factura anulada')}},'Anular'),h('button',{class:'btn',type:'button',onclick:()=>{f.estado='Pagada';f.pago='Efectivo';cerrar();render();toast('Pago registrado')}},ic('check',16),'Marcar como pagada')]:null);
 }
 function facturacionView(){
   if(S.datos==='cargando')return h('div',null,cabeza('Facturación','Cargando…'),skeleton(6));
