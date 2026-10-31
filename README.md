@@ -24,8 +24,9 @@ las adendas, la corrección de datos/alergias y las **citas con no-solape** func
 **los cuatro motores**. Los módulos propios de cada establecimiento (odontograma en
 Firestore, crecimiento y vacunación en MySQL, órdenes y resultados de laboratorio en
 MongoDB; camas, ingresos y cobros en PostgreSQL; tutores y facturación en MySQL) responden
-501 en los demás. La administración de profesionales (una cuenta de administración por
-institución) y el cambio de contraseña funcionan para todas. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
+501 en los demás. La administración de profesionales es de **dos niveles**: un
+superusuario de plataforma (sin institución ni acceso clínico, el único que elimina) y un
+administrador por institución; ambos, y el cambio de contraseña, funcionan para todas. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
 migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
 
 **Frontend:** pendiente. Decisión: HTML/JS sencillo servido por la misma FastAPI (sin
@@ -144,10 +145,12 @@ obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID
 | `POST /api/v1/pacientes/{id}/archivo` | Baja por traslado, fallecimiento o causa administrativa (`historiales:archivar`). |
 | `POST /api/v1/citas`, `GET /api/v1/citas` | Agendar y ver agenda (`citas:gestionar`, `citas:leer`). |
 | `POST /api/v1/citas/{id}/estado` | Atendida, cancelada (con motivo) o no asistió. |
-| `POST/GET/PATCH /api/v1/profesionales` | Administración del personal de tu institución (`profesionales:administrar`). |
+| `POST/GET/PATCH/DELETE /api/v1/profesionales` | Administración del personal: tu institución (`profesionales:administrar`) o cualquiera (`plataforma:administrar`, el único que elimina). |
+| `GET /api/v1/profesionales/resumen`, `/bitacora` | Resumen del personal y bitácora de administración con el alcance de cada nivel. |
+| `GET /api/v1/plataforma/resumen` | Solo superusuario: conteos de las cuatro entidades. |
 | `POST /api/v1/auth/cambiar-contrasena` | Cambia tu contraseña y devuelve un token nuevo. |
 | `/api/v1/camas`, `/api/v1/ingresos`, `/api/v1/hospital/resumen` | Hospital General: camas, emergencias e ingresos, inicio. |
-| `/api/v1/cobros`, `/api/v1/pacientes/{id}/cobros` | Cobros y pagos (hospital y centro pediátrico; `pagos:ver` / `pagos:registrar`). |
+| `/api/v1/cobros`, `/api/v1/pacientes/{id}/cobros` | Cobros y pagos (hospital y centro pediátrico; `pagos:ver` / `pagos:registrar`). En pediatría la factura va a nombre del tutor y se puede anular. El superusuario lee con `?establecimiento=`. |
 | `/api/v1/pacientes/{id}/tutores` | Tutores del paciente (centro pediátrico). |
 | `GET /api/v1/laboratorio/ordenes` | Tablero de órdenes del laboratorio. |
 | `GET/PUT /api/v1/pacientes/{id}/odontograma` | Odontograma FDI; el estado de la pieza debe estar en la lista fija, si no responde 422 (`historiales:leer` / `consultas:registrar`). |
@@ -167,6 +170,8 @@ disponible (por ejemplo, Firestore sin clave).
 - `database/postgresql/`: esquema del hospital, identidad y cuentas limitadas
   (`008`: escrituras de la API; `009`: citas/adendas; `010`: integridad; `011`: permisos de laboratorio).
 - `database/mysql/006`–`010`: citas, adendas, pediatría (crecimiento y vacunas), sus permisos y `010` (sin stock por lote).
+- `database/mysql/015` y `016`: factura a nombre del tutor y anulación (con sus permisos).
+- `database/postgresql/015`: administración en dos niveles ([plan y diferencias](docs/administracion_general.md)).
 - `scripts/cargar_catalogos.py` y `database/ejemplos/`: carga de catálogos de vacunas y pruebas (datos DEMO).
 - [Documentación del backend](documentacion-backend.md).
 - [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md).
@@ -208,9 +213,10 @@ sin configurar un entorno de pruebas separado.
 El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
 Pendiente: hacer los mockups y el frontend ([plan](docs/frontend.md)), redactar el
 documento comparativo, probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
-aplica las migraciones nuevas (PostgreSQL 009–014, MySQL 006–014 y repetir el JS de MongoDB:
-sección 14 de la documentación) y crea la cuenta de administración de cada institución con
-`python -m scripts.crear_profesional ... --rol administrador`. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
+aplica las migraciones nuevas (PostgreSQL 009–015, MySQL 006–016 y repetir el JS de MongoDB:
+sección 14 de la documentación), crea el superusuario con
+`python -m scripts.crear_profesional ... --rol superusuario` y, desde la API, el administrador
+de cada institución. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
 usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja
 simultáneas (ver [operaciones comunes](docs/operaciones_comunes.md)).
 
