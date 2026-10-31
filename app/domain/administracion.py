@@ -5,7 +5,7 @@ Reglas (decisiones del equipo, brecha-api-frontend):
   permisos clinicos. Solo gestiona al personal de SU institucion: la institucion sale del
   token, nunca del formulario.
 - Los permisos se dan por profesional, no por rol. El rol fija solo la base
-  (pacientes:leer, o los de la secretaria/laboratorista si no se indican otros).
+  (pacientes:leer, o los de secretaria/laboratorista/odontologo si no se indican otros).
 - La secretaria existe solo en la Clinica Odontologica y nunca tiene permisos clinicos.
 - Las cuentas de administracion se crean con scripts/crear_profesional.py, no por la API.
 """

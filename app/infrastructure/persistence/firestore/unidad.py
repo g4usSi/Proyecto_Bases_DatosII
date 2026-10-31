@@ -8,9 +8,9 @@
     agendas/{uuid}_{AAAA-MM-DD}            horarios ocupados de un profesional en un dia
 
 Consistencia:
-- Altas simples (paciente, pieza del odontograma) van a un WriteBatch que se
+- Altas simples (paciente, perfil de profesional) van a un WriteBatch que se
   confirma en commit(): se aplica completo o no se aplica.
-- Operaciones que deben LEER antes de escribir (consulta en paciente activo,
+- Operaciones que deben LEER antes de escribir (consulta o pieza en paciente activo,
   archivar, agendar sin choques, cambiar estado de cita) usan una transaccion de
   Firestore dentro del metodo: si otro usuario cambia lo leido, Firestore reintenta.
 """
@@ -22,7 +22,7 @@ from types import TracebackType
 from typing import Any, Literal, Self
 from zoneinfo import ZoneInfo
 
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import Aborted, GoogleAPIError
 from google.auth.exceptions import GoogleAuthError
 from google.cloud import firestore
 from google.cloud.firestore import Client, DocumentReference, Transaction, WriteBatch
@@ -674,24 +674,40 @@ class RepositorioOdontogramaFirestore:
         )
 
     def actualizar_pieza(self, id_paciente: str, estado: EstadoPieza) -> None:
-        # Documento aparte del paciente: datos clinicos restringidos que la secretaria
-        # no necesita; acotado a 52 piezas, cabe holgado en 1 MiB.
-        self.unidad.lote.set(
-            self._referencia(id_paciente),
-            {
-                "piezas": {
-                    estado.pieza: {
-                        "estado": estado.estado.value,
-                        "superficies": [s.value for s in estado.superficies],
-                        "nota": estado.nota,
-                        "actualizado_por": estado.actualizado_por,
-                        "actualizado_en": estado.actualizado_en,
-                    }
+        paciente = self.unidad.pacientes.referencia(id_paciente)
+        if paciente is None:
+            raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+        referencia = self._referencia(id_paciente)
+
+        @firestore.transactional
+        def guardar_si_activo(transaccion: Transaction) -> None:
+            # Releer al paciente serializa con una baja simultanea: si lo archivan
+            # mientras tanto, Firestore repite esta funcion y aqui se rechaza.
+            actual = paciente.get(transaction=transaccion)
+            if not actual.exists:
+                raise PacienteNoEncontrado("El paciente no existe en tu institucion.")
+            if (actual.to_dict() or {}).get("estado") == "Archivado":
+                raise PacienteArchivado("El historial esta archivado; no admite cambios.")
+            # Documento aparte del paciente: datos clinicos restringidos que la secretaria
+            # no necesita; acotado a 52 piezas, cabe holgado en 1 MiB.
+            transaccion.set(
+                referencia,
+                {
+                    "piezas": {
+                        estado.pieza: {
+                            "estado": estado.estado.value,
+                            "superficies": [s.value for s in estado.superficies],
+                            "nota": estado.nota,
+                            "actualizado_por": estado.actualizado_por,
+                            "actualizado_en": estado.actualizado_en,
+                        }
+                    },
+                    "actualizado_en": firestore.SERVER_TIMESTAMP,
                 },
-                "actualizado_en": firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
+                merge=True,
+            )
+
+        guardar_si_activo(self.unidad.cliente.transaction())
 
 
 class UnidadTrabajoFirestore:
@@ -737,6 +753,13 @@ class UnidadTrabajoFirestore:
             logger.warning("Firestore no disponible: %s", exc_value)
             raise IntegracionNoConfigurada(
                 "La base de la clinica odontologica no esta disponible."
+            ) from exc_value
+        # Al agotar sus reintentos, una transaccion lanza ValueError con Aborted como causa.
+        if isinstance(exc_value, ValueError) and isinstance(exc_value.__cause__, Aborted):
+            logger.warning("Transaccion de Firestore sin reintentos: %s", exc_value)
+            raise IntegracionNoConfigurada(
+                "La clinica odontologica tiene demasiadas operaciones simultaneas; "
+                "intenta de nuevo."
             ) from exc_value
         return False
 
