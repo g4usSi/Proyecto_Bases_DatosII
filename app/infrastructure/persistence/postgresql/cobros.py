@@ -186,8 +186,15 @@ class RepositorioCobrosPostgreSQL:
     # ------------------------------------------------------------------ escritura
 
     def abrir(
-        self, id_paciente: str, id_atencion: str, descripcion: str | None, ahora: datetime
+        self,
+        id_paciente: str,
+        id_atencion: str,
+        descripcion: str | None,
+        ahora: datetime,
+        id_tutor: str | None = None,
     ) -> Cobro:
+        if id_tutor is not None:
+            raise DatosInvalidos("El Hospital General no factura a nombre de un tutor.")
         paciente, atencion = entero_positivo(id_paciente), entero_positivo(id_atencion)
         fila = None
         if paciente is not None and atencion is not None:

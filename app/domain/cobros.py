@@ -4,8 +4,9 @@
 - Hospital: un cobro por atencion (consulta o ingreso). Cada cargo usa la TARIFA vigente de
   un servicio y la congela; los pagos se anulan (no se borran); estados abierto -> cerrado
   -> pagado, o anulado sin pagos.
-- Centro Pediatrico: una factura por consulta. Cada cargo lleva concepto y precio; los
-  totales los mantienen triggers. Pagado = saldo cero. No hay cierre ni anulacion.
+- Centro Pediatrico: una factura por consulta, a nombre de un tutor del paciente (por defecto
+  el principal). Cada cargo lleva concepto y precio; los totales los mantienen triggers.
+  Pagado = saldo cero. Se anula solo sin pagos (MySQL 015); no hay cierre.
 
 Los montos son Decimal (en JSON viajan como texto: "150.00") para no perder centavos.
 """
@@ -63,6 +64,14 @@ class Pago:
 
 
 @dataclass(frozen=True, slots=True)
+class TitularCobro:
+    """A quien se factura (Centro Pediatrico: un tutor del paciente)."""
+
+    id_tutor: str
+    nombre: str
+
+
+@dataclass(frozen=True, slots=True)
 class Cobro:
     id_cobro: str
     id_paciente: str
@@ -74,6 +83,7 @@ class Cobro:
     pagado: Decimal
     cerrado_en: datetime | None = None
     descripcion: str | None = None
+    facturado_a: TitularCobro | None = None
     cargos: tuple[Cargo, ...] = field(default_factory=tuple)
     pagos: tuple[Pago, ...] = field(default_factory=tuple)
 

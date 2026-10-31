@@ -41,6 +41,7 @@ from app.domain.paciente import (
     NuevoPaciente,
 )
 from app.domain.pediatria import EstadoDosis, NuevoControl
+from app.domain.tutores import NuevoTutor, Vinculo
 from app.infrastructure.persistence.mysql.unidad import UnidadTrabajoMySQL
 from app.main import create_app
 from scripts.sincronizar_profesionales import sincronizar_centro_pediatrico
@@ -79,6 +80,7 @@ def mysql_app(mysql_pruebas):
         "011_permisos_profesionales.sql",
         "012_permisos_cobros.sql",
         "014_permisos_tutores.sql",
+        "016_permisos_facturacion.sql",
     ):
         texto = (PROJECT_ROOT / "database/mysql" / archivo).read_text(encoding="utf-8")
         texto = texto.replace("historiales_app", usuario)
@@ -1368,11 +1370,12 @@ def test_facturacion_cargos_pagos_y_saldo(centro):
         for operacion in (
             lambda: unidad.cobros.anular_pago(identificador, cobro.id_cobro, "1"),
             lambda: unidad.cobros.cerrar(identificador, cobro.id_cobro, ahora),
-            lambda: unidad.cobros.anular(identificador, cobro.id_cobro, ahora),
             lambda: unidad.cobros.listar_servicios(),
         ):
             with pytest.raises(OperacionPendiente):
                 operacion()
+        with pytest.raises(ConflictoEstado):  # con pagos no se anula (015)
+            unidad.cobros.anular(identificador, cobro.id_cobro, ahora)
     assert pagada.estado == EstadoCobro.PAGADO and pagada.saldo == 0
     with centro.unidad() as unidad:
         pagadas = unidad.cobros.listar(None, frozenset({EstadoCobro.PAGADO}), 500)
@@ -1454,7 +1457,146 @@ def test_facturacion_por_la_api(centro):
         servicios = client.get("/api/v1/servicios", headers=h)
     assert cargo.json()["total"] == "80.00"
     assert (pago.json()["estado"], pago.json()["saldo"]) == ("pagado", "0.00")
-    assert anular.status_code == 501 and servicios.status_code == 501
+    assert anular.status_code == 409 and servicios.status_code == 501  # pagada: no se anula
+
+
+def test_factura_a_nombre_del_tutor_y_anulacion(centro):
+    """015: la factura queda a nombre del tutor principal (o del indicado) y se anula solo sin
+    pagos; anulada ya no admite cargos ni pagos, ni siquiera saltandose la API."""
+    identificador = registrar(centro)
+    hermano = registrar(centro, "Hermano")
+    consultas = [consulta_base(centro, identificador) for _ in range(3)]
+    consulta_hermano = consulta_base(centro, hermano)
+    ahora = datetime.now(UTC)
+    with centro.unidad() as unidad:
+        sin_tutor = unidad.cobros.abrir(identificador, consultas[0], None, ahora)
+        madre = unidad.tutores.vincular(
+            identificador,
+            Vinculo("Madre", es_principal=True, autorizado=True),
+            nuevo=NuevoTutor("Karina", "Barrios " + centro.marca, documento=uuid4().hex[:12]),
+        )
+        padre = unidad.tutores.vincular(
+            identificador,
+            Vinculo("Padre", es_principal=False, autorizado=True),
+            nuevo=NuevoTutor("Julio", "Ruiz " + centro.marca, documento=uuid4().hex[:12]),
+        )
+        unidad.commit()
+    assert sin_tutor.facturado_a is None
+    with centro.unidad() as unidad:
+        principal = unidad.cobros.abrir(identificador, consultas[1], None, ahora)
+        elegido = unidad.cobros.abrir(
+            identificador, consultas[2], None, ahora, padre.tutor.id_tutor
+        )
+        with pytest.raises(DatosInvalidos):  # tutor no vinculado a ese paciente
+            unidad.cobros.abrir(hermano, consulta_hermano, None, ahora, padre.tutor.id_tutor)
+        unidad.commit()
+    assert principal.facturado_a.id_tutor == madre.tutor.id_tutor
+    assert principal.facturado_a.nombre.startswith("Karina Barrios")
+    assert elegido.facturado_a.id_tutor == padre.tutor.id_tutor
+
+    with centro.unidad() as unidad:
+        unidad.cobros.agregar_cargo(
+            identificador,
+            principal.id_cobro,
+            NuevoCargo(Decimal(1), concepto="Control", precio_unitario=Decimal("180")),
+            ahora,
+        )
+        anulada = unidad.cobros.anular(identificador, principal.id_cobro, ahora)
+        unidad.commit()
+    assert anulada.estado == EstadoCobro.ANULADO and anulada.cerrado_en is not None
+    with centro.unidad() as unidad:
+        with pytest.raises(ConflictoEstado):
+            unidad.cobros.anular(identificador, principal.id_cobro, ahora)
+        with pytest.raises(ConflictoEstado):
+            unidad.cobros.agregar_cargo(
+                identificador,
+                principal.id_cobro,
+                NuevoCargo(Decimal(1), concepto="Otro", precio_unitario=Decimal("1")),
+                ahora,
+            )
+        with pytest.raises(ConflictoEstado):
+            unidad.cobros.registrar_pago(
+                identificador,
+                principal.id_cobro,
+                NuevoPago(MetodoPago.EFECTIVO, Decimal("1")),
+                ahora,
+            )
+        anuladas = unidad.cobros.listar(None, frozenset({EstadoCobro.ANULADO}), 500)
+        por_cobrar = unidad.cobros.listar(None, frozenset({EstadoCobro.ABIERTO}), 500)
+        assert principal.id_cobro in [c.id_cobro for c in anuladas]
+        assert principal.id_cobro not in [c.id_cobro for c in por_cobrar]
+
+    # La base lo impone aunque se salte la API: ni cargos, ni reabrir, ni cambiar titular.
+    with centro.admin.cursor() as cursor:
+        for sentencia in (
+            "INSERT INTO detalle_facturacion (id_facturacion, concepto, cantidad, "
+            "precio_unitario) VALUES (%s, 'X', 1, 1)",
+            "UPDATE facturacion SET anulada_en = NULL WHERE id_facturacion = %s",
+            "UPDATE facturacion SET id_tutor_fk = NULL WHERE id_facturacion = %s",
+        ):
+            with pytest.raises(pymysql.MySQLError):
+                cursor.execute(sentencia, (int(principal.id_cobro),))
+        # Con pagos, el CHECK impide anular.
+        cursor.execute(
+            "INSERT INTO detalle_facturacion (id_facturacion, concepto, cantidad, precio_unitario) "
+            "VALUES (%s, 'Y', 1, 10)",
+            (int(elegido.id_cobro),),
+        )
+        cursor.execute(
+            "INSERT INTO pago (id_facturacion, id_tipo_pago, monto) VALUES (%s, 1, 5)",
+            (int(elegido.id_cobro),),
+        )
+        with pytest.raises(pymysql.MySQLError):
+            cursor.execute(
+                "UPDATE facturacion SET anulada_en = NOW(6) WHERE id_facturacion = %s",
+                (int(elegido.id_cobro),),
+            )
+    # La cuenta de la API no puede borrar facturas ni tocar montos.
+    with centro.unidad() as unidad, unidad.conexion.cursor() as cursor:
+        for sentencia in (
+            "DELETE FROM facturacion WHERE id_facturacion = %s",
+            "UPDATE facturacion SET total_pagado = 0 WHERE id_facturacion = %s",
+        ):
+            with pytest.raises(pymysql.MySQLError):
+                cursor.execute(sentencia, (int(elegido.id_cobro),))
+
+
+def test_anular_factura_por_la_api(centro):
+    identificador = registrar(centro)
+    id_consulta = consulta_base(centro, identificador)
+    configuracion = Settings(
+        mysql_host=centro.datos["host"],
+        mysql_port=centro.datos["port"],
+        mysql_user=centro.datos["user"],
+        mysql_password=centro.datos["password"],
+        mysql_database=centro.datos["database"],
+    )
+    with TestClient(create_app(configuracion)) as client:
+        login = client.post(
+            "/api/v1/auth/login", json={"correo": centro.correo, "password": centro.password}
+        )
+        h = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        cobro = client.post(
+            f"/api/v1/pacientes/{identificador}/cobros",
+            json={"id_atencion": id_consulta},
+            headers=h,
+        ).json()
+        ruta = f"/api/v1/pacientes/{identificador}/cobros/{cobro['id_cobro']}"
+        client.post(
+            f"{ruta}/cargos", json={"concepto": "Control", "precio_unitario": "80.00"}, headers=h
+        )
+        anular = client.post(f"{ruta}/anular", headers=h)
+        pago = client.post(f"{ruta}/pagos", json={"metodo": "efectivo", "monto": "1"}, headers=h)
+        tablero = client.get("/api/v1/cobros", params={"estado": "anulado"}, headers=h)
+        otra = client.post(
+            f"/api/v1/pacientes/{identificador}/cobros",
+            json={"id_atencion": id_consulta},
+            headers=h,
+        )
+    assert anular.status_code == 200 and anular.json()["estado"] == "anulado"
+    assert pago.status_code == 409
+    assert cobro["id_cobro"] in [c["id_cobro"] for c in tablero.json()]
+    assert otra.status_code == 201  # una anulada no impide volver a facturar la consulta
 
 
 # ---------------------------------------------------------------------------------------

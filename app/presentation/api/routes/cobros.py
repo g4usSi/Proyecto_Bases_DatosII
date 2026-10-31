@@ -66,9 +66,12 @@ def tablero_de_cobros(
 def abrir_cobro(
     id_paciente: IdPaciente, datos: CobroCrear, contexto: ContextoRegistrarPagos
 ) -> CobroResponse:
-    """Abre el cobro de una atencion (una por atencion; 409 si ya tiene uno vigente)."""
+    """Abre el cobro de una atencion (una por atencion; 409 si ya tiene uno vigente).
+    Centro Pediatrico: la factura queda a nombre de `id_tutor` o del tutor principal."""
     return _r(
-        AbrirCobro(contexto.unidad).ejecutar(id_paciente, datos.id_atencion, datos.descripcion)
+        AbrirCobro(contexto.unidad).ejecutar(
+            id_paciente, datos.id_atencion, datos.descripcion, datos.id_tutor
+        )
     )
 
 
@@ -123,5 +126,6 @@ def cerrar_cobro(
 def anular_cobro(
     id_paciente: IdPaciente, id_cobro: IdCobro, contexto: ContextoRegistrarPagos
 ) -> CobroResponse:
-    """Solo sin pagos confirmados (409 si los tiene). Solo Hospital General."""
+    """Solo sin pagos confirmados (409 si los tiene). Hospital General y Centro Pediatrico:
+    la factura queda anulada (no se borra) y ya no admite cargos ni pagos."""
     return _r(AnularCobro(contexto.unidad).ejecutar(id_paciente, id_cobro))

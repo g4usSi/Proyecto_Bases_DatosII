@@ -16,9 +16,15 @@ class RepositorioCobros(Protocol):
         ...
 
     def abrir(
-        self, id_paciente: str, id_atencion: str, descripcion: str | None, ahora: datetime
+        self,
+        id_paciente: str,
+        id_atencion: str,
+        descripcion: str | None,
+        ahora: datetime,
+        id_tutor: str | None = None,
     ) -> Cobro:
-        """RegistroNoEncontrado si la atencion no es de ese paciente."""
+        """RegistroNoEncontrado si la atencion no es de ese paciente. id_tutor solo aplica
+        al Centro Pediatrico (a quien se factura; por defecto el tutor principal)."""
         ...
 
     def obtener(self, id_paciente: str, id_cobro: str) -> Cobro | None: ...

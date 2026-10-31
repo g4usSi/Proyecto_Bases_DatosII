@@ -57,10 +57,18 @@ class AbrirCobro:
     def __init__(self, unidad_trabajo: UnidadDeTrabajo) -> None:
         self.unidad_trabajo = unidad_trabajo
 
-    def ejecutar(self, id_paciente: str, id_atencion: str, descripcion: str | None) -> Cobro:
+    def ejecutar(
+        self,
+        id_paciente: str,
+        id_atencion: str,
+        descripcion: str | None,
+        id_tutor: str | None = None,
+    ) -> Cobro:
         with self.unidad_trabajo as unidad:
             _paciente(unidad, id_paciente)
-            cobro = unidad.cobros.abrir(id_paciente, id_atencion, descripcion, datetime.now(UTC))
+            cobro = unidad.cobros.abrir(
+                id_paciente, id_atencion, descripcion, datetime.now(UTC), id_tutor
+            )
             unidad.commit()
             return cobro
 
