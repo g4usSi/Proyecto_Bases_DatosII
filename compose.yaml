@@ -26,6 +26,7 @@ services:
       - ./database/postgresql/012_administracion_profesionales.sql:/docker-entrypoint-initdb.d/012_administracion_profesionales.sql:ro
       - ./database/postgresql/013_camas_ingresos.sql:/docker-entrypoint-initdb.d/013_camas_ingresos.sql:ro
       - ./database/postgresql/014_cobros.sql:/docker-entrypoint-initdb.d/014_cobros.sql:ro
+      - ./database/postgresql/015_administracion_dos_niveles.sql:/docker-entrypoint-initdb.d/015_administracion_dos_niveles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U historiales_admin -d hospital_general"]
       interval: 5s

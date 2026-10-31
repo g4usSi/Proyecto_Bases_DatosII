@@ -43,6 +43,7 @@ from app.infrastructure.persistence.comun import (
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 from app.infrastructure.persistence.postgresql.cobros import RepositorioCobrosPostgreSQL
 from app.infrastructure.persistence.postgresql.hospital import RepositorioHospitalPostgreSQL
+from app.infrastructure.persistence.postgresql.indicadores import IndicadoresPostgreSQL
 
 MOTOR = "PostgreSQL"
 ESTADO_ARCHIVADO = "Inactivo"
@@ -735,6 +736,7 @@ class UnidadTrabajoPostgreSQL:
         self.hospital = RepositorioHospitalPostgreSQL(
             self.conexion, self.zona, self.historial._id_personal
         )
+        self.indicadores = IndicadoresPostgreSQL(self.conexion, self.hospital)
         # El odontograma es propio de la clinica odontologica (HTTP 501 aqui).
         pendientes = repositorios_pendientes(MOTOR)
         self.odontograma = pendientes["odontograma"]

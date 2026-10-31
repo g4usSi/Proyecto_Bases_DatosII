@@ -1,6 +1,8 @@
 """Cobros y pagos: Hospital General y Centro Pediatrico (otros establecimientos: 501).
 
 Ver montos exige pagos:ver; abrir, cargar, pagar, anular o cerrar exige pagos:registrar.
+La administracion general (superusuario) solo lee: elige la entidad con
+`?establecimiento=` y cualquier escritura le responde 403.
 """
 
 from typing import Annotated

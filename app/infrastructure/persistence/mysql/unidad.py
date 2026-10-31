@@ -53,6 +53,7 @@ from app.infrastructure.persistence.comun import (
     utc_ingenuo,
 )
 from app.infrastructure.persistence.mysql.cobros import RepositorioCobrosMySQL
+from app.infrastructure.persistence.mysql.indicadores import IndicadoresMySQL
 from app.infrastructure.persistence.mysql.tutores import RepositorioTutoresMySQL
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
@@ -1014,6 +1015,7 @@ class UnidadTrabajoMySQL:
         self.hospital = pendientes["hospital"]
         self.cobros = RepositorioCobrosMySQL(self.conexion)
         self.tutores = RepositorioTutoresMySQL(self.conexion)
+        self.indicadores = IndicadoresMySQL(self.conexion)
         return self
 
     def __exit__(

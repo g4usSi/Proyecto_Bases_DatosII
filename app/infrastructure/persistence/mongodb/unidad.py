@@ -77,6 +77,7 @@ from app.domain.paciente import (
 )
 from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.comun import con_utc
+from app.infrastructure.persistence.mongodb.indicadores import IndicadoresMongo
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 MOTOR = "MongoDB"
@@ -1300,6 +1301,7 @@ class UnidadTrabajoMongo:
         self.hospital = pendientes["hospital"]
         self.cobros = pendientes["cobros"]
         self.tutores = pendientes["tutores"]
+        self.indicadores = IndicadoresMongo(self.database)
         return self
 
     def __exit__(

@@ -9,6 +9,7 @@ from app.presentation.api.routes import (
     odontograma,
     pacientes,
     pediatria,
+    plataforma,
     profesionales,
     tutores,
 )
@@ -16,6 +17,7 @@ from app.presentation.api.routes import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(profesionales.router)
+api_router.include_router(plataforma.router)
 api_router.include_router(pacientes.router)
 api_router.include_router(odontograma.router)
 api_router.include_router(citas.router)

@@ -10,7 +10,7 @@ class CuentaProfesional:
     id_profesional: str
     correo: str
     password_hash: str
-    institucion: Institucion
+    institucion: Institucion | None  # None = superusuario de plataforma
     permisos: frozenset[str]
     version_token: int
     activo: bool

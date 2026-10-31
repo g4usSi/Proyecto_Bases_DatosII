@@ -1,13 +1,16 @@
-"""Administracion del personal de UNA institucion (cuentas de la identidad central).
+"""Administracion de cuentas de la identidad central, en dos niveles.
 
-Reglas (decisiones del equipo, brecha-api-frontend):
-- Un administrador por institucion, con un unico permiso (profesionales:administrar) y sin
-  permisos clinicos. Solo gestiona al personal de SU institucion: la institucion sale del
-  token, nunca del formulario.
+Reglas (decisiones del equipo, docs/administracion_general.md):
+- Superusuario de plataforma: UNA cuenta, sin institucion ni permisos clinicos. Crea
+  cuentas en cualquier entidad (incluido su administrador), deshabilita, rehabilita y es el
+  unico que elimina (baja definitiva logica). Nunca se gestiona a si mismo por la API.
+- Administrador de cada entidad: uno ACTIVO por entidad, con un unico permiso
+  (profesionales:administrar). Solo gestiona al personal de SU institucion, que sale del
+  token y nunca del formulario. No crea administradores ni elimina.
 - Los permisos se dan por profesional, no por rol. El rol fija solo la base
   (pacientes:leer, o los de la secretaria/laboratorista si no se indican otros).
 - La secretaria existe solo en la Clinica Odontologica y nunca tiene permisos clinicos.
-- Las cuentas de administracion se crean con scripts/crear_profesional.py, no por la API.
+- El superusuario se crea con scripts/crear_profesional.py, nunca por la API.
 """
 
 import secrets
@@ -17,10 +20,13 @@ from datetime import datetime
 from enum import StrEnum
 
 from app.domain import permisos as p
-from app.domain.errores import DatosInvalidos
+from app.domain.errores import AccesoDenegado, DatosInvalidos
+from app.domain.identidad import UsuarioAutenticado
 from app.domain.institucion import Institucion
 
 ROL_ADMINISTRADOR = "administrador"
+ROL_SUPERUSUARIO = "superusuario"
+ROLES_DE_ADMINISTRACION = frozenset({ROL_ADMINISTRADOR, ROL_SUPERUSUARIO})
 
 # Roles que un administrador puede dar de alta en su institucion.
 ROLES_POR_INSTITUCION: dict[Institucion, frozenset[str]] = {
@@ -57,7 +63,12 @@ LARGO_MAXIMO_CONTRASENA = 128
 class EstadoCuenta(StrEnum):
     ACTIVA = "activa"
     BLOQUEADA = "bloqueada"  # no puede iniciar sesion (por administracion o por intentos)
-    INACTIVA = "inactiva"  # ya no forma parte del personal
+    INACTIVA = "inactiva"  # deshabilitada: se puede rehabilitar
+    ELIMINADA = "eliminada"  # baja definitiva (solo DELETE del superusuario); no se asigna
+
+
+# Estados que se pueden pedir por PATCH. Eliminar solo se hace con DELETE.
+ESTADOS_ASIGNABLES = frozenset({EstadoCuenta.ACTIVA, EstadoCuenta.BLOQUEADA, EstadoCuenta.INACTIVA})
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +80,7 @@ class FichaProfesional:
     nombres: str
     apellidos: str
     rol: str
-    institucion: Institucion
+    institucion: Institucion | None
     estado: EstadoCuenta
     permisos: frozenset[str]
     id_departamento: int | None = None
@@ -123,20 +134,140 @@ class ProfesionalAgenda:
     id_departamento: int | None = None
 
 
-def validar_rol(institucion: Institucion, rol: str) -> None:
+class AccionBitacora(StrEnum):
+    ALTA = "alta"
+    CAMBIO = "cambio"
+    RESTABLECER_CONTRASENA = "restablecer_contrasena"
+    CAMBIAR_CONTRASENA = "cambiar_contrasena"
+    ELIMINAR = "eliminar"
+
+
+@dataclass(frozen=True, slots=True)
+class EntradaBitacora:
+    """Un movimiento de administracion. La tabla nunca guarda contrasenas ni hashes."""
+
+    id_evento: int
+    ocurrido_en: datetime
+    accion: AccionBitacora
+    id_actor: str
+    actor_nombre: str | None  # None si el actor ya no existe en la identidad central
+    actor_rol: str | None
+    id_profesional: str
+    profesional_nombre: str
+    institucion: Institucion | None  # None: el superusuario sobre su propia cuenta
+    detalle: dict
+
+
+@dataclass(frozen=True, slots=True)
+class FiltroBitacora:
+    acciones: frozenset[AccionBitacora] | None = None
+    desde: datetime | None = None
+    hasta: datetime | None = None
+    antes_de: int | None = None  # cursor: id_evento de la ultima fila recibida
+    limite: int = 50
+
+
+@dataclass(frozen=True, slots=True)
+class CuentaAtencion:
+    """Cuenta que el administrador deberia revisar (solo datos de la cuenta)."""
+
+    id_profesional: str
+    nombres: str
+    apellidos: str
+    rol: str
+    estado: EstadoCuenta
+    motivo: str  # bloqueo_por_intentos | bloqueo_administrativo | debe_cambiar_contrasena
+
+
+@dataclass(frozen=True, slots=True)
+class ResumenPersonal:
+    """Resumen del personal de UNA entidad. Sale de identidad.profesional y de la bitacora;
+    nunca toca un motor clinico."""
+
+    institucion: Institucion
+    administrador: str | None  # nombre del administrador activo, o None
+    por_estado: dict[str, int]
+    bloqueadas_por_intentos: int
+    bloqueadas_por_administracion: int
+    deben_cambiar_contrasena: int
+    activos_por_rol: dict[str, int]
+    activos_por_area: tuple[tuple[int, str, int], ...] | None  # solo Hospital General
+    requieren_atencion: tuple[CuentaAtencion, ...]
+    ultimos_movimientos: tuple[EntradaBitacora, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Alcance:
+    """Que cuentas puede ver y gestionar quien administra.
+
+    institucion None = las cuatro entidades (solo el superusuario). El superusuario nunca
+    aparece en un alcance y las cuentas eliminadas no salen en los listados.
+    """
+
+    institucion: Institucion | None
+    incluir_administradores: bool = False
+
+
+def es_superusuario(actor: UsuarioAutenticado) -> bool:
+    return actor.es_plataforma and p.PLATAFORMA_ADMINISTRAR in actor.permisos
+
+
+def alcance_de(actor: UsuarioAutenticado, pedida: Institucion | None = None) -> Alcance:
+    """Superusuario: todas las entidades o la pedida. Administrador: solo la suya.
+
+    Un administrador que pide otra entidad recibe 403 (no puede ver fuera de la suya).
+    """
+    if es_superusuario(actor):
+        return Alcance(pedida, incluir_administradores=True)
+    if actor.institucion is None or p.PROFESIONALES_ADMINISTRAR not in actor.permisos:
+        raise AccesoDenegado("No tienes permiso para realizar esta operacion.")
+    if pedida is not None and pedida != actor.institucion:
+        raise AccesoDenegado("Solo puedes administrar el personal de tu institucion.")
+    return Alcance(actor.institucion, incluir_administradores=False)
+
+
+def puede_gestionar(actor: UsuarioAutenticado, objetivo: "FichaProfesional") -> bool:
+    """El superusuario gestiona cualquier cuenta menos la suya; el administrador, solo las de
+    su entidad que no sean de administracion."""
+    if objetivo.rol == ROL_SUPERUSUARIO or objetivo.id_profesional == actor.id_usuario:
+        return False
+    if es_superusuario(actor):
+        return True
+    return (
+        actor.institucion is not None
+        and objetivo.institucion == actor.institucion
+        and objetivo.rol not in ROLES_DE_ADMINISTRACION
+    )
+
+
+def validar_rol(institucion: Institucion, rol: str, *, actor_es_superusuario: bool = False) -> None:
+    if rol == ROL_SUPERUSUARIO:
+        raise DatosInvalidos("El superusuario se crea con scripts/crear_profesional.py.")
     if rol == ROL_ADMINISTRADOR:
-        raise DatosInvalidos(
-            "Las cuentas de administracion se crean con scripts/crear_profesional.py."
-        )
+        if not actor_es_superusuario:
+            raise AccesoDenegado(
+                "Solo la administracion general crea la cuenta de administracion de una entidad."
+            )
+        return
     if rol not in ROLES_POR_INSTITUCION[institucion]:
         validos = ", ".join(sorted(ROLES_POR_INSTITUCION[institucion]))
-        raise DatosInvalidos(f"Rol no valido para tu institucion. Roles permitidos: {validos}.")
+        raise DatosInvalidos(f"Rol no valido para esa institucion. Roles permitidos: {validos}.")
 
 
 def permisos_finales(
     institucion: Institucion, rol: str, pedidos: frozenset[str] | None
 ) -> frozenset[str]:
     """Permisos que quedaran guardados. Lanza DatosInvalidos si no son compatibles."""
+    if p.PLATAFORMA_ADMINISTRAR in (pedidos or frozenset()):
+        raise DatosInvalidos("plataforma:administrar es exclusivo del superusuario.")
+    if rol == ROL_ADMINISTRADOR:
+        # La cuenta de administracion tiene un unico permiso y nunca uno clinico.
+        unico = frozenset({p.PROFESIONALES_ADMINISTRAR})
+        if pedidos is not None and frozenset(pedidos) - unico:
+            raise DatosInvalidos(
+                "La cuenta de administracion solo tiene profesionales:administrar."
+            )
+        return unico
     elegidos = (
         frozenset(pedidos)
         if pedidos is not None
@@ -150,7 +281,7 @@ def permisos_finales(
     fuera = elegidos - PERMISOS_ASIGNABLES[institucion]
     if fuera:
         raise DatosInvalidos(
-            "Permisos que no aplican a tu institucion: " + ", ".join(sorted(fuera)) + "."
+            "Permisos que no aplican a esa institucion: " + ", ".join(sorted(fuera)) + "."
         )
     if rol == "secretaria":
         vedados = elegidos & p.PERMISOS_VEDADOS_SECRETARIA

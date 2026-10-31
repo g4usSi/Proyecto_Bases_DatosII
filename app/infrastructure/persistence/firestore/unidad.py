@@ -57,6 +57,7 @@ from app.domain.paciente import (
     Paciente,
 )
 from app.domain.profesional import ProfesionalLocal
+from app.infrastructure.persistence.firestore.indicadores import IndicadoresFirestore
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 logger = logging.getLogger(__name__)
@@ -720,6 +721,7 @@ class UnidadTrabajoFirestore:
         self.hospital = pendientes["hospital"]
         self.cobros = pendientes["cobros"]
         self.tutores = pendientes["tutores"]
+        self.indicadores = IndicadoresFirestore(cliente, COLECCION_PACIENTES, timeout)
 
     def __enter__(self) -> Self:
         self.lote = self.cliente.batch()

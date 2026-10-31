@@ -12,6 +12,9 @@ LABORATORIO_VALIDAR = "laboratorio:validar"  # validar una orden (despues no se 
 # Solo el rol administrador (uno por institucion): altas, permisos, estado y contrasenas del
 # personal de SU institucion. Nunca se combina con permisos clinicos (012_administracion).
 PROFESIONALES_ADMINISTRAR = "profesionales:administrar"
+# Solo el superusuario de plataforma (uno, sin institucion): cuentas de las cuatro
+# entidades, bajas definitivas, resumen y bitacora completa (015_administracion_dos_niveles).
+PLATAFORMA_ADMINISTRAR = "plataforma:administrar"
 # Hospital General: marcar camas en limpieza/mantenimiento/disponibles (013_camas_ingresos).
 CAMAS_GESTIONAR = "camas:gestionar"
 # Cobros y pagos (Hospital General y Centro Pediatrico): ver montos / registrar movimientos.
@@ -36,5 +39,7 @@ PERMISOS_POR_ROL = {
     "laboratorista": frozenset({PACIENTES_LEER, LABORATORIO_RESULTADOS, LABORATORIO_VALIDAR}),
     "secretaria": frozenset({PACIENTES_LEER, PACIENTES_REGISTRAR, CITAS_LEER, CITAS_GESTIONAR}),
     "administrador": frozenset({PROFESIONALES_ADMINISTRAR}),
+    # Pagos en solo lectura; nunca permisos clinicos (la base lo impone en 015).
+    "superusuario": frozenset({PLATAFORMA_ADMINISTRAR, PAGOS_VER}),
 }
 PERMISOS_POR_DEFECTO = frozenset({PACIENTES_LEER})

@@ -1460,7 +1460,7 @@ def test_facturacion_por_la_api(centro):
     assert anular.status_code == 409 and servicios.status_code == 501  # pagada: no se anula
 
 
-def test_factura_a_nombre_del_tutor_y_anulacion(centro):
+def test_factura_a_nombre_del_tutor_anulacion_e_indicadores(centro):
     """015: la factura queda a nombre del tutor principal (o del indicado) y se anula solo sin
     pagos; anulada ya no admite cargos ni pagos, ni siquiera saltandose la API."""
     identificador = registrar(centro)
@@ -1525,6 +1525,9 @@ def test_factura_a_nombre_del_tutor_y_anulacion(centro):
         por_cobrar = unidad.cobros.listar(None, frozenset({EstadoCobro.ABIERTO}), 500)
         assert principal.id_cobro in [c.id_cobro for c in anuladas]
         assert principal.id_cobro not in [c.id_cobro for c in por_cobrar]
+        indicadores = unidad.indicadores.conteos(ahora.date())
+    assert indicadores.pacientes_registrados >= 2
+    assert indicadores.cobros_por_cobrar >= 2  # sin_tutor y elegido, sin cargos todavia
 
     # La base lo impone aunque se salte la API: ni cargos, ni reabrir, ni cambiar titular.
     with centro.admin.cursor() as cursor:

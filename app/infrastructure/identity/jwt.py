@@ -9,6 +9,11 @@ from app.application.ports.cuentas import DirectorioProfesionales
 from app.domain.cuenta import Sesion
 from app.domain.errores import TokenInvalido
 from app.domain.identidad import UsuarioAutenticado
+from app.domain.institucion import Institucion
+
+
+def _inst(institucion: Institucion | None) -> str | None:
+    return institucion.value if institucion is not None else None
 
 
 class AutenticadorCentral:
@@ -48,7 +53,8 @@ class AutenticadorCentral:
         token = jwt.encode(
             {
                 "sub": cuenta.id_profesional,
-                "inst": cuenta.institucion.value,
+                # null para el superusuario de plataforma (no pertenece a una entidad).
+                "inst": _inst(cuenta.institucion),
                 "ver": cuenta.version_token,
                 "iss": self.emisor,
                 "aud": self.audiencia,
@@ -69,17 +75,20 @@ class AutenticadorCentral:
                 algorithms=["HS256"],
                 issuer=self.emisor,
                 audience=self.audiencia,
-                options={"require": ["sub", "inst", "ver", "iss", "aud", "iat", "exp", "jti"]},
+                # "inst" puede ser null (superusuario): se exige su presencia aparte.
+                options={"require": ["sub", "ver", "iss", "aud", "iat", "exp", "jti"]},
             )
         except jwt.InvalidTokenError as error:
             raise TokenInvalido("Token invalido.") from error
+        if "inst" not in payload:
+            raise TokenInvalido("Token invalido.")
         cuenta = self.directorio.buscar_por_id(payload["sub"])
         if (
             cuenta is None
             or not cuenta.activo
             or type(payload["ver"]) is not int
             or payload["ver"] != cuenta.version_token
-            or payload["inst"] != cuenta.institucion.value
+            or payload["inst"] != _inst(cuenta.institucion)
         ):
             raise TokenInvalido("Sesion revocada.")
         # Los permisos se leen de PostgreSQL en CADA solicitud, no del JWT.
