@@ -197,9 +197,21 @@ class TableroLaboratorio:
         estados: frozenset[EstadoOrden] | None = None,
         limite: int = 50,
         antes_de: datetime | None = None,
+        antes_de_id: str | None = None,
     ) -> list[ResumenOrden]:
+        if antes_de_id is not None and antes_de is None:
+            raise DatosInvalidos("antes_de_id requiere antes_de.")
         with self.unidad_trabajo as unidad:
-            return unidad.laboratorio.listar_institucion(estados, limite, antes_de)
+            return unidad.laboratorio.listar_institucion(estados, limite, antes_de, antes_de_id)
+
+
+class ResumenDelLaboratorio:
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo):
+        self.unidad_trabajo = unidad_trabajo
+
+    def ejecutar(self):
+        with self.unidad_trabajo as unidad:
+            return unidad.laboratorio.resumen()
 
 
 class VersionesDePrueba:

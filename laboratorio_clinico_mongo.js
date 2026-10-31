@@ -194,6 +194,8 @@
   laboratorio.ordenes_laboratorio.createIndex({ id_paciente: 1, solicitada_en: -1, _id: -1 }, { name: "ix_orden_historial" });
   laboratorio.ordenes_laboratorio.createIndex({ id_consulta: 1 }, { name: "ix_orden_consulta" });
   laboratorio.ordenes_laboratorio.createIndex({ estado: 1, solicitada_en: 1 }, { name: "ix_cola_trabajo" });
+  laboratorio.ordenes_laboratorio.createIndex({ solicitada_en: -1, _id: -1 }, { name: "ix_tablero_reciente" });
+  laboratorio.ordenes_laboratorio.createIndex({ estado: 1, solicitada_en: -1, _id: -1 }, { name: "ix_tablero_estado" });
 
   // Solo el contenedor de desarrollo provee esta variable. No incrustar contrasenas.
   if (process.env.MONGO_APP_PASSWORD && !laboratorio.getUser("historiales_app")) {

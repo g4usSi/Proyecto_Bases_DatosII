@@ -29,11 +29,16 @@ class RepositorioLaboratorio(Protocol):
         estados: frozenset[EstadoOrden] | None,
         limite: int,
         antes_de: datetime | None = None,
+        antes_de_id: str | None = None,
     ) -> list[ResumenOrden]:
         """Ordenes de toda la institucion (tablero), de la mas reciente a la mas antigua.
 
         Paginacion por cursor: `antes_de` es la solicitada_en de la ultima fila recibida.
         """
+        ...
+
+    def resumen(self) -> dict[str, int]:
+        """Conteos globales por estado y abiertas listas para validar, sin valores clinicos."""
         ...
 
     def solicitar(

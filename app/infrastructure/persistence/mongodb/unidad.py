@@ -954,12 +954,20 @@ class RepositorioLaboratorioMongo:
         estados: frozenset[EstadoOrden] | None,
         limite: int,
         antes_de: datetime | None = None,
+        antes_de_id: str | None = None,
     ) -> list[ResumenOrden]:
         filtro: dict[str, Any] = {}
         if estados:
             filtro["estado"] = {"$in": sorted(ESTADO_ORDEN_BD[e] for e in estados)}
         if antes_de is not None:
-            filtro["solicitada_en"] = {"$lt": _milisegundos(con_utc(antes_de))}
+            momento = _milisegundos(con_utc(antes_de))
+            if antes_de_id is not None:
+                filtro["$or"] = [
+                    {"solicitada_en": {"$lt": momento}},
+                    {"solicitada_en": momento, "_id": {"$lt": ObjectId(antes_de_id)}},
+                ]
+            else:
+                filtro["solicitada_en"] = {"$lt": momento}
         tuberia = [
             {"$match": filtro},
             {"$sort": {"solicitada_en": -1, "_id": -1}},
@@ -1023,6 +1031,19 @@ class RepositorioLaboratorioMongo:
                 )
             )
         return filas
+
+    def resumen(self):
+        conteos = {estado.value: 0 for estado in EstadoOrden}
+        for grupo in self.coleccion.aggregate([{"$group": {"_id": "$estado", "n": {"$sum": 1}}}]):
+            conteos[ESTADO_ORDEN_DOMINIO[grupo["_id"]].value] = grupo["n"]
+        conteos["listas_para_validar"] = self.coleccion.count_documents(
+            {
+                "estado": {"$in": ABIERTAS_BD},
+                "pruebas.0": {"$exists": True},
+                "pruebas": {"$not": {"$elemMatch": {"resultados.0": {"$exists": False}}}},
+            }
+        )
+        return conteos
 
     @staticmethod
     def _a_orden(doc: dict) -> Orden:

@@ -9,6 +9,7 @@ from app.application.use_cases.laboratorio import (
     ConsultarOrdenes,
     RegistrarMuestra,
     RegistrarResultados,
+    ResumenDelLaboratorio,
     SolicitarOrden,
     TableroLaboratorio,
     ValidarOrden,
@@ -33,6 +34,13 @@ from app.presentation.api.schemas.laboratorio import (
 )
 
 router = APIRouter(tags=["Laboratorio"])
+
+
+@router.get("/laboratorio/resumen", response_model=dict[str, int])
+def resumen_laboratorio(contexto: ContextoLeerLab) -> dict[str, int]:
+    """Conteos globales del tablero, sin depender de la pagina visible de ordenes."""
+    return ResumenDelLaboratorio(contexto.unidad).ejecutar()
+
 
 IdPaciente = Annotated[str, Path(min_length=1, max_length=128)]
 IdOrden = Annotated[str, Path(min_length=1, max_length=128)]
@@ -67,10 +75,17 @@ def tablero_de_ordenes(
         AwareDatetime | None,
         Query(description="Cursor: solicitada_en de la ultima fila recibida"),
     ] = None,
+    antes_de_id: Annotated[
+        str | None,
+        Query(
+            pattern="^[0-9a-fA-F]{24}$",
+            description="ID de la ultima fila; desempata fechas iguales.",
+        ),
+    ] = None,
 ) -> list[ResumenOrdenResponse]:
     """Ordenes de toda tu institucion, de la mas reciente a la mas antigua (tablero)."""
     filas = TableroLaboratorio(contexto.unidad).ejecutar(
-        frozenset(estado) if estado else None, limite, antes_de
+        frozenset(estado) if estado else None, limite, antes_de, antes_de_id
     )
     return [ResumenOrdenResponse.model_validate(f) for f in filas]
 
