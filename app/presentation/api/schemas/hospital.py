@@ -1,9 +1,15 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.hospital import EstadoCama, TipoIngreso, TipoOrdenMedica
-from app.presentation.api.schemas.historial import DiagnosticoSchema, Entrada, RecetaSchema
+from app.domain.hospital import EstadoCama, TipoAtencion, TipoIngreso, TipoOrdenMedica
+from app.presentation.api.schemas.historial import (
+    ConsultaResponse,
+    DiagnosticoSchema,
+    Entrada,
+    RecetaSchema,
+)
 
 
 class OcupanteResponse(BaseModel):
@@ -94,3 +100,48 @@ class ResumenHospitalResponse(BaseModel):
     ingresos_hoy: int
     altas_hoy: int
     citas_hoy_por_estado: dict[str, int]
+
+
+class AtencionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_atencion: str
+    tipo: TipoAtencion
+    id_paciente: str
+    nombre_paciente: str
+    id_profesional: str
+    nombre_profesional: str
+    fecha_hora: datetime
+    motivo: str
+    id_cita: str | None
+    cama: str | None
+    tipo_ingreso: TipoIngreso | None
+    alta_en: datetime | None
+    id_cobro: str | None
+    estado_cobro: str | None
+
+
+class DetalleAtencionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    atencion: AtencionResponse
+    consulta: ConsultaResponse | None = None
+    ingreso: IngresoResponse | None = None
+
+
+class GrupoSanguineoCambio(Entrada):
+    grupo_sanguineo: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None
+
+
+class GrupoSanguineoResponse(BaseModel):
+    id_paciente: str
+    grupo_sanguineo: str | None
+
+
+class PerfilHospitalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    colegiado: str | None
+    especialidades: list[str]
+    telefono: str | None
+    estado: str

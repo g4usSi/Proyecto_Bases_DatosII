@@ -1,17 +1,48 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 
 from app.application.errores import IntegracionNoConfigurada
 from app.application.use_cases.profesionales import CambiarContrasena
 from app.bootstrap.container import Contenedor
 from app.domain.errores import TokenInvalido
 from app.domain.identidad import UsuarioAutenticado
+from app.domain.institucion import Institucion
 from app.presentation.api.dependencies import obtener_contenedor, obtener_usuario_actual
+from app.presentation.api.schemas.hospital import PerfilHospitalResponse
 from app.presentation.api.schemas.identidad import LoginRequest, LoginResponse, UsuarioResponse
 from app.presentation.api.schemas.profesionales import CambiarContrasenaRequest
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
+
+
+class PerfilPropioResponse(BaseModel):
+    usuario: UsuarioResponse
+    correo: str
+    hospital: PerfilHospitalResponse | None = None
+
+
+@router.get("/perfil", response_model=PerfilPropioResponse)
+def perfil_propio(
+    response: Response,
+    usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
+) -> PerfilPropioResponse:
+    if contenedor.cuentas is None:
+        raise IntegracionNoConfigurada("La identidad central no esta configurada.")
+    cuenta = contenedor.cuentas.buscar_por_id(usuario.id_usuario)
+    if cuenta is None:
+        raise TokenInvalido("La cuenta ya no existe.")
+    perfil = None
+    if usuario.institucion == Institucion.HOSPITAL_GENERAL and usuario.rol != "administrador":
+        with contenedor.crear_unidad_trabajo(usuario.institucion) as unidad:
+            local = unidad.hospital.perfil(usuario.id_usuario)
+            perfil = PerfilHospitalResponse.model_validate(local) if local else None
+    response.headers["Cache-Control"] = "no-store"
+    return PerfilPropioResponse(
+        usuario=UsuarioResponse.de(usuario), correo=cuenta.correo, hospital=perfil
+    )
 
 
 @router.post("/login", response_model=LoginResponse)

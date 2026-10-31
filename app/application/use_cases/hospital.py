@@ -20,11 +20,13 @@ from app.domain.hospital import (
     ESTADOS_CAMA_MANUALES,
     Cama,
     Departamento,
+    DetalleAtencion,
     EstadoCama,
     Ingreso,
     NuevaOrdenMedica,
     NuevoIngreso,
     ResumenHospital,
+    TipoAtencion,
     TipoIngreso,
 )
 from app.domain.identidad import UsuarioAutenticado
@@ -175,3 +177,44 @@ class ResumenDelHospital:
         hoy = datetime.now(self.zona).date()
         with self.unidad_trabajo as unidad:
             return unidad.hospital.resumen(hoy)
+
+
+class ConsultarAtenciones:
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo):
+        self.unidad_trabajo = unidad_trabajo
+
+    def listar(self, id_paciente=None, tipo=None, desde=None, hasta=None, limite=50, antes_de=None):
+        if desde and hasta and desde >= hasta:
+            raise DatosInvalidos("desde debe ser anterior a hasta.")
+        with self.unidad_trabajo as unidad:
+            if id_paciente is not None:
+                _paciente_existe(unidad, id_paciente, activo=False)
+            return unidad.hospital.listar_atenciones(
+                id_paciente, tipo, desde, hasta, limite, antes_de
+            )
+
+    def una(self, id_paciente, id_atencion):
+        with self.unidad_trabajo as unidad:
+            _paciente_existe(unidad, id_paciente, activo=False)
+            atencion = unidad.hospital.obtener_atencion(id_paciente, id_atencion)
+            if atencion is None:
+                raise RegistroNoEncontrado("La atencion no existe en el historial del paciente.")
+            if atencion.tipo == TipoAtencion.INGRESO:
+                return DetalleAtencion(
+                    atencion, ingreso=unidad.hospital.obtener_ingreso(id_paciente, id_atencion)
+                )
+            return DetalleAtencion(
+                atencion, consulta=unidad.historial.obtener_consulta(id_paciente, id_atencion)
+            )
+
+
+class GrupoSanguineoHospital:
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo):
+        self.unidad_trabajo = unidad_trabajo
+
+    def cambiar(self, id_paciente, grupo):
+        with self.unidad_trabajo as unidad:
+            _paciente_existe(unidad, id_paciente, activo=True)
+            unidad.hospital.cambiar_grupo_sanguineo(id_paciente, grupo)
+            unidad.commit()
+            return {"id_paciente": id_paciente, "grupo_sanguineo": grupo}

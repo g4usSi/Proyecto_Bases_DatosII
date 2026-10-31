@@ -248,6 +248,18 @@ class HospitalNoAplica:
     def _no(self) -> NoReturn:
         pendiente(self.motor, "modulo hospitalario (solo aplica al Hospital General)")
 
+    def listar_atenciones(self, *args, **kwargs):
+        self._no()
+
+    def obtener_atencion(self, *args, **kwargs):
+        self._no()
+
+    def perfil(self, id_profesional):
+        self._no()
+
+    def cambiar_grupo_sanguineo(self, id_paciente, grupo):
+        self._no()
+
     def listar_departamentos(self) -> list[Departamento]:
         self._no()
 

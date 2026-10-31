@@ -51,7 +51,7 @@ IdConsulta = Annotated[str, Path(min_length=1, max_length=128)]
 def respuesta_paciente(paciente: Paciente, usuario: UsuarioAutenticado) -> PacienteResponse:
     """Las alergias son informacion clinica: solo se muestran con historiales:leer."""
     if permisos.HISTORIALES_LEER not in usuario.permisos:
-        paciente = replace(paciente, alergias=None)
+        paciente = replace(paciente, alergias=None, grupo_sanguineo=None)
     return PacienteResponse.model_validate(paciente)
 
 

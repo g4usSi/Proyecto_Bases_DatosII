@@ -9,7 +9,10 @@ from app.domain.hospital import (
     Ingreso,
     NuevaOrdenMedica,
     NuevoIngreso,
+    PerfilHospital,
+    ResumenAtencion,
     ResumenHospital,
+    TipoAtencion,
     TipoIngreso,
 )
 
@@ -77,3 +80,19 @@ class RepositorioHospital(Protocol):
     def resumen(self, hoy: date) -> ResumenHospital:
         """Conteos del dia local `hoy` (ocupacion, ingresos, altas y citas)."""
         ...
+
+    def listar_atenciones(
+        self,
+        id_paciente: str | None = None,
+        tipo: TipoAtencion | None = None,
+        desde: datetime | None = None,
+        hasta: datetime | None = None,
+        limite: int = 50,
+        antes_de: int | None = None,
+    ) -> list[ResumenAtencion]: ...
+
+    def obtener_atencion(self, id_paciente: str, id_atencion: str) -> ResumenAtencion | None: ...
+
+    def perfil(self, id_profesional: str) -> PerfilHospital | None: ...
+
+    def cambiar_grupo_sanguineo(self, id_paciente: str, grupo: str | None) -> None: ...

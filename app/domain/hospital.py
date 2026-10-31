@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
-from app.domain.consulta import Diagnostico, Receta
+from app.domain.consulta import Consulta, Diagnostico, Receta
 from app.domain.errores import DatosInvalidos
 
 
@@ -39,6 +39,44 @@ class TipoOrdenMedica(StrEnum):
     EXAMEN = "examen"
     PROCEDIMIENTO = "procedimiento"
     INTERCONSULTA = "interconsulta"
+
+
+class TipoAtencion(StrEnum):
+    CONSULTA = "CONSULTA"
+    INGRESO = "INGRESO"
+
+
+@dataclass(frozen=True, slots=True)
+class ResumenAtencion:
+    id_atencion: str
+    tipo: TipoAtencion
+    id_paciente: str
+    nombre_paciente: str
+    id_profesional: str
+    nombre_profesional: str
+    fecha_hora: datetime
+    motivo: str
+    id_cita: str | None = None
+    cama: str | None = None
+    tipo_ingreso: TipoIngreso | None = None
+    alta_en: datetime | None = None
+    id_cobro: str | None = None
+    estado_cobro: str | None = None  # estado visible, sin montos
+
+
+@dataclass(frozen=True, slots=True)
+class DetalleAtencion:
+    atencion: ResumenAtencion
+    consulta: Consulta | None = None
+    ingreso: "Ingreso | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class PerfilHospital:
+    colegiado: str | None
+    especialidades: tuple[str, ...]
+    telefono: str | None
+    estado: str
 
 
 @dataclass(frozen=True, slots=True)

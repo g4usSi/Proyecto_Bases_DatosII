@@ -74,7 +74,7 @@ class RepositorioPacientesPostgreSQL:
             return None
         fila = self.conexion.execute(
             "SELECT id_paciente, nombres, apellidos, fecha_nacimiento, estado, telefono, "
-            "correo_electronico, direccion, alergias_evaluadas "
+            "correo_electronico, direccion, alergias_evaluadas, grupo_sanguineo "
             "FROM paciente WHERE id_paciente = %s",
             (numero,),
         ).fetchone()
@@ -101,6 +101,7 @@ class RepositorioPacientesPostgreSQL:
             if telefono or correo or direccion
             else None,
             alergias=alergias,
+            grupo_sanguineo=fila[9],
         )
 
     def registrar(self, datos: NuevoPaciente) -> Paciente:
