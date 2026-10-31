@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import TracebackType
 from typing import Literal, Protocol, Self
 
@@ -67,3 +68,7 @@ class UnidadDeTrabajo(Protocol):
     def commit(self) -> None: ...
 
     def rollback(self) -> None: ...
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        """Solo agregados de la institucion; nunca documentos ni identificadores clinicos."""
+        ...

@@ -1,5 +1,10 @@
 # Frontend: decisión y plan de trabajo
 
+Actualización del backend (31 de octubre de 2026): el mockup de referencia ya existe en
+`docs/referencia/Historiales identidad visual.html`. Las rutas para Hospital General,
+Laboratorio y administración se detallan en [los contratos del frontend](api_frontend_hospital_laboratorio.md).
+El plan que sigue es histórico; la interfaz de producción continúa pendiente.
+
 Estado (23 de octubre de 2026): **tecnología decidida, nada construido**. Faltan los
 mockups; este documento deja listo qué debe tener cada pantalla para diseñarlos y
 después programarlos sin volver a discutir lo básico.

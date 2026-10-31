@@ -1,11 +1,14 @@
+from datetime import datetime
 from typing import Protocol
 
 from app.domain.administracion import (
     CambiosProfesional,
     EstadoCuenta,
+    EventoProfesional,
     FichaProfesional,
     NuevoProfesional,
     ProfesionalAgenda,
+    ResumenPersonal,
 )
 from app.domain.institucion import Institucion
 
@@ -19,7 +22,7 @@ class Cifrador(Protocol):
 
 
 class DirectorioAdministrable(Protocol):
-    """Cuentas de la identidad central, siempre acotadas a UNA institucion.
+    """Cuentas centrales: alcance institucional o global autorizado por el caso de uso.
 
     Cada escritura deja su evento en la bitacora de administracion dentro de la misma
     transaccion: o se guardan ambos, o ninguno.
@@ -38,18 +41,39 @@ class DirectorioAdministrable(Protocol):
 
     def listar(
         self,
-        institucion: Institucion,
+        institucion: Institucion | None,
         rol: str | None = None,
         id_departamento: int | None = None,
         estado: EstadoCuenta | None = None,
         limite: int = 200,
+        incluir_administradores: bool = False,
     ) -> list[FichaProfesional]:
-        """Personal de la institucion (sin cuentas de administracion), por apellidos."""
+        """Por apellidos. Plataforma puede incluir administradores con alcance global."""
         ...
 
-    def obtener(self, institucion: Institucion, id_profesional: str) -> FichaProfesional | None:
+    def obtener(
+        self,
+        institucion: Institucion | None,
+        id_profesional: str,
+        incluir_administradores: bool = False,
+        incluir_eliminados: bool = False,
+    ) -> FichaProfesional | None:
         """None si no existe, es de otra institucion o es una cuenta de administracion."""
         ...
+
+    def eliminar(self, id_profesional: str, id_actor: str) -> None: ...
+
+    def consultar_bitacora(
+        self,
+        institucion: Institucion | None,
+        accion: str | None = None,
+        desde: datetime | None = None,
+        hasta: datetime | None = None,
+        limite: int = 50,
+        antes_de: int | None = None,
+    ) -> list[EventoProfesional]: ...
+
+    def resumen(self, institucion: Institucion) -> ResumenPersonal: ...
 
     def actualizar(
         self,

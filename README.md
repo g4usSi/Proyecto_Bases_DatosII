@@ -1,14 +1,18 @@
 # Proyecto Bases de Datos II
 
 Plataforma común de historiales clínicos con FastAPI, Python 3.12 y arquitectura
-hexagonal. Identidad central en PostgreSQL: **un establecimiento por profesional**.
+hexagonal. Identidad central en PostgreSQL: **un establecimiento por profesional**;
+el superusuario de plataforma es la única cuenta sin establecimiento.
 La API decide el motor después de autenticar; cada establecimiento conserva sus datos.
 
 ## Estado y continuidad
 
-El trabajo permanece en `main`; las ramas de motor aún no se han creado.
+Las ramas organizan el desarrollo; las cuatro instituciones comparten una aplicación.
 **Documentación completa del backend (qué hace cada pieza, rutas, permisos, motores):
 [documentacion-backend.md](documentacion-backend.md).**
+Contratos nuevos para el mockup de Hospital General, Laboratorio y administración,
+migraciones 015–016 y pruebas en bases temporales:
+[guía de integración del frontend](docs/api_frontend_hospital_laboratorio.md).
 Para retomar decisiones, pendientes, límites conocidos y pasos recomendados, leer
 [contexto para el siguiente agente](docs/CONTEXTO_PARA_OTRO_AGENTE.md).
 
@@ -208,7 +212,7 @@ sin configurar un entorno de pruebas separado.
 El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
 Pendiente: hacer los mockups y el frontend ([plan](docs/frontend.md)), redactar el
 documento comparativo, probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
-aplica las migraciones nuevas (PostgreSQL 009–014, MySQL 006–014 y repetir el JS de MongoDB:
+aplica las migraciones nuevas (PostgreSQL 009–016, MySQL 006–014 y repetir el JS de MongoDB:
 sección 14 de la documentación) y crea la cuenta de administración de cada institución con
 `python -m scripts.crear_profesional ... --rol administrador`. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
 usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja

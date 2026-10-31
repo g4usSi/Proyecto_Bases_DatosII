@@ -1,33 +1,40 @@
-"""Administracion del personal (cuenta de administracion de cada institucion).
+"""Administracion del personal: administrador institucional y superusuario de plataforma.
 
-La institucion sale siempre del token del administrador. Las respuestas que muestran una
+La institucion sale del token del administrador; solo plataforma puede elegirla.
+Las respuestas que muestran una
 contrasena generada llevan Cache-Control: no-store y no se repiten.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
+from pydantic import AwareDatetime
 
 from app.application.errores import IntegracionNoConfigurada
 from app.application.use_cases.hospital import ConsultarDepartamentos
 from app.application.use_cases.profesionales import AdministrarProfesionales
 from app.bootstrap.container import Contenedor
 from app.domain.administracion import CambiosProfesional, EstadoCuenta, NuevoProfesional
+from app.domain.errores import DatosInvalidos
+from app.domain.institucion import Institucion
 from app.presentation.api.dependencies import (
     AdministradorDeProfesionales,
     ContextoDepartamentos,
+    SuperusuarioDePlataforma,
     UsuarioLeerCitas,
     obtener_contenedor,
 )
 from app.presentation.api.schemas.profesionales import (
     ContrasenaRestablecidaResponse,
     DepartamentoResponse,
+    EventoProfesionalResponse,
     ProfesionalAgendaResponse,
     ProfesionalCambiadoResponse,
     ProfesionalCambios,
     ProfesionalCreadoResponse,
     ProfesionalCrear,
     ProfesionalResponse,
+    ResumenPersonalResponse,
 )
 
 router = APIRouter(tags=["Profesionales"])
@@ -48,7 +55,12 @@ def caso_de_uso(
         if institucion in contenedor.unidades_trabajo
         else None
     )
-    return AdministrarProfesionales(contenedor.administracion, contenedor.cifrador, abrir)
+    return AdministrarProfesionales(
+        contenedor.administracion,
+        contenedor.cifrador,
+        abrir,
+        contenedor.crear_unidad_trabajo if admin.es_plataforma else None,
+    )
 
 
 CasoDeUso = Annotated[AdministrarProfesionales, Depends(caso_de_uso)]
@@ -65,7 +77,12 @@ def crear_profesional(
     admin: AdministradorDeProfesionales,
     casos: CasoDeUso,
 ) -> ProfesionalCreadoResponse:
-    """Alta de un profesional en TU institucion. 409 si el correo ya existe."""
+    """Alta en el alcance autorizado. Plataforma debe elegir establecimiento.
+
+    409 si el correo existe o la entidad ya tiene un administrador activo.
+    """
+    if not admin.es_plataforma and "establecimiento" in datos.model_fields_set:
+        raise DatosInvalidos("La institucion del administrador sale de su sesion.")
     resultado = casos.crear(
         admin,
         NuevoProfesional(
@@ -77,6 +94,7 @@ def crear_profesional(
             datos.id_departamento,
         ),
         datos.contrasena_inicial.get_secret_value() if datos.contrasena_inicial else None,
+        datos.establecimiento,
     )
     response.headers.update(SIN_CACHE)
     return ProfesionalCreadoResponse(
@@ -94,10 +112,56 @@ def listar_profesionales(
     id_departamento: Annotated[int | None, Query(ge=1)] = None,
     estado: EstadoCuenta | None = None,
     limite: Annotated[int, Query(ge=1, le=500)] = 200,
+    establecimiento: Institucion | None = None,
 ) -> list[ProfesionalResponse]:
-    """Personal de tu institucion (sin cuentas de administracion), por apellidos."""
-    fichas = casos.listar(admin, rol, id_departamento, estado, limite)
+    """Personal del alcance autorizado, por apellidos; plataforma incluye administradores."""
+    fichas = casos.listar(admin, rol, id_departamento, estado, limite, establecimiento)
     return [ProfesionalResponse.model_validate(f) for f in fichas]
+
+
+@router.get("/profesionales/resumen", response_model=ResumenPersonalResponse)
+def resumen_personal(
+    admin: AdministradorDeProfesionales,
+    casos: CasoDeUso,
+    establecimiento: Institucion | None = None,
+) -> ResumenPersonalResponse:
+    return ResumenPersonalResponse.model_validate(casos.resumen(admin, establecimiento))
+
+
+@router.get("/profesionales/bitacora", response_model=list[EventoProfesionalResponse])
+def bitacora_personal(
+    admin: AdministradorDeProfesionales,
+    casos: CasoDeUso,
+    establecimiento: Institucion | None = None,
+    accion: Literal["alta", "cambio", "restablecer_contrasena", "cambiar_contrasena", "eliminar"]
+    | None = None,
+    desde: AwareDatetime | None = None,
+    hasta: AwareDatetime | None = None,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+    antes_de: Annotated[int | None, Query(ge=1)] = None,
+) -> list[EventoProfesionalResponse]:
+    return [
+        EventoProfesionalResponse.model_validate(e)
+        for e in casos.bitacora(
+            admin,
+            establecimiento,
+            accion=accion,
+            desde=desde,
+            hasta=hasta,
+            limite=limite,
+            antes_de=antes_de,
+        )
+    ]
+
+
+@router.delete("/profesionales/{id_profesional}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_profesional(
+    id_profesional: IdProfesional,
+    admin: SuperusuarioDePlataforma,
+    casos: CasoDeUso,
+) -> Response:
+    casos.eliminar(admin, id_profesional)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/profesionales/{id_profesional}", response_model=ProfesionalResponse)
@@ -121,7 +185,7 @@ def cambiar_profesional(
         nombres=datos.nombres,
         apellidos=datos.apellidos,
         permisos=frozenset(datos.permisos) if datos.permisos is not None else None,
-        estado=datos.estado,
+        estado=EstadoCuenta(datos.estado) if datos.estado else None,
         id_departamento=datos.id_departamento,
         quitar_departamento="id_departamento" in enviados and datos.id_departamento is None,
     )

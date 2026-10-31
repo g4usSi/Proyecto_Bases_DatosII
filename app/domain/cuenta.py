@@ -10,7 +10,7 @@ class CuentaProfesional:
     id_profesional: str
     correo: str
     password_hash: str
-    institucion: Institucion
+    institucion: Institucion | None
     permisos: frozenset[str]
     version_token: int
     activo: bool
@@ -19,6 +19,10 @@ class CuentaProfesional:
     apellidos: str | None = None
     rol: str | None = None
     debe_cambiar_contrasena: bool = False
+
+    @property
+    def es_plataforma(self) -> bool:
+        return self.institucion is None
 
     def usuario(self) -> UsuarioAutenticado:
         return UsuarioAutenticado(

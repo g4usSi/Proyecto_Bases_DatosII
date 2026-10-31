@@ -1,7 +1,8 @@
 """Cobros y pagos (Hospital General y Centro Pediatrico). Nada se borra: un error se
 corrige anulando el pago o el cobro, nunca editandolo."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from app.application.ports.unidad_trabajo import UnidadDeTrabajo
 from app.domain.cobros import Cobro, EstadoCobro, NuevoCargo, NuevoPago, Servicio
@@ -27,6 +28,19 @@ class ConsultarServicios:
     def ejecutar(self) -> list[Servicio]:
         with self.unidad_trabajo as unidad:
             return unidad.cobros.listar_servicios()
+
+
+class ResumenDeCobros:
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo, zona: ZoneInfo):
+        self.unidad_trabajo = unidad_trabajo
+        self.zona = zona
+
+    def ejecutar(self):
+        hoy = datetime.now(self.zona).date()
+        desde = datetime.combine(hoy, time.min, self.zona)
+        hasta = datetime.combine(hoy + timedelta(days=1), time.min, self.zona)
+        with self.unidad_trabajo as unidad:
+            return unidad.cobros.resumen(desde, hasta)
 
 
 class ConsultarCobros:

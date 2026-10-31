@@ -33,6 +33,15 @@ class MetodoPago(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ResumenCobros:
+    cobros_por_estado: dict[str, int]
+    saldo_pendiente: Decimal
+    cobrado_hoy: Decimal
+    pagos_anulados: int
+    cobrado_hoy_por_metodo: dict[str, Decimal]
+
+
+@dataclass(frozen=True, slots=True)
 class Servicio:
     id_servicio: int
     nombre: str

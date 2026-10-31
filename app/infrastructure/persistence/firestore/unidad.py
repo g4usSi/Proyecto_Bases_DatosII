@@ -748,3 +748,14 @@ class UnidadTrabajoFirestore:
     def rollback(self) -> None:
         # Un batch sin confirmar no envio nada: descartarlo equivale a revertir.
         self.lote = self.cliente.batch()
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        pacientes = self.cliente.collection(COLECCION_PACIENTES).count().get(timeout=self.timeout)
+        citas = (
+            self.cliente.collection(COLECCION_CITAS)
+            .where(filter=FieldFilter("inicio", ">=", desde))
+            .where(filter=FieldFilter("inicio", "<", hasta))
+            .count()
+            .get(timeout=self.timeout)
+        )
+        return {"pacientes_registrados": pacientes[0][0].value, "citas_hoy": citas[0][0].value}

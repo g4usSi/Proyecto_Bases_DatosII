@@ -1,4 +1,4 @@
-"""Administracion del personal de UNA institucion (cuentas de la identidad central).
+"""Administracion institucional y de plataforma (cuentas de la identidad central).
 
 Reglas (decisiones del equipo, brecha-api-frontend):
 - Un administrador por institucion, con un unico permiso (profesionales:administrar) y sin
@@ -7,7 +7,8 @@ Reglas (decisiones del equipo, brecha-api-frontend):
 - Los permisos se dan por profesional, no por rol. El rol fija solo la base
   (pacientes:leer, o los de la secretaria/laboratorista si no se indican otros).
 - La secretaria existe solo en la Clinica Odontologica y nunca tiene permisos clinicos.
-- Las cuentas de administracion se crean con scripts/crear_profesional.py, no por la API.
+- El superusuario sin institucion crea administradores por la API y es el unico que
+  elimina cuentas. Se aprovisiona y recupera con scripts locales.
 """
 
 import secrets
@@ -17,10 +18,11 @@ from datetime import datetime
 from enum import StrEnum
 
 from app.domain import permisos as p
-from app.domain.errores import DatosInvalidos
+from app.domain.errores import AccesoDenegado, DatosInvalidos
 from app.domain.institucion import Institucion
 
 ROL_ADMINISTRADOR = "administrador"
+ROL_SUPERUSUARIO = "superusuario"
 
 # Roles que un administrador puede dar de alta en su institucion.
 ROLES_POR_INSTITUCION: dict[Institucion, frozenset[str]] = {
@@ -58,6 +60,7 @@ class EstadoCuenta(StrEnum):
     ACTIVA = "activa"
     BLOQUEADA = "bloqueada"  # no puede iniciar sesion (por administracion o por intentos)
     INACTIVA = "inactiva"  # ya no forma parte del personal
+    ELIMINADA = "eliminada"  # irreversible; solo por DELETE
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,11 +126,35 @@ class ProfesionalAgenda:
     id_departamento: int | None = None
 
 
-def validar_rol(institucion: Institucion, rol: str) -> None:
+@dataclass(frozen=True, slots=True)
+class EventoProfesional:
+    id_evento: int
+    ocurrido_en: datetime
+    institucion: Institucion | None
+    actor: str
+    rol_actor: str
+    id_profesional: str
+    cuenta: str
+    accion: str
+    detalle: dict
+
+
+@dataclass(frozen=True, slots=True)
+class ResumenPersonal:
+    por_estado: dict[str, int]
+    bloqueadas_por_intentos: int
+    pendientes_cambio_contrasena: int
+    activos_por_rol: dict[str, int]
+    activos_por_departamento: dict[str, int] | None
+    ultimos_movimientos: list[EventoProfesional]
+    administrador_activo: str | None = None
+
+
+def validar_rol(institucion: Institucion, rol: str, *, actor_es_superusuario: bool = False) -> None:
     if rol == ROL_ADMINISTRADOR:
-        raise DatosInvalidos(
-            "Las cuentas de administracion se crean con scripts/crear_profesional.py."
-        )
+        if not actor_es_superusuario:
+            raise AccesoDenegado("Solo el superusuario puede crear administradores.")
+        return
     if rol not in ROLES_POR_INSTITUCION[institucion]:
         validos = ", ".join(sorted(ROLES_POR_INSTITUCION[institucion]))
         raise DatosInvalidos(f"Rol no valido para tu institucion. Roles permitidos: {validos}.")
@@ -142,6 +169,10 @@ def permisos_finales(
         if pedidos is not None
         else p.PERMISOS_POR_ROL.get(rol, p.PERMISOS_POR_DEFECTO)
     )
+    if rol == ROL_ADMINISTRADOR:
+        if elegidos != {p.PROFESIONALES_ADMINISTRAR}:
+            raise DatosInvalidos("El administrador tiene solo profesionales:administrar.")
+        return frozenset(elegidos)
     elegidos = elegidos | {p.PACIENTES_LEER}  # base de todo el personal
     if p.PROFESIONALES_ADMINISTRAR in elegidos:
         raise DatosInvalidos(

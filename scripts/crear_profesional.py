@@ -13,7 +13,15 @@ from app.core.config import PROJECT_ROOT
 from app.domain import permisos
 from app.domain.institucion import Institucion
 
-ROLES = ["medico", "enfermeria", "laboratorista", "odontologo", "secretaria", "administrador"]
+ROLES = [
+    "medico",
+    "enfermeria",
+    "laboratorista",
+    "odontologo",
+    "secretaria",
+    "administrador",
+    "superusuario",
+]
 
 
 def main() -> None:
@@ -22,7 +30,7 @@ def main() -> None:
     parser.add_argument("--nombres", required=True)
     parser.add_argument("--apellidos", required=True)
     parser.add_argument(
-        "--institucion", required=True, choices=[item.value for item in Institucion]
+        "--institucion", "--establecimiento", choices=[item.value for item in Institucion]
     )
     parser.add_argument("--rol", required=True, choices=ROLES)
     parser.add_argument(
@@ -37,6 +45,8 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    if (args.rol == "superusuario") != (args.institucion is None):
+        parser.error("El superusuario no tiene institucion; los demas roles deben indicar una.")
     elegidos = set(args.permiso) or set(
         permisos.PERMISOS_POR_ROL.get(args.rol, permisos.PERMISOS_POR_DEFECTO)
     )
@@ -52,6 +62,10 @@ def main() -> None:
             "La cuenta de administracion tiene solo profesionales:administrar (sin permisos "
             "clinicos). Omite --permiso."
         )
+    if args.rol == "superusuario" and elegidos != permisos.PERMISOS_POR_ROL["superusuario"]:
+        parser.error("El superusuario tiene solo plataforma:administrar y pagos:ver.")
+    if args.rol != "superusuario" and permisos.PLATAFORMA_ADMINISTRAR in elegidos:
+        parser.error("plataforma:administrar es exclusivo del superusuario.")
     if args.rol != "administrador" and permisos.PROFESIONALES_ADMINISTRAR in elegidos:
         parser.error("profesionales:administrar es exclusivo del rol administrador.")
     correo = args.correo.strip().lower()
@@ -71,8 +85,9 @@ def main() -> None:
         with psycopg.connect(dsn, connect_timeout=5) as conn:
             conn.execute(
                 "INSERT INTO identidad.profesional "
-                "(id_profesional, correo, nombres, apellidos, password_hash, establecimiento, rol) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                "(id_profesional, correo, nombres, apellidos, password_hash, establecimiento, "
+                "rol, debe_cambiar_contrasena) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,TRUE)",
                 (
                     identificador,
                     correo,
@@ -88,17 +103,17 @@ def main() -> None:
                     "INSERT INTO identidad.profesional_permiso VALUES (%s,%s)",
                     (identificador, permiso),
                 )
-            if args.institucion == Institucion.HOSPITAL_GENERAL:
+            if args.institucion == Institucion.HOSPITAL_GENERAL and args.rol != "administrador":
                 # Misma base y misma transaccion: la cuenta y su perfil nacen juntos.
                 from scripts.sincronizar_profesionales import sincronizar_hospital
 
                 sincronizar_hospital(conn, [str(identificador)])
     except psycopg.errors.UniqueViolation:
-        parser.error("Ese correo ya tiene una cuenta; no se modifico.")
+        parser.error("El correo ya existe o ya hay una cuenta de administracion para ese alcance.")
     except psycopg.errors.CheckViolation:
         parser.error(
             "La base rechazo el rol o los permisos. Aplica las migraciones de "
-            "database/postgresql (006, 007 y 012) si la base se creo antes."
+            "database/postgresql hasta 015 si la base se creo antes."
         )
     except psycopg.errors.ForeignKeyViolation:
         parser.error("Institucion o permiso desconocido; se revirtio el alta.")
@@ -106,7 +121,9 @@ def main() -> None:
         parser.error("No se pudo crear el profesional. Revisa conexiones y datos requeridos.")
     print(f"Profesional creado: {identificador}. Establecimiento: {args.institucion}.")
     print(f"Permisos: {', '.join(sorted(elegidos))}.")
-    if args.rol == "administrador":
+    if args.rol == "superusuario":
+        print("Cuenta de plataforma: administra las cuatro instituciones, sin acceso clinico.")
+    elif args.rol == "administrador":
         print("Cuenta de administracion: gestiona el personal de su institucion desde la API.")
     elif args.institucion == Institucion.CLINICA_ODONTOLOGICA:
         # Perfil local en Firestore (sin correo ni contrasena). No es una transaccion entre

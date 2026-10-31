@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.application.errores import IntegracionNoConfigurada
@@ -10,8 +10,9 @@ from app.application.ports.unidad_trabajo import UnidadDeTrabajo
 from app.bootstrap.container import Contenedor
 from app.core import auditoria
 from app.domain import permisos
-from app.domain.errores import AccesoDenegado
+from app.domain.errores import AccesoDenegado, DatosInvalidos
 from app.domain.identidad import UsuarioAutenticado
+from app.domain.institucion import Institucion
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -47,6 +48,8 @@ def obtener_unidad_trabajo(
     contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
 ) -> UnidadDeTrabajo:
     # La institucion siempre proviene del autenticador, nunca de un parametro del cliente.
+    if usuario.es_plataforma:
+        raise AccesoDenegado("Una cuenta de plataforma no accede a datos clinicos.")
     return contenedor.crear_unidad_trabajo(usuario.institucion)
 
 
@@ -73,7 +76,9 @@ def usuario_con_permiso(permiso: str) -> Callable[..., UsuarioAutenticado]:
         request: Request,
         usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
     ) -> UsuarioAutenticado:
-        if permiso not in usuario.permisos:
+        if permiso not in usuario.permisos or (
+            permiso == permisos.PLATAFORMA_ADMINISTRAR and not usuario.es_plataforma
+        ):
             _auditar(request, usuario, permiso, permitido=False)
             raise AccesoDenegado("No tienes permiso para realizar esta operacion.")
         _auditar(request, usuario, permiso, permitido=True)
@@ -100,13 +105,42 @@ def contexto_con_alguno(*permisos_validos: str) -> Callable[..., Contexto]:
         contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
     ) -> Contexto:
         elegido = next((p for p in permisos_validos if p in usuario.permisos), None)
-        if elegido is None:
+        if elegido is None or usuario.es_plataforma:
             _auditar(request, usuario, permisos_validos[0], permitido=False)
             raise AccesoDenegado("No tienes permiso para realizar esta operacion.")
         _auditar(request, usuario, elegido, permitido=True)
         return Contexto(usuario, contenedor.crear_unidad_trabajo(usuario.institucion))
 
     return dependencia
+
+
+def gestor_de_profesionales(
+    usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
+) -> UsuarioAutenticado:
+    if permisos.PROFESIONALES_ADMINISTRAR in usuario.permisos and not usuario.es_plataforma:
+        return usuario
+    if permisos.PLATAFORMA_ADMINISTRAR in usuario.permisos and usuario.es_plataforma:
+        return usuario
+    raise AccesoDenegado("No tienes permiso para administrar cuentas.")
+
+
+def contexto_pagos_lectura(
+    request: Request,
+    usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
+    establecimiento: Annotated[Institucion | None, Query()] = None,
+) -> Contexto:
+    usuario.exigir_permiso(permisos.PAGOS_VER)
+    institucion = usuario.institucion
+    if usuario.es_plataforma:
+        usuario.exigir_permiso(permisos.PLATAFORMA_ADMINISTRAR)
+        if establecimiento not in {Institucion.HOSPITAL_GENERAL, Institucion.CENTRO_PEDIATRICO}:
+            raise DatosInvalidos("Selecciona hospital_general o centro_pediatrico.")
+        institucion = establecimiento
+    elif establecimiento is not None and establecimiento != institucion:
+        raise AccesoDenegado("Solo puedes consultar los cobros de tu institucion.")
+    _auditar(request, usuario, permisos.PAGOS_VER, permitido=True)
+    return Contexto(usuario, contenedor.crear_unidad_trabajo(institucion))
 
 
 # Permisos de identidad.permiso (database/postgresql/002, 006 y 011).
@@ -120,15 +154,16 @@ ContextoLeerCitas = Annotated[Contexto, Depends(_con(permisos.CITAS_LEER))]
 ContextoGestionarCitas = Annotated[Contexto, Depends(_con(permisos.CITAS_GESTIONAR))]
 ContextoResultadosLab = Annotated[Contexto, Depends(_con(permisos.LABORATORIO_RESULTADOS))]
 ContextoValidarLab = Annotated[Contexto, Depends(_con(permisos.LABORATORIO_VALIDAR))]
-AdministradorDeProfesionales = Annotated[
-    UsuarioAutenticado, Depends(usuario_con_permiso(permisos.PROFESIONALES_ADMINISTRAR))
+AdministradorDeProfesionales = Annotated[UsuarioAutenticado, Depends(gestor_de_profesionales)]
+SuperusuarioDePlataforma = Annotated[
+    UsuarioAutenticado, Depends(usuario_con_permiso(permisos.PLATAFORMA_ADMINISTRAR))
 ]
 UsuarioLeerCitas = Annotated[UsuarioAutenticado, Depends(usuario_con_permiso(permisos.CITAS_LEER))]
 ContextoDepartamentos = Annotated[
     Contexto,
     Depends(contexto_con_alguno(permisos.PACIENTES_LEER, permisos.PROFESIONALES_ADMINISTRAR)),
 ]
-ContextoVerPagos = Annotated[Contexto, Depends(_con(permisos.PAGOS_VER))]
+ContextoVerPagos = Annotated[Contexto, Depends(contexto_pagos_lectura)]
 ContextoRegistrarPagos = Annotated[Contexto, Depends(_con(permisos.PAGOS_REGISTRAR))]
 ContextoGestionarCamas = Annotated[Contexto, Depends(_con(permisos.CAMAS_GESTIONAR))]
 ContextoLeerLab = Annotated[

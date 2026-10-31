@@ -61,9 +61,10 @@ no perderlas antes de implementar el cliente.
 
 * **Una cuenta de administración por institución** (rol `administrador`). Tiene un único
   permiso, `profesionales:administrar`, y **ningún permiso clínico**: no ve pacientes. La
-  base lo impone (`012_administracion_profesionales.sql`). Se crea con
-  `scripts/crear_profesional.py --rol administrador`; la API no crea administradores.
-* Solo el administrador restablece contraseñas. Cada persona cambia la suya con
+  base lo impone (`012` y `015`). El **superusuario de plataforma**, sin institución,
+  puede crear administradores por la API. El script local se conserva para el arranque.
+* El administrador institucional y el superusuario restablecen contraseñas dentro de
+  su alcance. Cada persona cambia la suya con
   `POST /auth/cambiar-contrasena`.
 * La institución sale siempre del token del administrador: un administrador del
   laboratorio no ve ni modifica al personal del hospital (404).
@@ -309,6 +310,35 @@ texto decimal (`"150.00"`).
 | `GET /laboratorio/ordenes?estado=&limite=&antes_de=` | `historiales:leer` o `laboratorio:resultados` | Órdenes de todo el laboratorio, más recientes primero, con nombre del paciente, muestras y pruebas pendientes (sin valores). `estado` repetible; `antes_de` es un cursor. |
 | `GET /laboratorio/pruebas/{codigo}/versiones` | ídem | Todas las versiones publicadas de una prueba; marca la vigente. 404 si no existe. |
 
+### 3.13 Brechas restantes del mockup (31 de octubre de 2026)
+
+Implementadas: atenciones unificadas del hospital, grupo sanguíneo, perfil propio,
+conteos globales del laboratorio, paginación con desempate de órdenes y administración
+en dos niveles (superusuario, baja lógica, resúmenes, bitácora y pagos de solo lectura).
+Contratos completos, campos, permisos, migraciones **015–016** y pruebas reproducibles:
+[API para el frontend de Hospital General y Laboratorio](docs/api_frontend_hospital_laboratorio.md).
+
+| Ruta nueva | Permiso / alcance |
+| --- | --- |
+| `GET /auth/perfil` | Cuenta autenticada; solo su perfil. |
+| `GET /atenciones`, `GET /pacientes/{id}/atenciones`, `GET /pacientes/{id}/atenciones/{id_atencion}` | `historiales:leer`; solo Hospital. |
+| `PUT /pacientes/{id}/grupo-sanguineo` | `consultas:registrar`; solo Hospital. |
+| `GET /laboratorio/resumen` | `historiales:leer` o `laboratorio:resultados`; solo Laboratorio. |
+| `GET /cobros/resumen` | `pagos:ver`; indicadores globales y cobros confirmados del día local (Hospital/Pediátrico). |
+| `GET /profesionales/resumen`, `GET /profesionales/bitacora` | `profesionales:administrar` de su entidad o `plataforma:administrar`. |
+| `DELETE /profesionales/{id}` | Solo `plataforma:administrar`; 204, irreversible, sin borrar historial. |
+| `GET /plataforma/resumen` | Solo `plataforma:administrar`; agregados por entidad, respuesta parcial. |
+
+El superusuario tiene únicamente `plataforma:administrar` y `pagos:ver`, con
+`institucion: null` en login y `/auth/me`. El administrador institucional mantiene
+únicamente `profesionales:administrar`. Ninguno accede a rutas clínicas. Los GET de
+pagos/cobros permiten al superusuario elegir `?establecimiento=` (Hospital/Pediátrico);
+los POST siguen vedados. `POST /profesionales` solo acepta `establecimiento` para
+plataforma; en esa cuenta es obligatorio y permite crear `rol: administrador`.
+
+Para órdenes de laboratorio, enviar `antes_de_id` junto con `antes_de` permite
+paginar sin omitir órdenes con igual fecha, conservando el cursor anterior.
+
 ---
 
 ## 4. Permisos y roles
@@ -375,6 +405,8 @@ Migraciones en `database/postgresql/` (se aplican en orden):
 | `012_administracion_profesionales.sql` | Rol `administrador`, permiso `profesionales:administrar` (reglas en la base), área del profesional, `debe_cambiar_contrasena`, bitácora de administración solo-agregar y permisos de la API. |
 | `013_camas_ingresos.sql` | Ingreso ↔ cama: solo camas disponibles (bloqueo de la cama), Ocupada solo con ingreso abierto, alta única que deja la cama en limpieza, ingreso no reasignable. `orden_medica.descripcion`. Permiso `camas:gestionar`. |
 | `014_cobros.sql` | Permisos `pagos:ver`/`pagos:registrar`, referencia del pago, descripción del cobro y permisos de la API sobre el módulo de pagos. |
+| `015_administracion_dos_niveles.sql` | Superusuario sin institución, unicidad administrativa, baja lógica irreversible y bitácora. |
+| `016_frontend_hospital.sql` | Permisos para perfil propio y grupo sanguíneo del Hospital; restricción de valores de grupo. |
 
 Consistencia: una transacción por petición; `EXCLUDE gist` impide citas solapadas aunque
 dos peticiones lleguen a la vez; *advisory locks* y `FOR SHARE` serializan la baja contra
