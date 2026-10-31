@@ -1,4 +1,4 @@
-# Avance de la Entrega II (estimado al 23 de octubre de 2026)
+# Avance de la Entrega II (estimado al 31 de octubre de 2026)
 
 Estimación del equipo contra los "Resultados esperados" del PDF. Los pesos son
 propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
@@ -8,7 +8,7 @@ propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
 | Parte | Avance |
 | --- | --- |
 | Backend (API + motores) | **≈ 98 %** |
-| Frontend (cliente) | **0 %**: tecnología decidida (HTML/JS en FastAPI), faltan mockups |
+| Frontend (cliente) | **0 %**: tecnología decidida (HTML/JS en FastAPI) y mockup listo; cliente sin construir |
 | Documento comparativo | **≈ 30 %**: el material está repartido en `docs/`, sin redactar |
 | Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 52 %** |
 
@@ -34,12 +34,13 @@ Operaciones por motor (✅ hecho, — pendiente):
 Se agregó desde entonces: adendas, corrección de datos y alergias, citas en los cuatro
 motores, pediatría (crecimiento y vacunación), laboratorio (órdenes, resultados,
 validación), integridad del hospital (PostgreSQL `010`), auditoría y `/health/ready`.
-Lo que falta del backend: API de pagos y camas, probar el arranque con Docker y Firestore
-real (lo nuevo se probó con el emulador). Detalle en [documentacion-backend.md](../documentacion-backend.md).
+La Clínica Odontológica quedó completa frente al mockup y probada contra Firestore real,
+concurrencia incluida ([contrato](contrato_clinica_odontologica.md)). Lo que falta del backend:
+probar el arranque con Docker. Detalle en [documentacion-backend.md](../documentacion-backend.md).
 
 ## Frontend (pendiente completo)
 
-Decisión: HTML/JS sencillo servido por FastAPI. Faltan los mockups; plan, pantallas por
+Decisión: HTML/JS sencillo servido por FastAPI. Mockup en `referencia/`; plan, pantallas por
 rol y odontograma en [frontend.md](frontend.md).
 
 Lo que pide el PDF: un cliente que permita iniciar sesión, ver toda la información de forma

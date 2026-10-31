@@ -17,6 +17,17 @@ de Git, Docker y las bases antes de basarse en los datos de entorno anotados aqu
   trabajo. Modelo de consultas/archivo pendiente: `docs/modelo_odontologia.md`.
 - Proyecto ahora también en `C:\Users\henry\OneDrive\...\Proyecto_Bases_DatosII`.
 
+## Actualización 31 de octubre de 2026 — Clínica Odontológica
+
+Rama `Clinica-Odontologica`, que parte de `Develop`. El backend de la clínica coincide con el
+mockup y el contrato por pantalla está en `docs/contrato_clinica_odontologica.md`. Se corrigió:
+pieza contra baja simultánea, 500 al agotar reintentos, consulta de alergias por la secretaria
+(afecta a la ruta común de los cuatro motores) y permisos por defecto del `odontologo`.
+
+Las pruebas de `tests/integration/test_firestore.py` pasan contra el proyecto real. Con el
+emulador 1.19.8 las de concurrencia se omiten. Lo administrativo del mockup para la clínica
+depende del commit `d611ab6` de la rama `Hospital-pediatrico`.
+
 ## Estado vigente (23 de octubre de 2026, noche) — leer primero
 
 Esta sección corrige lo que dicen las actualizaciones históricas de más abajo.
