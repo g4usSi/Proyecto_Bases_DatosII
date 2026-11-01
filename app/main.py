@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.presentation.api.handlers import registrar_manejadores
 from app.presentation.api.router import api_router
 from app.presentation.api.routes import health
+from app.presentation.web import montar_frontend
 
 
 def create_app(settings: Settings | None = None, contenedor: Contenedor | None = None) -> FastAPI:
@@ -46,6 +47,7 @@ def create_app(settings: Settings | None = None, contenedor: Contenedor | None =
     registrar_manejadores(app)
     app.include_router(health.router)
     app.include_router(api_router, prefix=settings.api_prefix)
+    montar_frontend(app)
 
     @app.get("/", tags=["Sistema"])
     def inicio() -> dict[str, str]:
