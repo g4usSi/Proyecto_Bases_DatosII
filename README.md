@@ -32,8 +32,8 @@ MongoDB; camas, ingresos y cobros en PostgreSQL; tutores y facturación en MySQL
 institución) y el cambio de contraseña funcionan para todas. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
 migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
 
-**Frontend:** pendiente. Decisión: HTML/JS sencillo servido por la misma FastAPI (sin
-React ni paso de compilación). Faltan los mockups; el plan, las pantallas por rol y el
+**Frontend:** administración disponible en `/app/`; pantallas clínicas por rama. HTML/JS sencillo servido por la misma FastAPI (sin
+React ni paso de compilación). El plan, las pantallas por rol y el
 odontograma interactivo están en [docs/frontend.md](docs/frontend.md).
 
 ### Decisiones del equipo vigentes
@@ -210,7 +210,7 @@ sin configurar un entorno de pruebas separado.
 ## Trabajo siguiente
 
 El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
-Pendiente: hacer los mockups y el frontend ([plan](docs/frontend.md)), redactar el
+Pendiente: completar las pantallas clínicas del frontend ([plan](docs/frontend.md)), redactar el
 documento comparativo, probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
 aplica las migraciones nuevas (PostgreSQL 009–016, MySQL 006–014 y repetir el JS de MongoDB:
 sección 14 de la documentación) y crea la cuenta de administración de cada institución con

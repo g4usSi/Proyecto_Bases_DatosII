@@ -154,3 +154,21 @@ def test_token_plataforma_admite_null_pero_exige_claim_inst(autenticador):
     assert payload.pop("inst") is None
     with pytest.raises(TokenInvalido):
         autenticador.verificar_token(jwt.encode(payload, SECRETO, algorithm="HS256"))
+
+
+def test_superusuario_consulta_areas_solo_del_hospital(settings):
+    client, _, unidad, _ = preparar(settings, {"admin": SUPER, "entidad": ADMIN})
+    otra = {"Authorization": "Bearer entidad"}
+    with client:
+        ruta = "/api/v1/departamentos"
+        assert client.get(ruta, headers=AUTH).status_code == 422
+        laboratorio = client.get(
+            ruta, params={"establecimiento": "laboratorio_clinico"}, headers=AUTH
+        )
+        hospital = client.get(ruta, params={"establecimiento": "hospital_general"}, headers=AUTH)
+        propia = client.get(ruta, params={"establecimiento": "hospital_general"}, headers=otra)
+        ajena = client.get(ruta, params={"establecimiento": "centro_pediatrico"}, headers=otra)
+    assert laboratorio.status_code == 422
+    assert hospital.status_code == propia.status_code
+    assert hospital.status_code != 403
+    assert ajena.status_code == 403
