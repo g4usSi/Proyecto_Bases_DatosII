@@ -256,7 +256,7 @@ Flujo de una orden: `solicitada → en_proceso → validada` (o `cancelada`).
 | `GET /profesionales/{id}` | `profesionales:administrar` | Una ficha (404 si es de otra institución). |
 | `PATCH /profesionales/{id}` | `profesionales:administrar` | Nombres, área, permisos (lista completa) y estado `activa`/`bloqueada`/`inactiva`. Bloquear o desactivar corta el acceso de inmediato. |
 | `POST /profesionales/{id}/restablecer-contrasena` | `profesionales:administrar` | Genera una contraseña nueva, la muestra una vez (`Cache-Control: no-store`) y cierra las sesiones de esa persona. |
-| `GET /departamentos` | `pacientes:leer` o `profesionales:administrar` | Áreas del hospital con habitaciones y camas disponibles (otros → 501). |
+| `GET /departamentos` | `pacientes:leer`, `profesionales:administrar` o `plataforma:administrar` | Áreas del hospital con habitaciones y camas disponibles (otros → 501). El superusuario envía `?establecimiento=hospital_general`; otra entidad o ninguna → 422. |
 | `GET /citas/profesionales` | `citas:leer` | Profesionales activos con quienes se puede agendar (sin correo ni permisos). Resuelve la decisión D5. |
 
 Contraseñas: 12 a 128 caracteres, letras combinadas con números o símbolos, sin el usuario
