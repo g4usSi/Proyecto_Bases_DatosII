@@ -162,6 +162,9 @@ Un motor no configurado, no disponible o que no termine en 15 segundos devuelve
 `null` para su entidad; las otras conservan sus resultados. No es una transaccion
 ni una fotografia simultanea de los cuatro motores.
 
+El superusuario consulta las areas con `GET /departamentos?establecimiento=hospital_general`
+(sin el parametro u otra entidad da 422), para asignarlas al crear o editar personal.
+
 El superusuario usa `?establecimiento=hospital_general|centro_pediatrico` en los GET
 de cobros, servicios y cobros de paciente. Omitirlo u ofrecer otra entidad da 422.
 Todos los POST de pagos/cobros dan 403 para plataforma. Para otras cuentas, el alcance

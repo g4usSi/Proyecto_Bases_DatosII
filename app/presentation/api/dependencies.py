@@ -143,6 +143,26 @@ def contexto_pagos_lectura(
     return Contexto(usuario, contenedor.crear_unidad_trabajo(institucion))
 
 
+def contexto_departamentos(
+    request: Request,
+    usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
+    contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
+    establecimiento: Annotated[Institucion | None, Query()] = None,
+) -> Contexto:
+    """Areas del Hospital: el superusuario las pide para asignar personal; no son datos clinicos."""
+    if usuario.es_plataforma:
+        usuario.exigir_permiso(permisos.PLATAFORMA_ADMINISTRAR)
+        if establecimiento != Institucion.HOSPITAL_GENERAL:
+            raise DatosInvalidos("Selecciona hospital_general.")
+        _auditar(request, usuario, permisos.PLATAFORMA_ADMINISTRAR, permitido=True)
+        return Contexto(usuario, contenedor.crear_unidad_trabajo(establecimiento))
+    if establecimiento is not None and establecimiento != usuario.institucion:
+        raise AccesoDenegado("Solo puedes consultar las areas de tu institucion.")
+    return contexto_con_alguno(permisos.PACIENTES_LEER, permisos.PROFESIONALES_ADMINISTRAR)(
+        request, usuario, contenedor
+    )
+
+
 # Permisos de identidad.permiso (database/postgresql/002, 006 y 011).
 _con = contexto_con_permiso
 ContextoLeerPaciente = Annotated[Contexto, Depends(_con(permisos.PACIENTES_LEER))]
@@ -159,10 +179,7 @@ SuperusuarioDePlataforma = Annotated[
     UsuarioAutenticado, Depends(usuario_con_permiso(permisos.PLATAFORMA_ADMINISTRAR))
 ]
 UsuarioLeerCitas = Annotated[UsuarioAutenticado, Depends(usuario_con_permiso(permisos.CITAS_LEER))]
-ContextoDepartamentos = Annotated[
-    Contexto,
-    Depends(contexto_con_alguno(permisos.PACIENTES_LEER, permisos.PROFESIONALES_ADMINISTRAR)),
-]
+ContextoDepartamentos = Annotated[Contexto, Depends(contexto_departamentos)]
 ContextoVerPagos = Annotated[Contexto, Depends(contexto_pagos_lectura)]
 ContextoRegistrarPagos = Annotated[Contexto, Depends(_con(permisos.PAGOS_REGISTRAR))]
 ContextoGestionarCamas = Annotated[Contexto, Depends(_con(permisos.CAMAS_GESTIONAR))]
