@@ -53,7 +53,6 @@ from app.infrastructure.persistence.comun import (
     utc_ingenuo,
 )
 from app.infrastructure.persistence.mysql.cobros import RepositorioCobrosMySQL
-from app.infrastructure.persistence.mysql.indicadores import IndicadoresMySQL
 from app.infrastructure.persistence.mysql.tutores import RepositorioTutoresMySQL
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
@@ -1015,7 +1014,6 @@ class UnidadTrabajoMySQL:
         self.hospital = pendientes["hospital"]
         self.cobros = RepositorioCobrosMySQL(self.conexion)
         self.tutores = RepositorioTutoresMySQL(self.conexion)
-        self.indicadores = IndicadoresMySQL(self.conexion)
         return self
 
     def __exit__(
@@ -1038,3 +1036,25 @@ class UnidadTrabajoMySQL:
 
     def rollback(self) -> None:
         self.conexion.rollback()
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        with self.conexion.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM paciente")
+            pacientes = cursor.fetchone()[0]
+            cursor.execute(
+                "SELECT count(*) FROM cita WHERE inicio >= %s AND inicio < %s",
+                (utc_ingenuo(desde), utc_ingenuo(hasta)),
+            )
+            citas = cursor.fetchone()[0]
+            cursor.execute(
+                "SELECT count(*), COALESCE(sum(total_facturado - total_pagado),0) "
+                "FROM facturacion WHERE anulada_en IS NULL "
+                "AND (total_facturado = 0 OR total_pagado < total_facturado)"
+            )
+            abiertos, saldo = cursor.fetchone()
+        return {
+            "pacientes_registrados": pacientes,
+            "citas_hoy": citas,
+            "cobros_abiertos": abiertos,
+            "saldo_pendiente": saldo,
+        }

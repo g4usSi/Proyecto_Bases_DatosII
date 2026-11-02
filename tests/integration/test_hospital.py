@@ -517,6 +517,12 @@ def test_cobro_con_tarifa_congelada_pagos_y_saldo(hospital, admin):
             f"{ruta}/pagos", json={"metodo": "transferencia", "monto": "195.50"}, headers=h
         ).json()
         assert (pagado["estado"], pagado["saldo"]) == ("pagado", "0.00")
+        resumen = client.get("/api/v1/cobros/resumen", headers=h)
+        assert resumen.status_code == 200, resumen.text
+        assert resumen.json()["cobrado_hoy"] == "195.50"
+        assert resumen.json()["cobrado_hoy_por_metodo"]["transferencia"] == "195.50"
+        assert resumen.json()["pagos_anulados"] == 1
+        assert resumen.json()["cobros_por_estado"]["pagado"] == 1
         assert pagado["cerrado_en"] is not None
         assert (
             client.post(f"{ruta}/cargos", json={"id_servicio": curacion}, headers=h).status_code

@@ -7,6 +7,7 @@ pagos) y el tutor facturado. No hay cierre ni anulacion de pagos: responden 501.
 """
 
 from datetime import datetime
+from decimal import Decimal
 
 import pymysql
 
@@ -18,6 +19,7 @@ from app.domain.cobros import (
     NuevoCargo,
     NuevoPago,
     Pago,
+    ResumenCobros,
     Servicio,
     TitularCobro,
 )
@@ -61,6 +63,28 @@ def _estado(fila: tuple) -> EstadoCobro:
 class RepositorioCobrosMySQL:
     def __init__(self, conexion: pymysql.Connection) -> None:
         self.conexion = conexion
+
+    def resumen(self, desde: datetime, hasta: datetime) -> ResumenCobros:
+        estados = {e.value: 0 for e in EstadoCobro}
+        filas = self._filas(
+            "SELECT COALESCE(sum(anulada_en IS NULL),0), "
+            "COALESCE(sum(IF(anulada_en IS NULL,total_facturado-total_pagado,0)),0), "
+            "COALESCE(sum(anulada_en IS NULL AND total_facturado>0 "
+            "AND total_facturado=total_pagado),0), "
+            "COALESCE(sum(anulada_en IS NOT NULL),0) FROM facturacion"
+        )
+        vigentes, saldo, pagados, anuladas = filas[0]
+        estados["pagado"], estados["abierto"] = int(pagados), int(vigentes - pagados)
+        estados["anulado"] = int(anuladas)
+        metodos = {m.value: Decimal(0) for m in MetodoPago}
+        for nombre, monto in self._filas(
+            "SELECT t.nombre,sum(p.monto) FROM pago p "
+            "JOIN tipo_de_pago t ON t.id_tipo_pago=p.id_tipo_pago "
+            "WHERE p.fecha_pago >= %s AND p.fecha_pago < %s GROUP BY t.nombre",
+            (utc_ingenuo(desde), utc_ingenuo(hasta)),
+        ):
+            metodos[METODO_DOMINIO[nombre].value] += monto
+        return ResumenCobros(estados, saldo, sum(metodos.values(), Decimal(0)), 0, metodos)
 
     def _filas(self, sql: str, parametros: tuple = ()) -> tuple[tuple, ...]:
         with self.conexion.cursor() as cursor:

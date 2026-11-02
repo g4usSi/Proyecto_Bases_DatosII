@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import TracebackType
 from typing import Literal, Protocol, Self
 
@@ -5,7 +6,6 @@ from app.application.ports.citas import RepositorioCitas
 from app.application.ports.cobros import RepositorioCobros
 from app.application.ports.historial import RepositorioHistorial
 from app.application.ports.hospital import RepositorioHospital
-from app.application.ports.indicadores import RepositorioIndicadores
 from app.application.ports.laboratorio import RepositorioLaboratorio
 from app.application.ports.odontograma import RepositorioOdontograma
 from app.application.ports.pacientes import RepositorioPacientes
@@ -56,9 +56,6 @@ class UnidadDeTrabajo(Protocol):
     @property
     def tutores(self) -> RepositorioTutores: ...
 
-    @property
-    def indicadores(self) -> RepositorioIndicadores: ...
-
     def __enter__(self) -> Self: ...
 
     def __exit__(
@@ -71,3 +68,7 @@ class UnidadDeTrabajo(Protocol):
     def commit(self) -> None: ...
 
     def rollback(self) -> None: ...
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        """Solo agregados de la institucion; nunca documentos ni identificadores clinicos."""
+        ...

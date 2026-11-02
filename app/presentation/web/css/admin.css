@@ -1,0 +1,51 @@
+/* Resumen general: las cuatro entidades forman el simbolo de la plataforma.
+   Es cristal esmerilado a proposito: deja ver que hay actividad, nunca el dato de un paciente. */
+.entidades { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.entidad {
+  --tinte: var(--c-hospital);
+  position: relative; display: grid; gap: 14px; align-content: start; padding: 22px 24px;
+  border: 1px solid var(--glass-borde); border-radius: 10px;
+  background: color-mix(in srgb, var(--tinte) 7%, var(--glass-panel));
+  -webkit-backdrop-filter: var(--glass-desenfoque); backdrop-filter: var(--glass-desenfoque);
+  box-shadow: var(--sombra-panel), inset 0 1px 0 var(--glass-brillo);
+}
+.entidad:nth-child(1) { border-top-left-radius: 34px; }
+.entidad:nth-child(2) { --tinte: var(--c-pediatrico); border-top-right-radius: 34px; }
+.entidad:nth-child(3) { --tinte: var(--c-laboratorio); border-bottom-left-radius: 34px; }
+.entidad:nth-child(4) { --tinte: var(--c-dental); border-bottom-right-radius: 34px; }
+.entidad-cab { display: flex; gap: 12px; align-items: center; }
+.entidad-cab .emblema { background: var(--tinte); color: #fff; box-shadow: 0 6px 16px -8px var(--tinte); }
+.entidad:nth-child(3) .entidad-cab .emblema { background: #7B45D6; }
+.entidad-cab small { color: var(--text-2); font-size: 12.5px; }
+.entidad-datos { display: grid; grid-template-columns: 1fr auto; gap: 7px 16px; }
+.entidad-datos dt { color: #46586A; font-size: 13px; }
+.entidad-datos dd { font-weight: 620; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.entidad > .chip { justify-self: start; }
+.entidad.sin-datos { background: rgba(255, 255, 255, .5); }
+.entidad.sin-datos .entidad-cab .emblema { background: #6B7B89; box-shadow: none; }
+.entidad.sin-datos > p { color: #46586A; max-width: 46ch; }
+.entidad .fila { margin-top: auto; }
+
+.movimientos { display: grid; }
+.movimiento { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.movimiento > .chip { justify-self: start; }
+.papel .movimiento.corto { grid-template-columns: 112px minmax(0, 1fr) auto; }
+.movimiento:first-child { border-top: 0; padding-top: 2px; }
+.movimiento b { display: block; font-weight: 580; }
+.movimiento small { color: var(--text-2); font-size: 12.5px; overflow-wrap: anywhere; }
+.conteos { display: grid; gap: 4px; }
+.conteos div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); }
+.conteos div:first-child { border-top: 0; }
+.conteos b { font-weight: 620; font-variant-numeric: tabular-nums; }
+.titulo-sub { margin: 14px 0 6px; }
+.dos-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
+.filtros { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; }
+.filtros .campo { width: 160px; }
+.mas { display: flex; justify-content: center; }
+
+@media (max-width: 760px) {
+  .entidades { grid-template-columns: minmax(0, 1fr); }
+  .entidad:nth-child(n) { border-radius: var(--r-card); }
+  .movimiento, .papel .movimiento.corto { grid-template-columns: minmax(0, 1fr); }
+  .movimiento > .btn { justify-self: start; }
+}

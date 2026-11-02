@@ -6,11 +6,7 @@ from app.domain.institucion import Institucion
 
 @dataclass(frozen=True, slots=True)
 class UsuarioAutenticado:
-    """La institucion y los permisos provienen de una identidad verificada.
-
-    `institucion` es None solo para el superusuario de plataforma: no pertenece a ninguna
-    entidad y nunca abre un motor clinico.
-    """
+    """La institucion y los permisos provienen de una identidad verificada."""
 
     id_usuario: str
     institucion: Institucion | None

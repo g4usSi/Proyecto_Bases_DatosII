@@ -77,7 +77,6 @@ from app.domain.paciente import (
 )
 from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.comun import con_utc
-from app.infrastructure.persistence.mongodb.indicadores import IndicadoresMongo
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 
 MOTOR = "MongoDB"
@@ -1301,7 +1300,6 @@ class UnidadTrabajoMongo:
         self.hospital = pendientes["hospital"]
         self.cobros = pendientes["cobros"]
         self.tutores = pendientes["tutores"]
-        self.indicadores = IndicadoresMongo(self.database)
         return self
 
     def __exit__(
@@ -1327,3 +1325,14 @@ class UnidadTrabajoMongo:
 
     def rollback(self) -> None:
         self.pendientes = []
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        return {
+            "pacientes_registrados": self.database.pacientes.count_documents({}),
+            "citas_hoy": self.database.citas.count_documents(
+                {"inicio": {"$gte": desde, "$lt": hasta}}
+            ),
+            "ordenes_abiertas": self.database.ordenes_laboratorio.count_documents(
+                {"estado": {"$in": ABIERTAS_BD}}
+            ),
+        }

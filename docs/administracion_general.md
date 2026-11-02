@@ -1,12 +1,15 @@
 # Administración en dos niveles
 
-Estado: **implementada** en la rama `Backend/hospital-pediatrico` (31 de octubre de 2026).
-Este documento describe los cambios para agregar un superusuario de plataforma **sobre**
-el administrador que ya tiene cada institución. El mockup muestra el resultado
-(`docs/referencia/Historiales identidad visual.html`, escenarios «Administración general ·
-superusuario» y «… · administración» de cada entidad). La referencia de rutas vigente está
-en [documentacion-backend.md](../documentacion-backend.md) (§0.4, §3.8, §3.10 y §3.13); la
-sección 7 de este documento resume en qué se apartó la implementación del plan.
+Estado al 31 de octubre de 2026: **implementado en el backend** con la migración
+`015_administracion_dos_niveles.sql`. El mockup sigue siendo una referencia visual.
+El texto siguiente conserva la especificación que guio la implementación. Para los
+contratos vigentes, campos, cursores, instalación y pruebas, consultar
+[API del frontend de Hospital, Laboratorio y administración](api_frontend_hospital_laboratorio.md).
+
+Precisiones respecto al plan original: la bitácora permite `establecimiento` nulo
+para el cambio de contraseña propio del superusuario; su cursor es `id_evento`
+descendente. La lectura de pagos por paciente también acepta el selector de entidad
+de plataforma. La migración 016 completa los permisos del perfil hospitalario.
 
 ## 1. Decisiones
 
@@ -240,26 +243,3 @@ Los administradores actuales no necesitan migración de datos.
 * El superusuario **ve la bitácora** completa. El administrador ve la de su entidad: es lo
   mínimo para saber quién creó, deshabilitó o restableció cada cuenta.
 * **Sin superusuario de respaldo** por ahora. El índice `ux_un_superusuario` ya lo impide.
-
-## 7. Cómo quedó (diferencias con el plan)
-
-Todo lo de §3 está implementado y probado (unitarias con dobles; integración contra
-PostgreSQL real en `tests/integration/test_administracion_dos_niveles.py`). Diferencias:
-
-* **Bitácora sin entidad (§3.1.6).** El plan decía que `establecimiento` siempre tiene
-  valor, pero cuando el superusuario cambia **su propia** contraseña la cuenta afectada no
-  tiene entidad. La migración deja la columna nula solo en ese caso; esas entradas las ve
-  únicamente el superusuario.
-* **Selector de áreas.** Para dar de alta en el Hospital General el superusuario necesita
-  `GET /departamentos`; esa ruta abre el hospital para él (solo lee departamentos).
-* **`vinculado`.** Las cuentas de administración no tienen perfil local en el motor, así que
-  su alta responde `vinculado: null` (antes era siempre booleano).
-* **Recuperación.** `scripts/crear_profesional.py --restablecer-superusuario` implementa el
-  procedimiento de §3.5 y §5 (contraseña nueva, desbloqueo, sesiones cerradas, bitácora).
-* **Primer ingreso.** El superusuario se crea con `debe_cambiar_contrasena = TRUE` (§5).
-* **Resumen de plataforma.** Las citas se cuentan con la agenda común de los cuatro motores
-  (hoy y semana, sin canceladas). Los motores se consultan en paralelo con **un** plazo
-  total de 6 s; el que no responde sale como `indicadores: null`.
-* **Pendiente.** El `DELETE` no exige el correo en el cuerpo (§5, «Eliminar por error»): la
-  confirmación queda en el frontend. Tampoco hay segundo factor.
-

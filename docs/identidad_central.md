@@ -59,40 +59,6 @@ Get-Content database\postgresql\006_rol_secretaria_citas.sql | docker compose ex
 Get-Content database\postgresql\007_secretaria_restricciones.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general
 ```
 
-## Administración en dos niveles (migración 015)
-
-Detalle y decisiones en [administracion_general.md](administracion_general.md).
-
-- **Superusuario de plataforma**: la **única** cuenta sin establecimiento
-  (`CHECK ((rol = 'superusuario') = (establecimiento IS NULL))`). Su token lleva
-  `inst: null` y `/auth/me` devuelve `institucion: null`. Solo tiene
-  `plataforma:administrar` y `pagos:ver`; los triggers impiden darle permisos clínicos y
-  la API nunca abre un motor clínico con una cuenta sin institución. Un índice único
-  (`ux_un_superusuario`) impide un segundo superusuario.
-- **Administrador de cada entidad**: uno activo por entidad (`ux_un_admin_por_entidad`).
-- **Baja definitiva lógica** (`eliminado_en`): una cuenta eliminada no inicia sesión (mismo
-  error que una inactiva, sin revelar el motivo), sus tokens quedan revocados y el trigger
-  `identidad.validar_reactivacion()` impide volver a habilitarla.
-
-Crear el superusuario (pide la contraseña oculta; debe cambiarla en su primer ingreso):
-
-```powershell
-python -m scripts.crear_profesional --correo superusuario@example.com --nombres "Nombre" --apellidos "Apellido" --rol superusuario
-```
-
-**Si pierde el acceso** (contraseña olvidada o cuenta bloqueada) no hay superusuario de
-respaldo: se recupera con la cuenta administrativa de PostgreSQL. El script pone una
-contraseña nueva, quita el bloqueo, cierra sus sesiones, exige que elija otra al entrar y
-deja la entrada en la bitácora:
-
-```powershell
-python -m scripts.crear_profesional --restablecer-superusuario
-```
-
-Para una base creada antes de este cambio, aplicar
-`database/postgresql/015_administracion_dos_niveles.sql` (se detiene con un mensaje si
-alguna entidad tiene más de un administrador activo).
-
 ## Crear la primera cuenta
 
 Con las bases ejecutándose, desde PowerShell en la raíz:

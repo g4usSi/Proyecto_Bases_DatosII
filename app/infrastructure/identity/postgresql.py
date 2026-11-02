@@ -10,9 +10,8 @@ from app.domain.institucion import Institucion
 CONSULTA = """
 SELECT p.id_profesional, p.correo, p.password_hash, p.establecimiento,
        p.version_token, p.bloqueado_hasta,
-       -- El superusuario no tiene establecimiento; una cuenta eliminada nunca entra.
-       (p.activo AND COALESCE(e.activo, p.establecimiento IS NULL)
-        AND p.eliminado_en IS NULL) AS activo,
+       (p.activo AND p.eliminado_en IS NULL
+        AND COALESCE(e.activo, p.rol = 'superusuario')) AS activo,
        p.nombres, p.apellidos, p.rol, p.debe_cambiar_contrasena,
        COALESCE(array_agg(pp.permiso) FILTER (WHERE pp.permiso IS NOT NULL), '{}') AS permisos
 FROM identidad.profesional p

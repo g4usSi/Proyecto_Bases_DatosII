@@ -43,7 +43,6 @@ from app.infrastructure.persistence.comun import (
 from app.infrastructure.persistence.pendiente import repositorios_pendientes
 from app.infrastructure.persistence.postgresql.cobros import RepositorioCobrosPostgreSQL
 from app.infrastructure.persistence.postgresql.hospital import RepositorioHospitalPostgreSQL
-from app.infrastructure.persistence.postgresql.indicadores import IndicadoresPostgreSQL
 
 MOTOR = "PostgreSQL"
 ESTADO_ARCHIVADO = "Inactivo"
@@ -736,7 +735,6 @@ class UnidadTrabajoPostgreSQL:
         self.hospital = RepositorioHospitalPostgreSQL(
             self.conexion, self.zona, self.historial._id_personal
         )
-        self.indicadores = IndicadoresPostgreSQL(self.conexion, self.hospital)
         # El odontograma es propio de la clinica odontologica (HTTP 501 aqui).
         pendientes = repositorios_pendientes(MOTOR)
         self.odontograma = pendientes["odontograma"]
@@ -766,3 +764,22 @@ class UnidadTrabajoPostgreSQL:
 
     def rollback(self) -> None:
         self.conexion.rollback()
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        pacientes = self.conexion.execute("SELECT count(*) FROM paciente").fetchone()[0]
+        resumen = self.hospital.resumen(desde.astimezone(self.zona).date())
+        citas = sum(resumen.citas_hoy_por_estado.values())
+        abiertos, saldo = self.conexion.execute(
+            "SELECT count(*) FILTER (WHERE c.estado = 'Abierto'), COALESCE(sum("
+            "COALESCE((SELECT sum(d.monto) FROM detalle_cobro d WHERE d.id_cobro = c.id_cobro),0) "
+            "- COALESCE((SELECT sum(p.monto) FROM pago p WHERE p.id_cobro = c.id_cobro "
+            "AND p.estado = 'Confirmado'),0)),0) FROM cobro c WHERE c.estado <> 'Anulado'"
+        ).fetchone()
+        return {
+            "pacientes_registrados": pacientes,
+            "citas_hoy": citas,
+            "camas_ocupadas": resumen.camas_por_estado.get("ocupada", 0),
+            "emergencias_abiertas": resumen.emergencias_abiertas,
+            "cobros_abiertos": abiertos,
+            "saldo_pendiente": saldo,
+        }

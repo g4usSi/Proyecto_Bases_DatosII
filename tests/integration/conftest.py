@@ -24,11 +24,26 @@ def pytest_collection_modifyitems(items):
 
 @pytest.fixture(scope="session")
 def config_local():
-    return ConfiguracionPrivada(dotenv_values(PROJECT_ROOT / ".env"))
+    config = ConfiguracionPrivada(dotenv_values(PROJECT_ROOT / ".env"))
+    # Permite al ejecutor aislar PostgreSQL sin editar .env ni sus credenciales.
+    for clave in (
+        "HISTORIALES_POSTGRES_DSN",
+        "HISTORIALES_POSTGRES_ADMIN_DSN",
+        "HISTORIALES_MYSQL_DATABASE",
+        "HISTORIALES_MYSQL_USER",
+        "HISTORIALES_MYSQL_PASSWORD",
+    ):
+        if os.environ.get(clave):
+            config[clave] = os.environ[clave]
+    return config
 
 
-def ejecutar_script(conn, ruta, nombre_bd):
-    script = ruta.read_text(encoding="utf-8").replace("hospital_pediatrico", nombre_bd)
+def ejecutar_script(conn, ruta, nombre_bd, usuario_bd="historiales_app"):
+    script = (
+        ruta.read_text(encoding="utf-8")
+        .replace("hospital_pediatrico", nombre_bd)
+        .replace("historiales_app", usuario_bd)
+    )
     delimitador = ";"
     buffer = []
     with conn.cursor() as cursor:

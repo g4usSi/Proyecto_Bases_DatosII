@@ -89,7 +89,7 @@ def entorno(config_local, admin_pg):
         port=int(config_local["MYSQL_PORT"]),
         user="root",
         password=config_local["MYSQL_ROOT_PASSWORD"],
-        database="hospital_pediatrico",
+        database=config_local.get("HISTORIALES_MYSQL_DATABASE", "hospital_pediatrico"),
         autocommit=True,
     )
     with raiz.cursor() as cursor:
@@ -326,7 +326,7 @@ def test_cada_administrador_solo_ve_su_institucion_y_vincula_en_su_motor(entorno
             port=int(config_local["MYSQL_PORT"]),
             user="root",
             password=config_local["MYSQL_ROOT_PASSWORD"],
-            database="hospital_pediatrico",
+            database=config_local.get("HISTORIALES_MYSQL_DATABASE", "hospital_pediatrico"),
         )
         with raiz.cursor() as cursor:
             cursor.execute(

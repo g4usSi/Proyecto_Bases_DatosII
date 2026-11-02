@@ -4,25 +4,13 @@ from types import TracebackType
 from typing import Literal, Self
 
 from app.domain import busqueda
-from app.domain.administracion import (
-    ROL_ADMINISTRADOR,
-    ROL_SUPERUSUARIO,
-    AccionBitacora,
-    Alcance,
-    EntradaBitacora,
-    EstadoCuenta,
-    FichaProfesional,
-    FiltroBitacora,
-    ProfesionalAgenda,
-    ResumenPersonal,
-)
+from app.domain.administracion import EstadoCuenta, FichaProfesional, ProfesionalAgenda
 from app.domain.cita import ESTADOS_OCUPAN_HORARIO, Cita, EstadoCita, NuevaCita
 from app.domain.consulta import Adenda, Consulta, NuevaConsulta
 from app.domain.errores import ConflictoAgenda, ConflictoEstado, TokenInvalido
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.odontograma import EstadoPieza, Odontograma
 from app.domain.paciente import Alergia, Baja, CambiosPaciente, NuevoPaciente, Paciente
-from app.domain.plataforma import IndicadoresEntidad
 from app.domain.profesional import ProfesionalLocal
 from app.infrastructure.persistence.pendiente import (
     CobrosNoAplica,
@@ -229,16 +217,6 @@ class OdontogramaDoble:
         self.piezas.setdefault(id_paciente, {})[estado.pieza] = estado
 
 
-@dataclass
-class IndicadoresDoble:
-    """Conteos de la entidad: solo cuenta pacientes (lo demas no aplica al doble)."""
-
-    pacientes: "RepositorioDoble"
-
-    def conteos(self, hoy):
-        return IndicadoresEntidad(pacientes_registrados=len(self.pacientes.registros))
-
-
 class UnidadTrabajoDoble:
     def __init__(
         self,
@@ -257,7 +235,6 @@ class UnidadTrabajoDoble:
         self.hospital = HospitalNoAplica("Doble")
         self.cobros = CobrosNoAplica("Doble")
         self.tutores = TutoresNoAplica("Doble")
-        self.indicadores = IndicadoresDoble(self.pacientes)
         self.confirmaciones = 0
         self.reversiones = 0
         self.finalizada = False
@@ -298,26 +275,18 @@ class DirectorioAdministrableDoble:
 
     fichas: dict[str, FichaProfesional] = field(default_factory=dict)
     contrasenas: dict[str, str] = field(default_factory=dict)
-    bitacora_eventos: list[tuple[str, str, str]] = field(default_factory=list)
-
-    @staticmethod
-    def _dentro(alcance: Alcance, ficha: FichaProfesional) -> bool:
-        return (
-            ficha.rol != ROL_SUPERUSUARIO
-            and (alcance.institucion is None or ficha.institucion == alcance.institucion)
-            and (alcance.incluir_administradores or ficha.rol != ROL_ADMINISTRADOR)
-        )
+    bitacora: list[tuple[str, str, str]] = field(default_factory=list)
 
     def crear(self, institucion, datos, permisos, contrasena_cifrada, id_actor):
         if any(f.correo == datos.correo for f in self.fichas.values()):
             raise ConflictoEstado("Ya existe una cuenta con ese correo.")
-        if datos.rol == ROL_ADMINISTRADOR and any(
-            f.rol == ROL_ADMINISTRADOR
-            and f.institucion == institucion
-            and f.estado not in (EstadoCuenta.INACTIVA, EstadoCuenta.ELIMINADA)
+        if datos.rol == "administrador" and any(
+            f.institucion == institucion
+            and f.rol == "administrador"
+            and f.estado in {EstadoCuenta.ACTIVA, EstadoCuenta.BLOQUEADA}
             for f in self.fichas.values()
         ):
-            raise ConflictoEstado("Esa entidad ya tiene un administrador activo.")
+            raise ConflictoEstado("La institucion ya tiene un administrador activo.")
         identificador = f"00000000-0000-4000-8000-{len(self.fichas) + 1:012d}"
         ficha = FichaProfesional(
             identificador,
@@ -333,26 +302,46 @@ class DirectorioAdministrableDoble:
         )
         self.fichas[identificador] = ficha
         self.contrasenas[identificador] = contrasena_cifrada
-        self.bitacora_eventos.append((id_actor, identificador, "alta"))
+        self.bitacora.append((id_actor, identificador, "alta"))
         return ficha
 
-    def listar(self, alcance, rol=None, id_departamento=None, estado=None, limite=200):
+    def listar(
+        self,
+        institucion,
+        rol=None,
+        id_departamento=None,
+        estado=None,
+        limite=200,
+        incluir_administradores=False,
+    ):
         return [
             f
             for f in self.fichas.values()
-            if self._dentro(alcance, f)
+            if (institucion is None or f.institucion == institucion)
             and f.estado != EstadoCuenta.ELIMINADA
+            and f.rol != "superusuario"
+            and (incluir_administradores or f.rol != "administrador")
             and (rol is None or f.rol == rol)
             and (id_departamento is None or f.id_departamento == id_departamento)
             and (estado is None or f.estado == estado)
         ][:limite]
 
-    def obtener(self, alcance, id_profesional):
+    def obtener(
+        self, institucion, id_profesional, incluir_administradores=False, incluir_eliminados=False
+    ):
         ficha = self.fichas.get(id_profesional)
-        return ficha if ficha and self._dentro(alcance, ficha) else None
+        if ficha is None or (institucion is not None and ficha.institucion != institucion):
+            return None
+        if ficha.rol == "superusuario" or (
+            ficha.rol == "administrador" and not incluir_administradores
+        ):
+            return None
+        if ficha.estado == EstadoCuenta.ELIMINADA and not incluir_eliminados:
+            return None
+        return ficha
 
-    def actualizar(self, alcance, id_profesional, cambios, permisos, id_actor):
-        ficha = self.obtener(alcance, id_profesional)
+    def actualizar(self, institucion, id_profesional, cambios, permisos, id_actor):
+        ficha = self.obtener(institucion, id_profesional, incluir_administradores=True)
         nuevos = {}
         for campo in ("nombres", "apellidos", "estado"):
             if getattr(cambios, campo) is not None:
@@ -364,15 +353,8 @@ class DirectorioAdministrableDoble:
         if permisos is not None:
             nuevos["permisos"] = permisos
         self.fichas[id_profesional] = replace(ficha, **nuevos)
-        self.bitacora_eventos.append((id_actor, id_profesional, "cambio"))
+        self.bitacora.append((id_actor, id_profesional, "cambio"))
         return self.fichas[id_profesional]
-
-    def eliminar(self, alcance, id_profesional, id_actor):
-        ficha = self.obtener(alcance, id_profesional)
-        if ficha.estado == EstadoCuenta.ELIMINADA:
-            raise ConflictoEstado("La cuenta ya estaba eliminada.")
-        self.fichas[id_profesional] = replace(ficha, estado=EstadoCuenta.ELIMINADA)
-        self.bitacora_eventos.append((id_actor, id_profesional, "eliminar"))
 
     def establecer_contrasena(
         self, id_profesional, contrasena_cifrada, debe_cambiar, id_actor, accion
@@ -382,84 +364,19 @@ class DirectorioAdministrableDoble:
             self.fichas[id_profesional] = replace(
                 self.fichas[id_profesional], debe_cambiar_contrasena=debe_cambiar
             )
-        self.bitacora_eventos.append((id_actor, id_profesional, accion))
+        self.bitacora.append((id_actor, id_profesional, accion))
 
     def listar_para_agenda(self, institucion):
         return [
             ProfesionalAgenda(f.id_profesional, f.nombres, f.apellidos, f.rol, f.id_departamento)
             for f in self.fichas.values()
             if f.institucion == institucion
-            and f.estado not in (EstadoCuenta.INACTIVA, EstadoCuenta.ELIMINADA)
+            and f.estado == EstadoCuenta.ACTIVA
             and f.rol not in ("secretaria", "administrador")
         ]
 
-    def _entradas(self, alcance):
-        entradas = []
-        for numero, (actor, objetivo, accion) in enumerate(self.bitacora_eventos, start=1):
-            ficha = self.fichas.get(objetivo)
-            if alcance.institucion is not None and (
-                ficha is None or ficha.institucion != alcance.institucion
-            ):
-                continue
-            entradas.append(
-                EntradaBitacora(
-                    numero,
-                    datetime(2026, 10, 1, tzinfo=UTC) + timedelta(minutes=numero),
-                    AccionBitacora(accion),
-                    actor,
-                    None,
-                    None,
-                    objetivo,
-                    f"{ficha.nombres} {ficha.apellidos}" if ficha else "?",
-                    ficha.institucion if ficha else None,
-                    {},
-                )
-            )
-        return list(reversed(entradas))
-
-    def bitacora(self, alcance, filtro):
-        return [
-            e
-            for e in self._entradas(alcance)
-            if (not filtro.acciones or e.accion in filtro.acciones)
-            and (filtro.desde is None or e.ocurrido_en >= filtro.desde)
-            and (filtro.hasta is None or e.ocurrido_en < filtro.hasta)
-            and (filtro.antes_de is None or e.id_evento < filtro.antes_de)
-        ][: filtro.limite]
-
-    def resumen(self, institucion):
-        personal = [
-            f
-            for f in self.fichas.values()
-            if f.institucion == institucion
-            and f.rol not in (ROL_ADMINISTRADOR, ROL_SUPERUSUARIO)
-            and f.estado != EstadoCuenta.ELIMINADA
-        ]
-        admin = next(
-            (
-                f
-                for f in self.fichas.values()
-                if f.institucion == institucion
-                and f.rol == ROL_ADMINISTRADOR
-                and f.estado == EstadoCuenta.ACTIVA
-            ),
-            None,
+    def eliminar(self, id_profesional, id_actor):
+        self.fichas[id_profesional] = replace(
+            self.fichas[id_profesional], estado=EstadoCuenta.ELIMINADA
         )
-        por_estado = {e.value: 0 for e in EstadoCuenta if e != EstadoCuenta.ELIMINADA}
-        por_rol: dict[str, int] = {}
-        for f in personal:
-            por_estado[f.estado.value] += 1
-            if f.estado == EstadoCuenta.ACTIVA:
-                por_rol[f.rol] = por_rol.get(f.rol, 0) + 1
-        return ResumenPersonal(
-            institucion,
-            f"{admin.nombres} {admin.apellidos}" if admin else None,
-            por_estado,
-            0,
-            por_estado[EstadoCuenta.BLOQUEADA.value],
-            sum(f.debe_cambiar_contrasena and f.estado == EstadoCuenta.ACTIVA for f in personal),
-            por_rol,
-            () if institucion.value == "hospital_general" else None,
-            (),
-            tuple(self.bitacora(Alcance(institucion, True), FiltroBitacora(limite=5))),
-        )
+        self.bitacora.append((id_actor, id_profesional, "eliminar"))

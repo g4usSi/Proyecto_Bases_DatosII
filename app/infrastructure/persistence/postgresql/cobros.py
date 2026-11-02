@@ -18,6 +18,7 @@ from app.domain.cobros import (
     NuevoCargo,
     NuevoPago,
     Pago,
+    ResumenCobros,
     Servicio,
 )
 from app.domain.errores import ConflictoEstado, DatosInvalidos, RegistroNoEncontrado
@@ -57,6 +58,30 @@ def _mensaje(error: psycopg.Error) -> str:
 class RepositorioCobrosPostgreSQL:
     def __init__(self, conexion: psycopg.Connection) -> None:
         self.conexion = conexion
+
+    def resumen(self, desde: datetime, hasta: datetime) -> ResumenCobros:
+        estados = {e.value: 0 for e in EstadoCobro}
+        for estado, n in self.conexion.execute("SELECT estado,count(*) FROM cobro GROUP BY estado"):
+            estados[ESTADO_COBRO_DOMINIO[estado].value] = n
+        saldo = self.conexion.execute(
+            "SELECT COALESCE(sum(COALESCE((SELECT sum(d.monto) FROM detalle_cobro d "
+            "WHERE d.id_cobro=c.id_cobro),0) - COALESCE((SELECT sum(p.monto) FROM pago p "
+            "WHERE p.id_cobro=c.id_cobro AND p.estado='Confirmado'),0)),0) "
+            "FROM cobro c WHERE c.estado <> 'Anulado'"
+        ).fetchone()[0]
+        metodos = {m.value: Decimal(0) for m in MetodoPago}
+        anulados = self.conexion.execute(
+            "SELECT count(*) FROM pago WHERE estado='Anulado'"
+        ).fetchone()[0]
+        for nombre, total in self.conexion.execute(
+            "SELECT m.nombre,sum(p.monto) FROM pago p "
+            "JOIN metodo_pago m ON m.id_metodo_pago=p.id_metodo_pago "
+            "WHERE p.estado='Confirmado' AND p.fecha_hora >= %s "
+            "AND p.fecha_hora < %s GROUP BY m.nombre",
+            (utc_ingenuo(desde), utc_ingenuo(hasta)),
+        ):
+            metodos[METODO_DOMINIO[nombre].value] += total
+        return ResumenCobros(estados, saldo, sum(metodos.values(), Decimal(0)), anulados, metodos)
 
     def listar_servicios(self) -> list[Servicio]:
         return [

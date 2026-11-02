@@ -1,12 +1,4 @@
-"""Alta administrativa de profesionales; la API no permite autorregistro.
-
-Tambien crea el superusuario de plataforma (uno solo, sin --institucion) y lo recupera si
-pierde el acceso:
-
-    python -m scripts.crear_profesional --correo su@example.com --nombres "Sara" \
-        --apellidos "Admin" --rol superusuario
-    python -m scripts.crear_profesional --restablecer-superusuario
-"""
+"""Alta administrativa de profesionales; la API no permite autorregistro."""
 
 import argparse
 import getpass
@@ -32,63 +24,15 @@ ROLES = [
 ]
 
 
-def _dsn(parser: argparse.ArgumentParser) -> str:
-    config = dotenv_values(PROJECT_ROOT / ".env")
-    dsn = os.environ.get("HISTORIALES_POSTGRES_ADMIN_DSN") or config.get(
-        "HISTORIALES_POSTGRES_ADMIN_DSN"
-    )
-    if not dsn:
-        parser.error("Falta HISTORIALES_POSTGRES_ADMIN_DSN. Ejecuta configurar_desarrollo.")
-    return dsn
-
-
-def _pedir_contrasena(parser: argparse.ArgumentParser) -> str:
-    password = getpass.getpass("Contrasena (minimo 12 caracteres): ")
-    if not 12 <= len(password) <= 1024 or password != getpass.getpass("Repetir contrasena: "):
-        parser.error("La contrasena es demasiado corta o la confirmacion no coincide.")
-    return password
-
-
-def restablecer_superusuario(parser: argparse.ArgumentParser) -> None:
-    """Recupera el acceso del superusuario: contrasena nueva (debe cambiarla al entrar),
-    desbloqueo y cierre de sus sesiones. Queda en la bitacora de administracion."""
-    dsn = _dsn(parser)
-    password = _pedir_contrasena(parser)
-    with psycopg.connect(dsn, connect_timeout=5) as conn:
-        fila = conn.execute(
-            "UPDATE identidad.profesional SET password_hash = %s, debe_cambiar_contrasena = TRUE, "
-            "activo = TRUE, bloqueado_hasta = NULL, fallos_login = 0, "
-            "version_token = version_token + 1, actualizado_en = now() "
-            "WHERE rol = 'superusuario' AND eliminado_en IS NULL RETURNING id_profesional, correo",
-            (PasswordHash.recommended().hash(password),),
-        ).fetchone()
-        if fila is None:
-            parser.error("No existe un superusuario. Crealo con --rol superusuario.")
-        conn.execute(
-            "INSERT INTO identidad.bitacora_profesionales "
-            "(id_actor, id_profesional, establecimiento, accion, detalle) "
-            "VALUES (%s, %s, NULL, 'restablecer_contrasena', '{\"via\": \"script\"}')",
-            (fila[0], fila[0]),
-        )
-    print(f"Acceso del superusuario {fila[1]} restablecido; debera elegir otra contrasena.")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--correo", required=True)
+    parser.add_argument("--nombres", required=True)
+    parser.add_argument("--apellidos", required=True)
     parser.add_argument(
-        "--restablecer-superusuario",
-        action="store_true",
-        help="Recupera el acceso del superusuario (contrasena nueva y desbloqueo).",
+        "--institucion", "--establecimiento", choices=[item.value for item in Institucion]
     )
-    parser.add_argument("--correo")
-    parser.add_argument("--nombres")
-    parser.add_argument("--apellidos")
-    parser.add_argument(
-        "--institucion",
-        choices=[item.value for item in Institucion],
-        help="Obligatoria salvo para --rol superusuario (que no pertenece a una entidad).",
-    )
-    parser.add_argument("--rol", choices=ROLES)
+    parser.add_argument("--rol", required=True, choices=ROLES)
     parser.add_argument(
         "--permiso",
         action="append",
@@ -97,22 +41,12 @@ def main() -> None:
             "Repetir por permiso. Por defecto: pacientes:leer; secretaria: pacientes:leer, "
             "pacientes:registrar, citas:leer y citas:gestionar; laboratorista: pacientes:leer, "
             "laboratorio:resultados y laboratorio:validar; administrador: "
-            "profesionales:administrar (unico permiso posible); superusuario: "
-            "plataforma:administrar y pagos:ver (fijos)."
+            "profesionales:administrar (unico permiso posible)."
         ),
     )
     args = parser.parse_args()
-    if args.restablecer_superusuario:
-        restablecer_superusuario(parser)
-        return
-    faltan = [n for n in ("correo", "nombres", "apellidos", "rol") if not getattr(args, n)]
-    if faltan:
-        parser.error("Faltan: " + ", ".join("--" + n for n in faltan))
-    superusuario = args.rol == "superusuario"
-    if superusuario and args.institucion:
-        parser.error("El superusuario no pertenece a una institucion: omite --institucion.")
-    if not superusuario and not args.institucion:
-        parser.error("Falta --institucion.")
+    if (args.rol == "superusuario") != (args.institucion is None):
+        parser.error("El superusuario no tiene institucion; los demas roles deben indicar una.")
     elegidos = set(args.permiso) or set(
         permisos.PERMISOS_POR_ROL.get(args.rol, permisos.PERMISOS_POR_DEFECTO)
     )
@@ -128,26 +62,32 @@ def main() -> None:
             "La cuenta de administracion tiene solo profesionales:administrar (sin permisos "
             "clinicos). Omite --permiso."
         )
+    if args.rol == "superusuario" and elegidos != permisos.PERMISOS_POR_ROL["superusuario"]:
+        parser.error("El superusuario tiene solo plataforma:administrar y pagos:ver.")
+    if args.rol != "superusuario" and permisos.PLATAFORMA_ADMINISTRAR in elegidos:
+        parser.error("plataforma:administrar es exclusivo del superusuario.")
     if args.rol != "administrador" and permisos.PROFESIONALES_ADMINISTRAR in elegidos:
         parser.error("profesionales:administrar es exclusivo del rol administrador.")
-    if superusuario and elegidos != permisos.PERMISOS_POR_ROL["superusuario"]:
-        parser.error(
-            "El superusuario tiene solo plataforma:administrar y pagos:ver. Omite --permiso."
-        )
-    if not superusuario and permisos.PLATAFORMA_ADMINISTRAR in elegidos:
-        parser.error("plataforma:administrar es exclusivo del superusuario.")
     correo = args.correo.strip().lower()
     if "@" not in correo or any(char.isspace() for char in correo):
         parser.error("Correo invalido.")
-    password = _pedir_contrasena(parser)
-    dsn = _dsn(parser)
+    password = getpass.getpass("Contrasena (minimo 12 caracteres): ")
+    if not 12 <= len(password) <= 1024 or password != getpass.getpass("Repetir contrasena: "):
+        parser.error("La contrasena es demasiado corta o la confirmacion no coincide.")
+    config = dotenv_values(PROJECT_ROOT / ".env")
+    dsn = os.environ.get("HISTORIALES_POSTGRES_ADMIN_DSN") or config.get(
+        "HISTORIALES_POSTGRES_ADMIN_DSN"
+    )
+    if not dsn:
+        parser.error("Falta HISTORIALES_POSTGRES_ADMIN_DSN. Ejecuta configurar_desarrollo.")
     identificador = uuid4()
     try:
         with psycopg.connect(dsn, connect_timeout=5) as conn:
             conn.execute(
                 "INSERT INTO identidad.profesional "
-                "(id_profesional, correo, nombres, apellidos, password_hash, establecimiento, rol, "
-                "debe_cambiar_contrasena) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                "(id_profesional, correo, nombres, apellidos, password_hash, establecimiento, "
+                "rol, debe_cambiar_contrasena) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,TRUE)",
                 (
                     identificador,
                     correo,
@@ -156,8 +96,6 @@ def main() -> None:
                     PasswordHash.recommended().hash(password),
                     args.institucion,
                     args.rol,
-                    # Cuenta de alto valor: elige su propia contrasena en el primer ingreso.
-                    superusuario,
                 ),
             )
             for permiso in sorted(elegidos):
@@ -165,36 +103,26 @@ def main() -> None:
                     "INSERT INTO identidad.profesional_permiso VALUES (%s,%s)",
                     (identificador, permiso),
                 )
-            if args.institucion == Institucion.HOSPITAL_GENERAL:
+            if args.institucion == Institucion.HOSPITAL_GENERAL and args.rol != "administrador":
                 # Misma base y misma transaccion: la cuenta y su perfil nacen juntos.
                 from scripts.sincronizar_profesionales import sincronizar_hospital
 
                 sincronizar_hospital(conn, [str(identificador)])
-    except psycopg.errors.UniqueViolation as error:
-        if error.diag.constraint_name == "ux_un_superusuario":
-            parser.error(
-                "Ya existe un superusuario. Para recuperar su acceso usa "
-                "--restablecer-superusuario."
-            )
-        if error.diag.constraint_name == "ux_un_admin_por_entidad":
-            parser.error("Esa institucion ya tiene un administrador activo.")
-        parser.error("Ese correo ya tiene una cuenta; no se modifico.")
+    except psycopg.errors.UniqueViolation:
+        parser.error("El correo ya existe o ya hay una cuenta de administracion para ese alcance.")
     except psycopg.errors.CheckViolation:
         parser.error(
             "La base rechazo el rol o los permisos. Aplica las migraciones de "
-            "database/postgresql (006, 007, 012 y 015) si la base se creo antes."
+            "database/postgresql hasta 015 si la base se creo antes."
         )
     except psycopg.errors.ForeignKeyViolation:
         parser.error("Institucion o permiso desconocido; se revirtio el alta.")
     except psycopg.Error:
         parser.error("No se pudo crear el profesional. Revisa conexiones y datos requeridos.")
-    print(
-        f"Profesional creado: {identificador}. "
-        f"Establecimiento: {args.institucion or 'ninguno (plataforma)'}."
-    )
+    print(f"Profesional creado: {identificador}. Establecimiento: {args.institucion}.")
     print(f"Permisos: {', '.join(sorted(elegidos))}.")
-    if superusuario:
-        print("Superusuario de plataforma: debera elegir su contrasena al iniciar sesion.")
+    if args.rol == "superusuario":
+        print("Cuenta de plataforma: administra las cuatro instituciones, sin acceso clinico.")
     elif args.rol == "administrador":
         print("Cuenta de administracion: gestiona el personal de su institucion desde la API.")
     elif args.institucion == Institucion.CLINICA_ODONTOLOGICA:

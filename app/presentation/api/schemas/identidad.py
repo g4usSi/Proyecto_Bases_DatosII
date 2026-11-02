@@ -6,9 +6,7 @@ from app.domain.institucion import Institucion
 
 class UsuarioResponse(BaseModel):
     id_usuario: str
-    institucion: Institucion | None = Field(
-        description="null solo para el superusuario de plataforma (no pertenece a una entidad)."
-    )
+    institucion: Institucion | None
     permisos: list[str]
     nombres: str | None = None
     apellidos: str | None = None

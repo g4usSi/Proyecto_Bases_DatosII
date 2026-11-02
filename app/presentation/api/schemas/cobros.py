@@ -104,3 +104,13 @@ class CobroResponse(BaseModel):
     saldo: Decimal
     cargos: list[CargoResponse]
     pagos: list[PagoResponse]
+
+
+class ResumenCobrosResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cobros_por_estado: dict[str, int]
+    saldo_pendiente: Decimal
+    cobrado_hoy: Decimal
+    pagos_anulados: int
+    cobrado_hoy_por_metodo: dict[str, Decimal]

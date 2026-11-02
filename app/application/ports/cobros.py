@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
-from app.domain.cobros import Cobro, EstadoCobro, NuevoCargo, NuevoPago, Servicio
+from app.domain.cobros import Cobro, EstadoCobro, NuevoCargo, NuevoPago, ResumenCobros, Servicio
 
 
 class RepositorioCobros(Protocol):
@@ -14,6 +14,8 @@ class RepositorioCobros(Protocol):
     def listar_servicios(self) -> list[Servicio]:
         """Catalogo de servicios activos con su tarifa general vigente."""
         ...
+
+    def resumen(self, desde: datetime, hasta: datetime) -> ResumenCobros: ...
 
     def abrir(
         self,

@@ -1460,7 +1460,7 @@ def test_facturacion_por_la_api(centro):
     assert anular.status_code == 409 and servicios.status_code == 501  # pagada: no se anula
 
 
-def test_factura_a_nombre_del_tutor_anulacion_e_indicadores(centro):
+def test_factura_a_nombre_del_tutor_y_anulacion(centro):
     """015: la factura queda a nombre del tutor principal (o del indicado) y se anula solo sin
     pagos; anulada ya no admite cargos ni pagos, ni siquiera saltandose la API."""
     identificador = registrar(centro)
@@ -1525,9 +1525,6 @@ def test_factura_a_nombre_del_tutor_anulacion_e_indicadores(centro):
         por_cobrar = unidad.cobros.listar(None, frozenset({EstadoCobro.ABIERTO}), 500)
         assert principal.id_cobro in [c.id_cobro for c in anuladas]
         assert principal.id_cobro not in [c.id_cobro for c in por_cobrar]
-        indicadores = unidad.indicadores.conteos(ahora.date())
-    assert indicadores.pacientes_registrados >= 2
-    assert indicadores.cobros_por_cobrar >= 2  # sin_tutor y elegido, sin cargos todavia
 
     # La base lo impone aunque se salte la API: ni cargos, ni reabrir, ni cambiar titular.
     with centro.admin.cursor() as cursor:
@@ -1562,6 +1559,36 @@ def test_factura_a_nombre_del_tutor_anulacion_e_indicadores(centro):
         ):
             with pytest.raises(pymysql.MySQLError):
                 cursor.execute(sentencia, (int(elegido.id_cobro),))
+
+
+def test_factura_anulada_no_cuenta_en_los_resumenes(centro):
+    identificador = registrar(centro)
+    id_consulta = consulta_base(centro, identificador)
+    ahora = datetime.now(UTC)
+    with centro.unidad() as unidad:
+        cobro = unidad.cobros.abrir(identificador, id_consulta, None, ahora)
+        unidad.cobros.agregar_cargo(
+            identificador,
+            cobro.id_cobro,
+            NuevoCargo(Decimal(1), concepto="Control", precio_unitario=Decimal("180")),
+            ahora,
+        )
+        unidad.commit()
+    with centro.unidad() as unidad:
+        antes = unidad.cobros.resumen(ahora, ahora)
+        operativo_antes = unidad.resumen_operativo(ahora, ahora)
+        unidad.cobros.anular(identificador, cobro.id_cobro, ahora)
+        unidad.commit()
+    with centro.unidad() as unidad:
+        despues = unidad.cobros.resumen(ahora, ahora)
+        operativo_despues = unidad.resumen_operativo(ahora, ahora)
+    assert antes.cobros_por_estado["abierto"] - despues.cobros_por_estado["abierto"] == 1
+    assert despues.cobros_por_estado["anulado"] - antes.cobros_por_estado["anulado"] == 1
+    assert antes.saldo_pendiente - despues.saldo_pendiente == Decimal("180")
+    assert operativo_antes["cobros_abiertos"] - operativo_despues["cobros_abiertos"] == 1
+    assert operativo_antes["saldo_pendiente"] - operativo_despues["saldo_pendiente"] == Decimal(
+        "180"
+    )
 
 
 def test_anular_factura_por_la_api(centro):

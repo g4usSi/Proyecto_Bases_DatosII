@@ -1,19 +1,15 @@
-"""Administracion del personal en dos niveles y cambio de contrasena propio.
+"""Administracion del personal y cambio de contrasena propio.
 
 La identidad (correo, contrasena, permisos) vive solo en PostgreSQL. Al dar de alta o
 cambiar a un profesional, ademas se actualiza su perfil local en el motor de la
 institucion (sin credenciales). No es una transaccion entre motores: si ese motor no
 responde, la cuenta queda creada y la respuesta lo indica (`vinculado: false`); se
-completa despues con scripts/sincronizar_profesionales.py. Las cuentas de administracion
-no tienen perfil local (`vinculado: null`).
-
-Alcance: el administrador gestiona su entidad sin cuentas de administracion; el
-superusuario, cualquier cuenta menos la suya, y es el unico que elimina.
+completa despues con scripts/sincronizar_profesionales.py.
 """
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.application.errores import IntegracionNoConfigurada, OperacionPendiente
 from app.application.ports.administracion import Cifrador, DirectorioAdministrable
@@ -21,16 +17,11 @@ from app.application.ports.cuentas import DirectorioProfesionales, InicioSesion
 from app.application.ports.unidad_trabajo import UnidadDeTrabajo
 from app.domain import administracion as reglas
 from app.domain.administracion import (
-    ESTADOS_ASIGNABLES,
-    ROLES_DE_ADMINISTRACION,
     CambiosProfesional,
-    EntradaBitacora,
     EstadoCuenta,
     FichaProfesional,
-    FiltroBitacora,
     NuevoProfesional,
     ProfesionalAgenda,
-    ResumenPersonal,
 )
 from app.domain.cuenta import Sesion
 from app.domain.errores import (
@@ -50,8 +41,8 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class ResultadoAlta:
     ficha: FichaProfesional
-    vinculado: bool | None  # None = cuenta de administracion (no tiene perfil local)
-    # Solo si no se envio contrasena: se muestra UNA vez y no se guarda.
+    vinculado: bool
+    # Solo si el administrador no envio contrasena: se muestra UNA vez y no se guarda.
     contrasena_temporal: str | None = None
 
 
@@ -66,28 +57,34 @@ class AdministrarProfesionales:
         self,
         directorio: DirectorioAdministrable,
         cifrador: Cifrador,
-        abrir_unidad: Callable[[Institucion], UnidadDeTrabajo] | None = None,
+        abrir_unidad: Callable[[], UnidadDeTrabajo] | None = None,
+        abrir_por_institucion: Callable[[Institucion], UnidadDeTrabajo] | None = None,
     ) -> None:
         self.directorio = directorio
         self.cifrador = cifrador
-        # Abre la unidad de trabajo del motor de una institucion (perfil local).
         self.abrir_unidad = abrir_unidad
+        self.abrir_por_institucion = abrir_por_institucion
 
-    def _vincular(self, ficha: FichaProfesional) -> bool | None:
+    def _vincular(self, ficha: FichaProfesional) -> bool:
         """Crea o actualiza el perfil local en el motor de la institucion."""
-        if ficha.rol in ROLES_DE_ADMINISTRACION or ficha.institucion is None:
-            return None
-        if self.abrir_unidad is None:
+        if ficha.rol == reglas.ROL_ADMINISTRADOR:
+            return True  # Las cuentas administrativas no tienen perfil clinico.
+        abrir = (
+            (lambda: self.abrir_por_institucion(ficha.institucion))
+            if self.abrir_por_institucion
+            else self.abrir_unidad
+        )
+        if abrir is None:
             return False
         perfil = ProfesionalLocal(
             ficha.id_profesional,
             ficha.nombres,
             ficha.apellidos,
             ficha.rol,
-            ficha.estado not in (EstadoCuenta.INACTIVA, EstadoCuenta.ELIMINADA),
+            ficha.estado not in {EstadoCuenta.INACTIVA, EstadoCuenta.ELIMINADA},
         )
         try:
-            with self.abrir_unidad(ficha.institucion) as unidad:
+            with abrir() as unidad:
                 unidad.profesionales.sincronizar(perfil)
                 unidad.commit()
         except (IntegracionNoConfigurada, OperacionPendiente, ErrorDominio) as error:
@@ -100,35 +97,16 @@ class AdministrarProfesionales:
             return False
         return True
 
-    def _gestionable(self, actor: UsuarioAutenticado, id_profesional: str) -> FichaProfesional:
-        """La cuenta dentro del alcance del actor (404 si no, igual que si no existiera)."""
-        ficha = self.directorio.obtener(reglas.alcance_de(actor), id_profesional)
-        if ficha is None or not reglas.puede_gestionar(actor, ficha):
-            raise RegistroNoEncontrado("El profesional no existe en tu institucion.")
-        return ficha
-
     def crear(
         self,
-        actor: UsuarioAutenticado,
+        admin: UsuarioAutenticado,
         datos: NuevoProfesional,
         contrasena: str | None,
         establecimiento: Institucion | None = None,
     ) -> ResultadoAlta:
-        superusuario = reglas.es_superusuario(actor)
-        if superusuario:
-            if establecimiento is None:
-                raise DatosInvalidos("Indica el establecimiento de la cuenta nueva.")
-            institucion = establecimiento
-        else:
-            reglas.alcance_de(actor)  # 403 si no administra una entidad
-            if establecimiento is not None:
-                raise DatosInvalidos(
-                    "No envies establecimiento: la cuenta se crea en tu institucion."
-                )
-            assert actor.institucion is not None
-            institucion = actor.institucion
+        institucion = self.alcance(admin, establecimiento, obligatorio=True)
         correo = reglas.normalizar_correo(datos.correo)
-        reglas.validar_rol(institucion, datos.rol, actor_es_superusuario=superusuario)
+        reglas.validar_rol(institucion, datos.rol, actor_es_superusuario=admin.es_plataforma)
         permisos = reglas.permisos_finales(institucion, datos.rol, datos.permisos)
         reglas.validar_departamento(institucion, datos.id_departamento)
         temporal = None
@@ -144,38 +122,62 @@ class AdministrarProfesionales:
             datos.id_departamento,
         )
         ficha = self.directorio.crear(
-            institucion, nuevo, permisos, self.cifrador.cifrar(contrasena), actor.id_usuario
+            institucion, nuevo, permisos, self.cifrador.cifrar(contrasena), admin.id_usuario
         )
         return ResultadoAlta(ficha, self._vincular(ficha), temporal)
 
     def listar(
         self,
-        actor: UsuarioAutenticado,
+        admin: UsuarioAutenticado,
         rol: str | None = None,
         id_departamento: int | None = None,
         estado: EstadoCuenta | None = None,
         limite: int = 200,
         establecimiento: Institucion | None = None,
     ) -> list[FichaProfesional]:
-        if estado == EstadoCuenta.ELIMINADA:
-            raise DatosInvalidos("Las cuentas eliminadas no se listan.")
-        alcance = reglas.alcance_de(actor, establecimiento)
-        return self.directorio.listar(alcance, rol, id_departamento, estado, limite)
+        institucion = self.alcance(admin, establecimiento)
+        return self.directorio.listar(
+            institucion,
+            rol,
+            id_departamento,
+            estado,
+            limite,
+            incluir_administradores=admin.es_plataforma,
+        )
 
-    def obtener(self, actor: UsuarioAutenticado, id_profesional: str) -> FichaProfesional:
-        return self._gestionable(actor, id_profesional)
+    @staticmethod
+    def alcance(admin, establecimiento=None, obligatorio=False):
+        if admin.es_plataforma:
+            if obligatorio and establecimiento is None:
+                raise DatosInvalidos("Indica el establecimiento.")
+            return establecimiento
+        if establecimiento is not None and establecimiento != admin.institucion:
+            raise AccesoDenegado("Solo puedes administrar tu institucion.")
+        return admin.institucion
+
+    def obtener(
+        self, admin: UsuarioAutenticado, id_profesional: str, *, incluir_eliminados=False
+    ) -> FichaProfesional:
+        ficha = self.directorio.obtener(
+            admin.institucion,
+            id_profesional,
+            incluir_administradores=admin.es_plataforma,
+            incluir_eliminados=incluir_eliminados,
+        )
+        if ficha is None:
+            raise RegistroNoEncontrado("El profesional no existe en tu institucion.")
+        return ficha
 
     def actualizar(
-        self, actor: UsuarioAutenticado, id_profesional: str, cambios: CambiosProfesional
+        self, admin: UsuarioAutenticado, id_profesional: str, cambios: CambiosProfesional
     ) -> ResultadoCambio:
         if cambios.vacio:
             raise DatosInvalidos("No enviaste ningun cambio.")
-        if cambios.estado is not None and cambios.estado not in ESTADOS_ASIGNABLES:
-            raise DatosInvalidos("Para eliminar una cuenta usa DELETE /profesionales/{id}.")
-        actual = self._gestionable(actor, id_profesional)
+        actual = self.obtener(admin, id_profesional, incluir_eliminados=True)
         if actual.estado == EstadoCuenta.ELIMINADA:
-            raise ConflictoEstado("La cuenta fue eliminada: ya no se puede modificar.")
-        assert actual.institucion is not None
+            raise ConflictoEstado("La cuenta fue eliminada definitivamente.")
+        if cambios.estado == EstadoCuenta.ELIMINADA:
+            raise DatosInvalidos("Para eliminar una cuenta utiliza DELETE.")
         reglas.validar_departamento(actual.institucion, cambios.id_departamento)
         permisos = (
             reglas.permisos_finales(actual.institucion, actual.rol, cambios.permisos)
@@ -183,7 +185,7 @@ class AdministrarProfesionales:
             else None
         )
         ficha = self.directorio.actualizar(
-            reglas.alcance_de(actor), id_profesional, cambios, permisos, actor.id_usuario
+            actual.institucion, id_profesional, cambios, permisos, admin.id_usuario
         )
         perfil_cambio = (
             ficha.nombres != actual.nombres
@@ -192,55 +194,39 @@ class AdministrarProfesionales:
         )
         return ResultadoCambio(ficha, self._vincular(ficha) if perfil_cambio else None)
 
-    def eliminar(self, actor: UsuarioAutenticado, id_profesional: str) -> FichaProfesional:
-        """Baja definitiva logica. Solo el superusuario; nunca sobre si mismo."""
-        if not reglas.es_superusuario(actor):
-            raise AccesoDenegado("Solo la administracion general elimina cuentas.")
-        actual = self._gestionable(actor, id_profesional)
-        if actual.estado == EstadoCuenta.ELIMINADA:
-            raise ConflictoEstado("La cuenta ya estaba eliminada.")
-        self.directorio.eliminar(reglas.alcance_de(actor), id_profesional, actor.id_usuario)
-        eliminada = self.directorio.obtener(reglas.alcance_de(actor), id_profesional)
-        if eliminada is not None:
-            self._vincular(eliminada)  # el perfil local queda inactivo
-        return eliminada or actual
-
-    def restablecer_contrasena(self, actor: UsuarioAutenticado, id_profesional: str) -> str:
+    def restablecer_contrasena(self, admin: UsuarioAutenticado, id_profesional: str) -> str:
         """Genera una contrasena nueva (se muestra una sola vez) y cierra sus sesiones."""
-        actual = self._gestionable(actor, id_profesional)  # 404 fuera del alcance
-        if actual.estado == EstadoCuenta.ELIMINADA:
-            raise ConflictoEstado("La cuenta fue eliminada: ya no se puede modificar.")
+        self.obtener(admin, id_profesional)  # 404 si no es de su institucion
         nueva = reglas.generar_contrasena()
         self.directorio.establecer_contrasena(
             id_profesional,
             self.cifrador.cifrar(nueva),
             debe_cambiar=True,
-            id_actor=actor.id_usuario,
+            id_actor=admin.id_usuario,
             accion="restablecer_contrasena",
         )
         return nueva
 
-    def resumen(
-        self, actor: UsuarioAutenticado, establecimiento: Institucion | None = None
-    ) -> ResumenPersonal:
-        alcance = reglas.alcance_de(actor, establecimiento)
-        if alcance.institucion is None:
-            raise DatosInvalidos("Indica el establecimiento del resumen.")
-        return self.directorio.resumen(alcance.institucion)
+    def eliminar(self, admin: UsuarioAutenticado, id_profesional: str) -> None:
+        if not admin.es_plataforma:
+            raise AccesoDenegado("Solo el superusuario puede eliminar cuentas.")
+        actual = self.obtener(admin, id_profesional, incluir_eliminados=True)
+        if actual.estado == EstadoCuenta.ELIMINADA:
+            raise ConflictoEstado("La cuenta ya fue eliminada.")
+        self.directorio.eliminar(id_profesional, admin.id_usuario)
+        self._vincular(replace(actual, estado=EstadoCuenta.ELIMINADA))
 
-    def bitacora(
-        self,
-        actor: UsuarioAutenticado,
-        filtro: FiltroBitacora,
-        establecimiento: Institucion | None = None,
-    ) -> list[EntradaBitacora]:
-        if filtro.desde and filtro.hasta and filtro.desde >= filtro.hasta:
-            raise DatosInvalidos("'desde' debe ser anterior a 'hasta'.")
-        return self.directorio.bitacora(reglas.alcance_de(actor, establecimiento), filtro)
+    def resumen(self, admin, establecimiento=None):
+        institucion = self.alcance(admin, establecimiento, obligatorio=True)
+        return self.directorio.resumen(institucion)
+
+    def bitacora(self, admin, establecimiento=None, **filtros):
+        if filtros.get("desde") and filtros.get("hasta") and filtros["desde"] >= filtros["hasta"]:
+            raise DatosInvalidos("desde debe ser anterior a hasta.")
+        institucion = self.alcance(admin, establecimiento)
+        return self.directorio.consultar_bitacora(institucion, **filtros)
 
     def para_agenda(self, usuario: UsuarioAutenticado) -> list[ProfesionalAgenda]:
-        if usuario.institucion is None:
-            raise AccesoDenegado("La administracion general no agenda citas.")
         return self.directorio.listar_para_agenda(usuario.institucion)
 
 

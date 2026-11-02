@@ -17,16 +17,12 @@ de Git, Docker y las bases antes de basarse en los datos de entorno anotados aqu
   trabajo. Modelo de consultas/archivo pendiente: `docs/modelo_odontologia.md`.
 - Proyecto ahora también en `C:\Users\henry\OneDrive\...\Proyecto_Bases_DatosII`.
 
-## Actualización 31 de octubre de 2026 (rama `Backend/hospital-pediatrico`)
+## Actualización 1 de noviembre de 2026 (rama `Backend/hospital-pediatrico`)
 
-- Administración en dos niveles implementada (`docs/administracion_general.md`, sección 7
-  con las diferencias): superusuario sin institución, baja lógica, `/profesionales/resumen`,
-  `/profesionales/bitacora`, `/plataforma/resumen` y pagos en solo lectura. Migración
-  PostgreSQL `015`.
-- Centro Pediátrico alineado con la pantalla «Facturación» del mockup: factura a nombre del
-  tutor (`facturado_a`) y anulación. Migraciones MySQL `015` y `016`.
-- Probado contra PostgreSQL 16 y MySQL 8.0 locales; los conteos del resumen en MongoDB y
-  Firestore solo con dobles.
+- Se fusionó `Develop`. La administración en dos niveles es la de `Develop`: la implementación
+  propia de esta rama (commit `d611ab6`) se descartó al fusionar y queda solo en el historial.
+- Lo propio de esta rama es el Centro Pediátrico alineado con la pantalla «Facturación» del
+  mockup: factura a nombre del tutor (`facturado_a`) y anulación. Migraciones MySQL `015` y `016`.
 
 ## Estado vigente (23 de octubre de 2026, noche) — leer primero
 
