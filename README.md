@@ -32,7 +32,7 @@ MongoDB; camas, ingresos y cobros en PostgreSQL; tutores y facturación en MySQL
 institución) y el cambio de contraseña funcionan para todas. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
 migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
 
-**Frontend:** administración disponible en `/app/`; pantallas clínicas por rama. HTML/JS sencillo servido por la misma FastAPI (sin
+**Frontend:** administración y Centro Pediátrico disponibles en `/app/`; las demás pantallas clínicas, por rama. HTML/JS sencillo servido por la misma FastAPI (sin
 React ni paso de compilación). El plan, las pantallas por rol y el
 odontograma interactivo están en [docs/frontend.md](docs/frontend.md).
 

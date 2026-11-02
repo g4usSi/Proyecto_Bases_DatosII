@@ -2,10 +2,25 @@
 
 Estado (31 de octubre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
 `/app/` desde la misma API, sin Node ni compilación. Incluye acceso, cambio obligatorio de
-contraseña y la administración completa (superusuario y administrador de cada entidad). Las
-pantallas clínicas de cada institución se agregan como módulos en su rama. El mockup sigue
+contraseña, la administración completa (superusuario y administrador de cada entidad) y, en esta
+rama, las pantallas del Centro Pediátrico (`js/modulos/pediatrico.js`, `js/vistas/pediatrico/`). Las
+de las demás instituciones se agregan como módulos en su rama. El mockup sigue
 siendo la referencia visual: `docs/referencia/Historiales identidad visual.html`. Los contratos
 están en [la guía del frontend](api_frontend_hospital_laboratorio.md). El plan que sigue es histórico.
+
+## Centro Pediátrico
+
+Pacientes, ficha con edad en burbujas, historial, crecimiento, vacunación, tutores, agenda,
+catálogo de vacunas y facturación. Cada pantalla aparece según los permisos de la cuenta.
+
+- **Lo que el mockup propone y no se construyó:** «Lotes y vencimientos». El equipo decidió no
+  controlar lotes ni existencias (migración `010`) y la API no los expone.
+- **Facturación distinta del Hospital:** una factura por consulta, a nombre de un tutor; pagada
+  significa saldo cero; se anula solo sin pagos. No hay cierre, anulación de pagos, catálogo de
+  servicios ni pago con cheque. El mockup llama «Emitida» a lo que la API llama `abierto`; se
+  muestra como «Por cobrar». El resumen no da «facturado esta semana»: se muestra «cobrado hoy».
+- **La base debe tener las migraciones `006` a `016`**, y `nombre_vacuna` no se carga con ninguna:
+  sin datos en esa tabla, Vacunación avisa que el catálogo está vacío.
 
 ## Cómo está construida
 
