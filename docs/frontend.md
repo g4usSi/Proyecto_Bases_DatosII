@@ -2,8 +2,9 @@
 
 Estado (31 de octubre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
 `/app/` desde la misma API, sin Node ni compilación. Incluye acceso, cambio obligatorio de
-contraseña y la administración completa (superusuario y administrador de cada entidad). Las
-pantallas clínicas de cada institución se agregan como módulos en su rama. El mockup sigue
+contraseña, la administración completa (superusuario y administrador de cada entidad) y, en esta
+rama, las pantallas de la Clínica Odontológica (`js/modulos/clinica.js`, `js/vistas/clinica/`). Las
+de las demás instituciones se agregan como módulos en su rama. El mockup sigue
 siendo la referencia visual: `docs/referencia/Historiales identidad visual.html`. Los contratos
 están en [la guía del frontend](api_frontend_hospital_laboratorio.md). El plan que sigue es histórico.
 

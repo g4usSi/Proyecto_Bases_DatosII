@@ -4,7 +4,8 @@ Estado (31 de octubre de 2026): **el backend cubre todas las pantallas clínicas
 Este documento dice qué llama cada pantalla de
 [`referencia/Historiales identidad visual.html`](referencia/Historiales%20identidad%20visual.html),
 escenarios «Clínica Odontológica · odontóloga» y «… · secretaria». Prefijo de todas las
-rutas: `/api/v1`. El modelo en Firestore está en [modelo_odontologia.md](modelo_odontologia.md).
+rutas: `/api/v1`. Las pantallas ya consumen este contrato en `app/presentation/web/js/vistas/clinica/`.
+Del mockup falta el buscador global de la barra superior (tecla `/`); se busca desde Pacientes. El modelo en Firestore está en [modelo_odontologia.md](modelo_odontologia.md).
 
 ## Pantallas
 

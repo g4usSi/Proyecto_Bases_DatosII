@@ -112,7 +112,8 @@ responden 501 en los demás.
 
 - **Backend:** funcional. Referencia completa de rutas, permisos y motores en
   [documentacion-backend.md](documentacion-backend.md).
-- **Frontend:** en <http://127.0.0.1:8000/app/>: acceso y administración. HTML/JS servido por
+- **Frontend:** en <http://127.0.0.1:8000/app/>: acceso, administración y pantallas de la
+  Clínica Odontológica. HTML/JS servido por
   la misma FastAPI, sin compilación ([cómo está construido](docs/frontend.md)).
 - **Documento comparativo:** pendiente de redactar ([avance](docs/avance.md)).
 - **Ramas:** el desarrollo se reparte por establecimiento. Este README describe la rama
