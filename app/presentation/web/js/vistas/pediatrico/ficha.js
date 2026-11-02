@@ -10,6 +10,7 @@ import { abrirAdenda, abrirAlergias, abrirArchivar, abrirConsulta, abrirEditar }
 import { abrirCita } from './agendar.js';
 import { pestanaCrecimiento } from './crecimiento.js';
 import { pestanaVacunacion } from './vacunacion.js';
+import { pestanaTutores } from './tutores.js';
 
 const POR_PAGINA = 10;
 
@@ -173,6 +174,7 @@ function pestanasDe() {
   if (sesion.tiene('citas:leer')) lista.push(['citas', 'calendar-days', 'Citas']);
   if (sesion.tiene('historiales:leer')) lista.push(['crecimiento', 'ruler', 'Crecimiento']);
   if (sesion.tiene('historiales:leer')) lista.push(['vacunacion', 'syringe', 'Vacunación']);
+  if (sesion.tiene('pacientes:leer')) lista.push(['tutores', 'users', 'Tutores']);
   return lista;
 }
 
@@ -241,6 +243,7 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
     citas: pestanaCitas,
     crecimiento: pestanaCrecimiento,
     vacunacion: pestanaVacunacion,
+    tutores: pestanaTutores,
   }[actual];
 
   zona.replaceChildren(...[
