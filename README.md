@@ -1,36 +1,125 @@
 # Proyecto Bases de Datos II
 
-Plataforma común de historiales clínicos con FastAPI, Python 3.12 y arquitectura
-hexagonal. Identidad central en PostgreSQL: **un establecimiento por profesional**.
-La API decide el motor después de autenticar; cada establecimiento conserva sus datos.
+## Arrancar la aplicación
 
-## Estado y continuidad
+Ejecutar en PowerShell, desde esta carpeta, con Docker Desktop abierto.
 
-El trabajo permanece en `main`; las ramas de motor aún no se han creado.
-**Documentación completa del backend (qué hace cada pieza, rutas, permisos, motores):
-[documentacion-backend.md](documentacion-backend.md).**
-Para retomar decisiones, pendientes, límites conocidos y pasos recomendados, leer
-[contexto para el siguiente agente](docs/CONTEXTO_PARA_OTRO_AGENTE.md).
+### Arranque normal
+
+```powershell
+docker compose --profile api up -d --build
+```
+
+Abrir <http://127.0.0.1:8000/docs>. Para detener sin borrar datos:
+
+```powershell
+docker compose --profile api stop
+```
+
+### Primera vez
+
+Requiere Python 3.12 o 3.13 y Docker Desktop.
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m scripts.configurar_desarrollo
+docker compose --profile api up -d --build
+```
+
+Después, crear la primera cuenta. El comando pide una contraseña de al menos 12 caracteres:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.crear_profesional --correo odontologo@example.com --nombres "Nombre" --apellidos "Apellido" --institucion clinica_odontologica --rol odontologo
+```
+
+La Clínica Odontológica necesita además la clave de Firebase en
+`.secrets\firebase-adminsdk.json` ([cómo obtenerla](#conectar-firestore-clínica-odontológica)).
+Sin ella, las otras tres instituciones funcionan y la clínica responde 503.
+
+### Comprobar que todo responde
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health/ready | ConvertTo-Json
+```
+
+Cada institución debe aparecer como `ok`. En el primer arranque, MySQL puede tardar unos
+segundos más en aceptar conexiones: si `centro_pediatrico` sale `no_disponible`, repetir el
+comando.
+
+| Dirección | Contenido |
+| --- | --- |
+| <http://127.0.0.1:8000/docs> | Documentación interactiva de la API |
+| <http://127.0.0.1:8000/health> | Salud del proceso |
+| <http://127.0.0.1:8000/health/ready> | Conexión con los cuatro motores |
+
+### Si tus bases se crearon antes de las últimas migraciones
+
+Los scripts de `database/` solo se ejecutan solos cuando el volumen está vacío. Si la API
+falla con tablas inexistentes, por ejemplo en citas, aplicar esto **una sola vez**, después
+del arranque normal. Conserva los datos. Las migraciones de MySQL no se deben repetir.
+
+```powershell
+docker compose exec -T postgres sh -c 'for f in /docker-entrypoint-initdb.d/009_*.sql /docker-entrypoint-initdb.d/01[0-4]_*.sql; do psql -q -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general -f $f || exit 1; done'
+docker compose exec -T mysql sh -c 'for f in /docker-entrypoint-initdb.d/00[6-9]_*.sql /docker-entrypoint-initdb.d/01[0-4]_*.sql; do MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysql -uroot --default-character-set=utf8mb4 hospital_pediatrico < $f || exit 1; done'
+docker compose exec -T mongo sh -c 'mongosh --quiet -u historiales_admin -p $MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin /docker-entrypoint-initdb.d/001_laboratorio.js'
+.\.venv\Scripts\python.exe -m scripts.sincronizar_profesionales
+```
+
+Estos rangos corresponden a un volumen creado con PostgreSQL hasta `008` y MySQL hasta
+`005`. Si tu base es de otra época, consultar la
+[sección 14 de la documentación](documentacion-backend.md#14-cómo-aplicar-los-cambios-a-bases-ya-creadas).
+
+### Desarrollar con recarga automática
+
+Las bases corren en Docker y la API en tu máquina, así los cambios en el código se aplican
+sin reconstruir la imagen:
+
+```powershell
+docker compose --profile api stop api
+docker compose up -d postgres mysql mongo
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### Avisos
+
+- **Conservar `.env`:** sus contraseñas son las de los volúmenes ya creados y no está en
+  Git. `configurar_desarrollo` solo agrega lo que falta. No copiar `.env.example` encima.
+- **Evitar `docker compose down -v`:** borra todas las bases locales.
+- **Usar `--build` después de cambiar de rama o actualizar el código:** sin él, Docker sigue
+  usando la API anterior.
+
+## Qué es
+
+Plataforma común de historiales clínicos con FastAPI y arquitectura hexagonal. La identidad
+del personal está centralizada en PostgreSQL: **cada profesional pertenece a un
+establecimiento**. La API decide el motor después de autenticar y cada establecimiento
+conserva sus propios datos.
 
 | Establecimiento | Motor | Estado actual |
 | --- | --- | --- |
-| Hospital General | PostgreSQL | SQL original integrado, identidad central y CRUD clínico completo (migración `008`). |
-| Centro Pediátrico | MySQL 8.4 | Modelo revisado, reglas de integridad y saldos; vacunación sin control de stock; CRUD clínico completo (migraciones `004` y `005`). |
-| Laboratorio Clínico | MongoDB 8 | Colecciones, validadores e índices; CRUD clínico completo (consulta en un solo documento). |
-| Clínica Odontológica | Cloud Firestore | Completo: pacientes, consultas, archivo, citas, odontograma (estados fijos) y rol secretaria. [Modelo](docs/modelo_odontologia.md). |
+| Hospital General | PostgreSQL 17 | Operaciones clínicas, citas, camas, ingresos de emergencia, órdenes médicas, alta y cobros. |
+| Centro Pediátrico | MySQL 8.4 | Operaciones clínicas, citas, crecimiento, vacunación sin control de stock, tutores y facturación. |
+| Laboratorio Clínico | MongoDB 8 | Operaciones clínicas, citas, catálogo versionado, órdenes, muestras, resultados y validación. |
+| Clínica Odontológica | Cloud Firestore | Operaciones clínicas, citas, odontograma y rol de secretaria. Cubre las pantallas clínicas del mockup ([contrato](docs/contrato_clinica_odontologica.md)). |
 
-No se han creado ramas nuevas. Las cinco operaciones del curso, la búsqueda por nombre,
-las adendas, la corrección de datos/alergias y las **citas con no-solape** funcionan en
-**los cuatro motores**. Los módulos propios de cada establecimiento (odontograma en
-Firestore, crecimiento y vacunación en MySQL, órdenes y resultados de laboratorio en
-MongoDB; camas, ingresos y cobros en PostgreSQL; tutores y facturación en MySQL) responden
-501 en los demás. La administración de profesionales (una cuenta de administración por
-institución) y el cambio de contraseña funcionan para todas. Ver [operaciones comunes](docs/operaciones_comunes.md) (incluye cómo aplicar las
-migraciones a un volumen existente) y el [avance estimado](docs/avance.md).
+Las cinco operaciones del curso, la búsqueda por nombre, las adendas, la corrección de datos
+y alergias, las citas sin solapes, la administración de profesionales y el cambio de
+contraseña funcionan en los cuatro motores. Los módulos propios de un establecimiento
+responden 501 en los demás.
 
-**Frontend:** pendiente. Decisión: HTML/JS sencillo servido por la misma FastAPI (sin
-React ni paso de compilación). Faltan los mockups; el plan, las pantallas por rol y el
-odontograma interactivo están en [docs/frontend.md](docs/frontend.md).
+## Estado
+
+- **Backend:** funcional. Referencia completa de rutas, permisos y motores en
+  [documentacion-backend.md](documentacion-backend.md).
+- **Frontend:** sin construir. El [mockup](docs/referencia/Historiales%20identidad%20visual.html)
+  está listo y el cliente será HTML/JS servido por la misma FastAPI ([plan](docs/frontend.md)).
+- **Documento comparativo:** pendiente de redactar ([avance](docs/avance.md)).
+- **Ramas:** el desarrollo se reparte por establecimiento. Este README describe la rama
+  `Clinica-Odontologica`. Las rutas `/profesionales/resumen` y `/profesionales/bitacora`
+  están en la rama del Centro Pediátrico y todavía no llegan aquí.
+
+Para retomar el trabajo, leer el [contexto para el siguiente agente](docs/CONTEXTO_PARA_OTRO_AGENTE.md).
 
 ### Decisiones del equipo vigentes
 
@@ -44,34 +133,8 @@ odontograma interactivo están en [docs/frontend.md](docs/frontend.md).
 - Rol `secretaria`: **solo en la clínica odontológica**. Registra pacientes (puede anotar
   alergias) y gestiona citas. No ve alergias, consultas, diagnósticos ni odontograma, y
   **no puede archivar** historiales. PostgreSQL lo impide con triggers y un `CHECK`.
-- La clínica odontológica agenda citas y lleva odontograma con una **lista fija de
-  estados** por pieza (12 valores, ver [docs/frontend.md](docs/frontend.md)).
-
-## Arranque local en PowerShell
-
-Desde esta raíz, donde están `app`, `compose.yaml` y `.venv`:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements-dev.txt
-python -m scripts.configurar_desarrollo
-docker compose up -d postgres mysql mongo
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-El generador agrega valores faltantes y secretos aleatorios a `.env`; conserva la
-configuración existente. No copiar `.env.example` sobre un `.env` ya configurado.
-Para ejecutar sin activar el entorno, reemplazar `python` por
-`.\.venv\Scripts\python.exe`. Usar `python -m pip` evita launchers del entorno
-virtual que todavía apunten a la carpeta anterior.
-
-- API: <http://127.0.0.1:8000/>
-- Documentación interactiva: <http://127.0.0.1:8000/docs>
-- Salud del proceso: <http://127.0.0.1:8000/health>
-
-Si Docker ya ejecuta la API en 8000, primero usar `docker compose stop api`, o
-arrancar Uvicorn con `--port 8001`. Los tres motores pueden seguir ejecutándose.
-El perfil `api` evita que iniciar solamente las bases ocupe el puerto de Uvicorn.
+- La clínica odontológica lleva el odontograma con una **lista fija de 12 estados** por
+  pieza ([contrato](docs/contrato_clinica_odontologica.md#valores-y-límites)).
 
 ## Conectar Firestore (Clínica Odontológica)
 
@@ -79,147 +142,144 @@ El perfil `api` evita que iniciar solamente las bases ocupe el puerto de Uvicorn
    clave privada**. Cada integrante puede generar la suya.
 2. Guardarla como `.secrets\firebase-adminsdk.json` en esta raíz. `.secrets/` está
    ignorado por Git y por Docker: **no subir la clave**.
-3. Instalar dependencias, completar `.env` y probar:
+3. Probar la conexión. La prueba escribe, lee y borra un documento en el proyecto real:
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-python -m scripts.configurar_desarrollo
-python -m scripts.probar_firestore
+.\.venv\Scripts\python.exe -m scripts.probar_firestore
 ```
 
-Debe responder `OK: escritura, lectura y borrado funcionan`. Al iniciar Uvicorn
-aparece `Firestore conectado para la clinica odontologica`. Sin la clave, la API
-arranca igual y solo la clínica odontológica responde 503.
+Debe responder `OK: escritura, lectura y borrado funcionan`. Al iniciar la API aparece
+`Firestore conectado para la clinica odontologica`. Si la API ya estaba en marcha, reiniciarla
+con `docker compose --profile api restart api` para que cargue la clave.
 
-Si la base de PostgreSQL ya existía antes del rol secretaria, aplicar **una vez, en
-orden**, las migraciones 006 y 007 y luego copiar los perfiles de la clínica a Firestore.
-Ambas son idempotentes, así que repetirlas no daña nada. Un volumen nuevo las ejecuta solo.
+## Cuentas y login
+
+No hay autorregistro ni cuentas de ejemplo: cada cuenta se crea con `crear_profesional`.
+
+- **Instituciones:** `hospital_general`, `centro_pediatrico`, `laboratorio_clinico`,
+  `clinica_odontologica`.
+- **Roles:** `medico`, `enfermeria`, `laboratorista`, `odontologo`, `secretaria`,
+  `administrador`.
+- **Permisos por defecto:** `odontologo`, `secretaria`, `laboratorista` y `administrador`
+  reciben los de su rol. `medico` y `enfermeria` solo reciben `pacientes:leer`, así que
+  hay que indicar los demás con `--permiso`:
 
 ```powershell
-Get-Content database\postgresql\006_rol_secretaria_citas.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general
-Get-Content database\postgresql\007_secretaria_restricciones.sql | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general
-python -m scripts.sincronizar_profesionales
+.\.venv\Scripts\python.exe -m scripts.crear_profesional --correo medico@example.com --nombres "Nombre" --apellidos "Apellido" --institucion centro_pediatrico --rol medico --permiso pacientes:leer --permiso pacientes:registrar --permiso historiales:leer --permiso consultas:registrar
 ```
 
-## Ejecutar todo en Docker
-
-```powershell
-python -m scripts.configurar_desarrollo
-docker compose --profile api up -d --build
-docker compose ps
-```
-
-Puertos locales por defecto: PostgreSQL 5434, MySQL 3307, MongoDB 27018 y API 8000.
-Todos se publican en 127.0.0.1. Los volúmenes conservan datos al detener contenedores.
-Las imágenes no incluyen `.env`, credenciales administrativas ni PDFs del proyecto.
-Los SQL/JS de inicialización se montan aparte y se ejecutan al crear un volumen vacío.
-Editar un SQL no modifica automáticamente un volumen ya inicializado: aplicar una
-migración o parche explícito conservando datos; no usar `down -v` como rutina.
-
-## Primera cuenta y login
-
-```powershell
-python -m scripts.crear_profesional --correo medico@example.com --nombres "Nombre" --apellidos "Apellido" --institucion centro_pediatrico --rol medico
-```
-
-Se solicita la contraseña oculta; no se publica una cuenta con contraseña de ejemplo.
-Al crear la cuenta también se vincula al profesional local de su institución (necesario
-para registrar consultas); si ese motor no estaba disponible, repetir con
+Al crear la cuenta también se vincula al profesional local de su institución, lo que es
+necesario para registrar consultas. Si ese motor no estaba disponible, repetir el vínculo con
 `python -m scripts.sincronizar_profesionales`.
-En `/docs`, ejecutar `POST /api/v1/auth/login` con correo y contraseña. Copiar el
-`access_token`, pegarlo en **Authorize** y probar `/auth/me`. El establecimiento se
-obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID.
 
-| Ruta | Función |
+Para probar en `/docs`: ejecutar `POST /api/v1/auth/login` con correo y contraseña, copiar
+el `access_token`, pegarlo en **Authorize** y llamar a `GET /api/v1/auth/me`.
+
+Para cargar los catálogos de vacunas y pruebas de laboratorio (datos DEMO):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.cargar_catalogos vacunas database/ejemplos/catalogo_vacunas_demo.json
+.\.venv\Scripts\python.exe -m scripts.cargar_catalogos laboratorio database/ejemplos/catalogo_laboratorio_demo.json
+```
+
+## Rutas principales
+
+Prefijo `/api/v1`, salvo las de salud. La lista completa está en `/docs` y en la
+[documentación del backend](documentacion-backend.md#3-endpoints).
+
+| Ruta | Función | Disponible en |
+| --- | --- | --- |
+| `GET /health`, `GET /health/ready` | Salud del proceso y conexión con los motores. | Todos |
+| `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` | Sesión con JWT de 30 minutos, cierre y datos del usuario. | Todos |
+| `POST /auth/cambiar-contrasena` | Cambia la contraseña y devuelve un token nuevo. | Todos |
+| `GET/POST /pacientes`, `GET/PATCH /pacientes/{id}` | Buscar, registrar, leer y corregir pacientes. | Todos |
+| `POST /pacientes/{id}/alergias` | Agregar alergias. | Todos |
+| `GET /pacientes/{id}/historial` | Consultas paginadas. | Todos |
+| `POST /pacientes/{id}/consultas`, `POST .../consultas/{id}/adenda` | Consulta con diagnósticos, tratamientos y recetas, y sus adendas. | Todos |
+| `POST /pacientes/{id}/archivo` | Baja por traslado, fallecimiento o causa administrativa. | Todos |
+| `GET/POST /citas`, `POST /citas/{id}/estado`, `GET /citas/profesionales` | Agenda, cambio de estado y profesionales que atienden. | Todos |
+| `/profesionales` | Administración del personal de la institución. | Todos |
+| `GET /pacientes/{id}/odontograma`, `PUT .../odontograma/piezas/{pieza}` | Odontograma FDI. | Clínica Odontológica |
+| `/pacientes/{id}/crecimiento`, `/pacientes/{id}/vacunacion`, `/vacunas` | Crecimiento y vacunación. | Centro Pediátrico |
+| `/pacientes/{id}/tutores`, `/tutores` | Tutores del paciente. | Centro Pediátrico |
+| `/laboratorio/ordenes`, `/laboratorio/pruebas`, `/pacientes/{id}/ordenes` | Tablero, catálogo, órdenes, muestras, resultados y validación. | Laboratorio Clínico |
+| `/camas`, `/ingresos`, `/hospital/resumen`, `/departamentos` | Camas, emergencias, ingresos y resumen. | Hospital General |
+| `/cobros`, `/servicios`, `/pacientes/{id}/cobros` | Cobros y pagos. | Hospital General y Centro Pediátrico |
+
+| Código | Significado |
 | --- | --- |
-| `GET /health` | Salud del proceso, sin comprobar conexiones. |
-| `POST /api/v1/auth/login` | Credenciales centrales, JWT de 30 minutos. |
-| `GET /api/v1/auth/me` | Usuario, institución y permisos vigentes. |
-| `POST /api/v1/auth/logout` | Revoca todas las sesiones del profesional. |
-| `GET /api/v1/pacientes?nombre=` | Busca por nombre (comienzo de palabra, sin acentos) en la institución autorizada. |
-| `GET /api/v1/pacientes/{id_paciente}` | Lee en el motor de la institución autorizada. |
-| `POST /api/v1/pacientes` | Registra paciente nuevo (`pacientes:registrar`). |
-| `GET /api/v1/pacientes/{id}/historial` | Consultas paginadas (`historiales:leer`). |
-| `POST /api/v1/pacientes/{id}/consultas` | Consulta + diagnósticos + tratamientos + recetas (`consultas:registrar`). |
-| `POST /api/v1/pacientes/{id}/archivo` | Baja por traslado, fallecimiento o causa administrativa (`historiales:archivar`). |
-| `POST /api/v1/citas`, `GET /api/v1/citas` | Agendar y ver agenda (`citas:gestionar`, `citas:leer`). |
-| `POST /api/v1/citas/{id}/estado` | Atendida, cancelada (con motivo) o no asistió. |
-| `POST/GET/PATCH /api/v1/profesionales` | Administración del personal de tu institución (`profesionales:administrar`). |
-| `POST /api/v1/auth/cambiar-contrasena` | Cambia tu contraseña y devuelve un token nuevo. |
-| `/api/v1/camas`, `/api/v1/ingresos`, `/api/v1/hospital/resumen` | Hospital General: camas, emergencias e ingresos, inicio. |
-| `/api/v1/cobros`, `/api/v1/pacientes/{id}/cobros` | Cobros y pagos (hospital y centro pediátrico; `pagos:ver` / `pagos:registrar`). |
-| `/api/v1/pacientes/{id}/tutores` | Tutores del paciente (centro pediátrico). |
-| `GET /api/v1/laboratorio/ordenes` | Tablero de órdenes del laboratorio. |
-| `GET/PUT /api/v1/pacientes/{id}/odontograma` | Odontograma FDI; el estado de la pieza debe estar en la lista fija, si no responde 422 (`historiales:leer` / `consultas:registrar`). |
+| 401 | Credenciales o sesión inválidas. |
+| 403 | Falta el permiso. |
+| 404 | Paciente, consulta o cita inexistente. |
+| 409 | Conflicto: historial archivado, horario ocupado o estado final. |
+| 422 | Dato inválido. |
+| 501 | El módulo no existe en el motor de esa institución. |
+| 503 | Motor no disponible, por ejemplo Firestore sin clave. |
 
-401: credenciales/sesión inválidas; 403: permiso ausente; 404: paciente ausente;
-409: historial archivado; 501: operación pendiente en ese motor; 503: motor no
-disponible (por ejemplo, Firestore sin clave).
+## Docker
 
-## Archivos y decisiones
+Puertos locales por defecto, todos publicados solo en `127.0.0.1`:
 
-- `laboratorio_clinico_mongo.js`: script solicitado de laboratorio, en esta raíz.
-- `database/mysql/001_hospital_pediatrico.sql`: esquema revisado.
-- `database/mysql/002_integridad.sql`: reglas, stock y consistencia de facturación.
-- `database/mysql/004_escritura_api.sql` y `005_permisos_escritura.sql`: columnas y permisos
-  mínimos para las escrituras de la API.
-- `database/mysql/original/`: copia intacta del SQL recibido.
-- `database/postgresql/`: esquema del hospital, identidad y cuentas limitadas
-  (`008`: escrituras de la API; `009`: citas/adendas; `010`: integridad; `011`: permisos de laboratorio).
-- `database/mysql/006`–`010`: citas, adendas, pediatría (crecimiento y vacunas), sus permisos y `010` (sin stock por lote).
-- `scripts/cargar_catalogos.py` y `database/ejemplos/`: carga de catálogos de vacunas y pruebas (datos DEMO).
-- [Documentación del backend](documentacion-backend.md).
-- [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md).
-- [Identidad central](docs/identidad_central.md), [arquitectura](docs/arquitectura.md),
+| Servicio | Puerto |
+| --- | --- |
+| API | 8000 |
+| PostgreSQL | 5434 |
+| MySQL | 3307 |
+| MongoDB | 27018 |
+
+Los volúmenes conservan los datos al detener los contenedores. Las imágenes no incluyen
+`.env`, credenciales administrativas ni PDFs del proyecto. Editar un script de `database/`
+no modifica un volumen ya inicializado: hay que aplicarlo como migración.
+
+## Archivos y documentación
+
+- `laboratorio_clinico_mongo.js`: colecciones, validadores e índices del laboratorio.
+- `database/postgresql/`: hospital, identidad y permisos (`001`–`014`).
+- `database/mysql/`: centro pediátrico y permisos (`001`–`014`). `original/` guarda intacto
+  el SQL recibido y `010` retira el stock por lote.
+- `database/ejemplos/` y `scripts/cargar_catalogos.py`: catálogos con datos DEMO.
+- [Documentación del backend](documentacion-backend.md),
+  [arquitectura](docs/arquitectura.md) e [identidad central](docs/identidad_central.md).
+- [Contrato de la clínica con el frontend](docs/contrato_clinica_odontologica.md),
+  [modelo de Firestore](docs/modelo_odontologia.md) y
+  [decisión de Firestore](docs/decision_firestore.md).
+- [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md),
+  [operaciones comunes](docs/operaciones_comunes.md) y
+  [administración general](docs/administracion_general.md).
+- [Plan del frontend](docs/frontend.md), [avance estimado](docs/avance.md) y
   [trabajo por ramas](docs/ramas.md).
-- [Decisión de Firebase/Firestore](docs/decision_firestore.md): conexión cloud,
-  credenciales, IAM, costos y alternativa de emulador.
-- [Guía de modelado de Firestore](docs/modelo_odontologia.md) y
-  [operaciones comunes](docs/operaciones_comunes.md): qué falta en cada motor.
-- [Plan del frontend](docs/frontend.md) y [avance estimado](docs/avance.md).
 
 ## Verificación
 
 ```powershell
-python -m pytest
-python -m ruff check .
-python -m ruff format --check .
-python -m pip check
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-Las pruebas habituales usan dobles para aislar reglas y autorización. Las pruebas
-reales se activan explícitamente, con los tres contenedores ejecutándose:
+Las pruebas habituales usan dobles y no necesitan bases de datos. Las pruebas reales se
+activan explícitamente, con los contenedores en marcha:
 
 ```powershell
 $env:HISTORIALES_TEST_INTEGRATION = '1'
-python -m pytest
+.\.venv\Scripts\python.exe -m pytest
 Remove-Item Env:HISTORIALES_TEST_INTEGRATION
 ```
 
-MySQL se prueba en una base temporal creada y eliminada por la suite. Las pruebas
-de PostgreSQL/MongoDB y enrutamiento insertan registros sintéticos identificados y
-los eliminan al terminar. Verifican permisos vigentes, bloqueos de login, aislamiento
-institucional, alergias múltiples, archivo, control del paciente correcto, stock,
-validación documental y dos pagos simultáneos. No usar estas pruebas con datos reales
-sin configurar un entorno de pruebas separado.
+Estas pruebas insertan registros sintéticos en las bases configuradas en `.env`, incluido
+el proyecto de Firestore si existe la clave, y los eliminan al terminar. MySQL usa una base
+temporal. No usarlas con datos reales sin configurar un entorno de pruebas separado.
 
 ## Trabajo siguiente
 
-El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
-Pendiente: hacer los mockups y el frontend ([plan](docs/frontend.md)), redactar el
-documento comparativo, probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
-aplica las migraciones nuevas (PostgreSQL 009–014, MySQL 006–014 y repetir el JS de MongoDB:
-sección 14 de la documentación) y crea la cuenta de administración de cada institución con
-`python -m scripts.crear_profesional ... --rol administrador`. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
-usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja
-simultáneas (ver [operaciones comunes](docs/operaciones_comunes.md)).
+- Construir el frontend a partir del [mockup](docs/referencia/Historiales%20identidad%20visual.html).
+- Redactar el documento comparativo ([qué falta](docs/avance.md#documento-comparativo-pendiente-de-redactar)).
+- Integrar las ramas en una sola aplicación para la entrega: dos usuarios de instituciones
+  distintas deben poder operar a la vez, cada uno sobre su motor.
+- Opcional: convertir MongoDB a *replica set* para usar transacciones y cerrar la ventana de
+  milisegundos entre una consulta y una baja simultáneas
+  ([operaciones comunes](docs/operaciones_comunes.md)).
 
-La entrega debe integrar los cuatro adaptadores en una sola aplicación. Las ramas
-serán una forma de organizar desarrollo, no cuatro aplicaciones con contratos distintos.
-
-La especificación del curso manda sobre las decisiones de implementación. Si cambia
-el alcance, actualizar este README y el documento de continuidad juntos.
-
-Referencias: [FastAPI, JWT y Argon2](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/),
-[MySQL CHECK](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html),
-[MongoDB schema validation](https://www.mongodb.com/docs/manual/core/schema-validation/).
+La especificación del curso manda sobre las decisiones de implementación. Si cambia el
+alcance, actualizar este README y el documento de continuidad juntos.
