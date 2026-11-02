@@ -1,0 +1,127 @@
+/* Sistema visual de Historiales (REDESIGN_BRIEF.md).
+   Cristal para el marco, papel para el dato: barra lateral, barra superior y dialogos son
+   cristal esmerilado; tablas y formularios van sobre superficies casi opacas para que un
+   dato clinico o administrativo nunca se lea a traves de un fondo. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter-latin-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter-latin-ext-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Base neutra del brief; el secundario se oscurece para sostener AA sobre el cristal. */
+  --app-bg: #EDF2F6;
+  --surface: #FFFFFF;
+  --text: #172B3A;
+  --text-2: #55677A;
+  --border: #DCE5EC;
+  --border-strong: #B9C7D3;
+
+  /* Estados: universales, nunca el color institucional. */
+  --crit: #DC2626; --crit-ink: #B42318; --crit-tint: #FDECEA; --crit-line: #F4BDB6;
+  --warn: #E8890C; --warn-ink: #8A4B00; --warn-tint: #FEF3E2; --warn-line: #F6D49D;
+  --ok: #16A34A; --ok-ink: #12713A; --ok-tint: #E7F6EC; --ok-line: #BFE3CA;
+
+  /* Las cuatro instituciones. */
+  --c-hospital: #0068FF;
+  --c-pediatrico: #4D8687;
+  --c-laboratorio: #A75FF1;
+  --c-dental: #006977;
+
+  /* Cristal. */
+  --glass-marco: rgba(255, 255, 255, .58);
+  --glass-panel: rgba(255, 255, 255, .66);
+  --glass-capa: rgba(250, 252, 254, .84);
+  --glass-brillo: rgba(255, 255, 255, .75);
+  --glass-borde: rgba(255, 255, 255, .62);
+  --glass-desenfoque: blur(22px) saturate(160%);
+  --papel: rgba(255, 255, 255, .93);
+
+  /* Geometria. */
+  --r-card: 16px; --r-btn: 10px; --r-in: 10px;
+  --sombra-1: 0 1px 2px rgba(23, 43, 58, .05);
+  --sombra-panel: 0 1px 1px rgba(23, 43, 58, .04), 0 12px 32px -18px rgba(23, 43, 58, .28);
+  --sombra-capa: 0 24px 64px -16px rgba(23, 43, 58, .34);
+
+  /* Tipografia. */
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  /* Movimiento: solo transform y opacity. */
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  --t-press: 160ms;
+  --tr-hover: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+
+  /* Tema neutro, antes de conocer la institucion (login). */
+  --brand: #172B3A; --brand-ink: #172B3A; --brand-btn: #172B3A; --brand-btn-h: #0E1D29;
+  --brand-tint: #E8EEF4; --brand-line: #CFDAE3;
+  --side: rgba(23, 43, 58, .86); --side-tenue: rgba(255, 255, 255, .72); --side-hover: rgba(255, 255, 255, .1);
+  --suelo:
+    radial-gradient(46vmax 40vmax at 8% 6%, rgba(0, 104, 255, .2), transparent 70%),
+    radial-gradient(44vmax 40vmax at 94% 10%, rgba(77, 134, 135, .24), transparent 70%),
+    radial-gradient(44vmax 42vmax at 6% 96%, rgba(167, 95, 241, .18), transparent 70%),
+    radial-gradient(48vmax 42vmax at 96% 94%, rgba(0, 105, 119, .2), transparent 70%);
+}
+
+[data-tema=hospital] {
+  --brand: #0068FF; --brand-ink: #0050C8; --brand-btn: #0062F0; --brand-btn-h: #0050C8;
+  --brand-tint: #E8F1FF; --brand-line: #BBD5FF;
+  --side: rgba(0, 72, 184, .88);
+  --r-card: 12px; --r-btn: 8px; --r-in: 8px;
+  --suelo:
+    radial-gradient(60vmax 44vmax at 100% 0, rgba(0, 104, 255, .2), transparent 70%),
+    radial-gradient(44vmax 40vmax at 0 100%, rgba(120, 170, 255, .18), transparent 70%);
+}
+[data-tema=pediatrico] {
+  --brand: #4D8687; --brand-ink: #2F6061; --brand-btn: #3A7172; --brand-btn-h: #2F6061;
+  --brand-tint: #E9F2F2; --brand-line: #BFD8D8;
+  --side: rgba(50, 100, 101, .92);
+  --r-card: 20px; --r-btn: 12px; --r-in: 12px;
+  --suelo:
+    radial-gradient(50vmax 40vmax at 100% 0, rgba(241, 154, 145, .28), transparent 70%),
+    radial-gradient(52vmax 44vmax at 0 100%, rgba(244, 217, 144, .4), transparent 70%),
+    radial-gradient(40vmax 34vmax at 70% 100%, rgba(191, 220, 207, .5), transparent 70%);
+}
+[data-tema=laboratorio] {
+  --brand: #A75FF1; --brand-ink: #6F2FC0; --brand-btn: #6F3BCB; --brand-btn-h: #5E2DB6;
+  --brand-tint: #F3EAFE; --brand-line: #D9C0F8;
+  --side: rgba(74, 34, 150, .9);
+  --r-card: 12px; --r-btn: 9px; --r-in: 9px;
+  --suelo:
+    radial-gradient(70vmax 40vmax at 50% 110%, rgba(167, 95, 241, .32), transparent 72%),
+    radial-gradient(40vmax 30vmax at 100% 0, rgba(106, 55, 196, .14), transparent 70%);
+}
+[data-tema=dental] {
+  --brand: #006977; --brand-ink: #00505B; --brand-btn: #006977; --brand-btn-h: #00545F;
+  --brand-tint: #E4F0F0; --brand-line: #B5D6D9;
+  --side: rgba(0, 92, 105, .9);
+  --r-card: 22px; --r-btn: 13px; --r-in: 13px;
+  --suelo:
+    radial-gradient(44vmax 40vmax at 100% 0, rgba(245, 215, 210, .75), transparent 70%),
+    radial-gradient(44vmax 40vmax at 0 100%, rgba(216, 236, 231, .9), transparent 70%),
+    radial-gradient(34vmax 30vmax at 60% 100%, rgba(243, 229, 216, .8), transparent 70%);
+}
+
+/* Quien pide menos transparencia, o un navegador sin desenfoque, recibe superficies solidas. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-marco: #FFFFFF; --glass-panel: #FFFFFF; --glass-capa: #FFFFFF; --papel: #FFFFFF;
+    --glass-desenfoque: none;
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-marco: #FFFFFF; --glass-panel: #FFFFFF; --glass-capa: #FFFFFF; --papel: #FFFFFF; }
+}

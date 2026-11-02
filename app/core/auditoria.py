@@ -21,7 +21,8 @@ def _linea(
     paciente: str | None,
 ) -> str:
     return (
-        f"evento={evento} usuario={usuario.id_usuario} institucion={usuario.institucion.value} "
+        f"evento={evento} usuario={usuario.id_usuario} "
+        f"institucion={usuario.institucion.value if usuario.institucion else 'plataforma'} "
         f"metodo={metodo} ruta={ruta} permiso={permiso} paciente={paciente or '-'}"
     )
 

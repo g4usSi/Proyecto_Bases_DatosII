@@ -17,6 +17,7 @@ CAMAS_GESTIONAR = "camas:gestionar"
 # Cobros y pagos (Hospital General y Centro Pediatrico): ver montos / registrar movimientos.
 PAGOS_VER = "pagos:ver"
 PAGOS_REGISTRAR = "pagos:registrar"
+PLATAFORMA_ADMINISTRAR = "plataforma:administrar"
 
 # Igual que identidad.permisos_clinicos() en 006_rol_secretaria_citas.sql.
 PERMISOS_CLINICOS = frozenset({HISTORIALES_LEER, CONSULTAS_REGISTRAR})
@@ -47,5 +48,6 @@ PERMISOS_POR_ROL = {
         }
     ),
     "administrador": frozenset({PROFESIONALES_ADMINISTRAR}),
+    "superusuario": frozenset({PLATAFORMA_ADMINISTRAR, PAGOS_VER}),
 }
 PERMISOS_POR_DEFECTO = frozenset({PACIENTES_LEER})

@@ -137,7 +137,6 @@ def test_alta_sin_contrasena_genera_una_que_cumple_la_politica(settings: Setting
     ("extra", "texto"),
     [
         ({"rol": "secretaria"}, "Rol no valido"),
-        ({"rol": "administrador"}, "scripts/crear_profesional"),
         ({"permisos": ["profesionales:administrar"]}, "exclusivo"),
         ({"permisos": ["laboratorio:validar"]}, "no aplican"),
         ({"contrasena_inicial": "corta-1"}, None),

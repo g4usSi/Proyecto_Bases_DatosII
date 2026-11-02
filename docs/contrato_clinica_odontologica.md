@@ -119,9 +119,8 @@ frontend debe seguir este documento:
 | Los profesionales se ven como «Profesional ·1a2b». | Hay nombres para los activos. | Usar el nombre y dejar esa marca para cuentas de baja. |
 | El modal de estado ofrece atendida, no asistió y cancelada. | También acepta `confirmada`. | Opcional: agregar «Confirmar». |
 
-## Fuera de esta rama
+## Administración
 
 Las pantallas del escenario «Clínica Odontológica · administración» (Resumen, Usuarios y
-accesos, Bitácora) usan `/profesionales/resumen` y `/profesionales/bitacora`. Esas rutas están
-en la rama `Hospital-pediatrico` (commit `d611ab6`) y todavía no llegaron a `Develop`. Aquí solo
-están `POST`, `GET` y `PATCH /profesionales` y restablecer contraseña.
+accesos, Bitácora) usan las rutas de `/profesionales`, que llegaron con `Develop` junto con sus
+pantallas en `js/vistas/admin/`.

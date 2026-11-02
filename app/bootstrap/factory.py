@@ -74,7 +74,10 @@ def crear_contenedor(settings: Settings) -> Contenedor:
         contenedor.verificaciones[Institucion.CENTRO_PEDIATRICO] = ping_mysql
     if settings.mongodb_uri:
         cliente = MongoClient(
-            settings.mongodb_uri.get_secret_value(), serverSelectionTimeoutMS=5000
+            settings.mongodb_uri.get_secret_value(),
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=10000,
         )
         contenedor.cierres.append(cliente.close)
         contenedor.unidades_trabajo[Institucion.LABORATORIO_CLINICO] = lambda: UnidadTrabajoMongo(

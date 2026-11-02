@@ -280,6 +280,13 @@ class DirectorioAdministrableDoble:
     def crear(self, institucion, datos, permisos, contrasena_cifrada, id_actor):
         if any(f.correo == datos.correo for f in self.fichas.values()):
             raise ConflictoEstado("Ya existe una cuenta con ese correo.")
+        if datos.rol == "administrador" and any(
+            f.institucion == institucion
+            and f.rol == "administrador"
+            and f.estado in {EstadoCuenta.ACTIVA, EstadoCuenta.BLOQUEADA}
+            for f in self.fichas.values()
+        ):
+            raise ConflictoEstado("La institucion ya tiene un administrador activo.")
         identificador = f"00000000-0000-4000-8000-{len(self.fichas) + 1:012d}"
         ficha = FichaProfesional(
             identificador,
@@ -298,22 +305,43 @@ class DirectorioAdministrableDoble:
         self.bitacora.append((id_actor, identificador, "alta"))
         return ficha
 
-    def listar(self, institucion, rol=None, id_departamento=None, estado=None, limite=200):
+    def listar(
+        self,
+        institucion,
+        rol=None,
+        id_departamento=None,
+        estado=None,
+        limite=200,
+        incluir_administradores=False,
+    ):
         return [
             f
             for f in self.fichas.values()
-            if f.institucion == institucion
+            if (institucion is None or f.institucion == institucion)
+            and f.estado != EstadoCuenta.ELIMINADA
+            and f.rol != "superusuario"
+            and (incluir_administradores or f.rol != "administrador")
             and (rol is None or f.rol == rol)
             and (id_departamento is None or f.id_departamento == id_departamento)
             and (estado is None or f.estado == estado)
         ][:limite]
 
-    def obtener(self, institucion, id_profesional):
+    def obtener(
+        self, institucion, id_profesional, incluir_administradores=False, incluir_eliminados=False
+    ):
         ficha = self.fichas.get(id_profesional)
-        return ficha if ficha and ficha.institucion == institucion else None
+        if ficha is None or (institucion is not None and ficha.institucion != institucion):
+            return None
+        if ficha.rol == "superusuario" or (
+            ficha.rol == "administrador" and not incluir_administradores
+        ):
+            return None
+        if ficha.estado == EstadoCuenta.ELIMINADA and not incluir_eliminados:
+            return None
+        return ficha
 
     def actualizar(self, institucion, id_profesional, cambios, permisos, id_actor):
-        ficha = self.obtener(institucion, id_profesional)
+        ficha = self.obtener(institucion, id_profesional, incluir_administradores=True)
         nuevos = {}
         for campo in ("nombres", "apellidos", "estado"):
             if getattr(cambios, campo) is not None:
@@ -343,6 +371,12 @@ class DirectorioAdministrableDoble:
             ProfesionalAgenda(f.id_profesional, f.nombres, f.apellidos, f.rol, f.id_departamento)
             for f in self.fichas.values()
             if f.institucion == institucion
-            and f.estado != EstadoCuenta.INACTIVA
+            and f.estado == EstadoCuenta.ACTIVA
             and f.rol not in ("secretaria", "administrador")
         ]
+
+    def eliminar(self, id_profesional, id_actor):
+        self.fichas[id_profesional] = replace(
+            self.fichas[id_profesional], estado=EstadoCuenta.ELIMINADA
+        )
+        self.bitacora.append((id_actor, id_profesional, "eliminar"))

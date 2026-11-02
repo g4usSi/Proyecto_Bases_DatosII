@@ -48,7 +48,7 @@ class AutenticadorCentral:
         token = jwt.encode(
             {
                 "sub": cuenta.id_profesional,
-                "inst": cuenta.institucion.value,
+                "inst": cuenta.institucion.value if cuenta.institucion else None,
                 "ver": cuenta.version_token,
                 "iss": self.emisor,
                 "aud": self.audiencia,
@@ -69,7 +69,8 @@ class AutenticadorCentral:
                 algorithms=["HS256"],
                 issuer=self.emisor,
                 audience=self.audiencia,
-                options={"require": ["sub", "inst", "ver", "iss", "aud", "iat", "exp", "jti"]},
+                # PyJWT interpreta un claim null como ausente en `require`.
+                options={"require": ["sub", "ver", "iss", "aud", "iat", "exp", "jti"]},
             )
         except jwt.InvalidTokenError as error:
             raise TokenInvalido("Token invalido.") from error
@@ -77,9 +78,11 @@ class AutenticadorCentral:
         if (
             cuenta is None
             or not cuenta.activo
+            or "inst" not in payload
             or type(payload["ver"]) is not int
             or payload["ver"] != cuenta.version_token
-            or payload["inst"] != cuenta.institucion.value
+            or payload["inst"] != (cuenta.institucion.value if cuenta.institucion else None)
+            or (cuenta.bloqueado_hasta is not None and cuenta.bloqueado_hasta > datetime.now(UTC))
         ):
             raise TokenInvalido("Sesion revocada.")
         # Los permisos se leen de PostgreSQL en CADA solicitud, no del JWT.

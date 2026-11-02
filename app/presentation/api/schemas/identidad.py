@@ -6,7 +6,7 @@ from app.domain.institucion import Institucion
 
 class UsuarioResponse(BaseModel):
     id_usuario: str
-    institucion: Institucion
+    institucion: Institucion | None
     permisos: list[str]
     nombres: str | None = None
     apellidos: str | None = None

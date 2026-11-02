@@ -317,6 +317,9 @@ class CobrosNoAplica:
     def listar_servicios(self) -> list[Servicio]:
         self._no()
 
+    def resumen(self, desde, hasta):
+        self._no()
+
     def abrir(
         self, id_paciente: str, id_atencion: str, descripcion: str | None, ahora: datetime
     ) -> Cobro:

@@ -1325,3 +1325,14 @@ class UnidadTrabajoMongo:
 
     def rollback(self) -> None:
         self.pendientes = []
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        return {
+            "pacientes_registrados": self.database.pacientes.count_documents({}),
+            "citas_hoy": self.database.citas.count_documents(
+                {"inicio": {"$gte": desde, "$lt": hasta}}
+            ),
+            "ordenes_abiertas": self.database.ordenes_laboratorio.count_documents(
+                {"estado": {"$in": ABIERTAS_BD}}
+            ),
+        }

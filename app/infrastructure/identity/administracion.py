@@ -2,7 +2,8 @@
 
 Cada operacion abre su conexion y hace UNA transaccion: el cambio de la cuenta y su
 evento en identidad.bitacora_profesionales se guardan juntos o no se guarda nada.
-Las cuentas de administracion no se listan ni se modifican por esta via.
+Solo el alcance de plataforma incluye cuentas de administracion; las eliminadas nunca
+se listan y solo se recuperan internamente para rechazar intentos de rehabilitacion.
 """
 
 from datetime import UTC, datetime
@@ -15,12 +16,13 @@ from psycopg.types.json import Jsonb
 
 from app.application.errores import IntegracionNoConfigurada
 from app.domain.administracion import (
-    ROL_ADMINISTRADOR,
     CambiosProfesional,
     EstadoCuenta,
+    EventoProfesional,
     FichaProfesional,
     NuevoProfesional,
     ProfesionalAgenda,
+    ResumenPersonal,
 )
 from app.domain.errores import ConflictoEstado, DatosInvalidos, RegistroNoEncontrado
 from app.domain.institucion import Institucion
@@ -30,7 +32,7 @@ from app.domain.institucion import Institucion
 BLOQUEO_ADMINISTRATIVO = datetime(9999, 12, 31, tzinfo=UTC)
 
 _ESTADO_SQL = (
-    "CASE WHEN NOT p.activo THEN 'inactiva' "
+    "CASE WHEN p.eliminado_en IS NOT NULL THEN 'eliminada' WHEN NOT p.activo THEN 'inactiva' "
     "WHEN p.bloqueado_hasta IS NOT NULL AND p.bloqueado_hasta > now() THEN 'bloqueada' "
     "ELSE 'activa' END"
 )
@@ -44,7 +46,7 @@ SELECT p.id_profesional, p.correo, p.nombres, p.apellidos, p.rol, p.establecimie
 FROM identidad.profesional p
 LEFT JOIN public.departamento d ON d.id_departamento = p.id_departamento
 LEFT JOIN identidad.profesional_permiso pp ON pp.id_profesional = p.id_profesional
-WHERE p.establecimiento = %(institucion)s AND p.rol <> '{ROL_ADMINISTRADOR}' {{filtro}}
+WHERE p.rol <> 'superusuario' {{filtro}}
 GROUP BY p.id_profesional, d.descripcion
 """
 
@@ -92,20 +94,37 @@ class AdministracionPostgreSQL:
             ) from error
 
     def _leer(
-        self, conexion: psycopg.Connection, institucion: Institucion, id_profesional: UUID
+        self,
+        conexion: psycopg.Connection,
+        institucion: Institucion | None,
+        id_profesional: UUID,
+        incluir_administradores: bool = True,
+        incluir_eliminados: bool = False,
     ) -> FichaProfesional | None:
+        alcance = self._alcance(institucion, incluir_administradores, incluir_eliminados)
         fila = conexion.execute(
-            _FICHA.replace("{filtro}", "AND p.id_profesional = %(id)s"),
-            {"institucion": institucion.value, "id": id_profesional},
+            _FICHA.replace("{filtro}", alcance + " AND p.id_profesional = %(id)s"),
+            {"institucion": institucion.value if institucion else None, "id": id_profesional},
         ).fetchone()
         return _ficha(fila) if fila else None
+
+    @staticmethod
+    def _alcance(institucion, incluir_administradores=False, incluir_eliminados=False):
+        filtros = []
+        if institucion is not None:
+            filtros.append("AND p.establecimiento = %(institucion)s")
+        if not incluir_administradores:
+            filtros.append("AND p.rol <> 'administrador'")
+        if not incluir_eliminados:
+            filtros.append("AND p.eliminado_en IS NULL")
+        return " ".join(filtros)
 
     @staticmethod
     def _bitacora(
         conexion: psycopg.Connection,
         id_actor: str,
         id_profesional: UUID,
-        institucion: str,
+        institucion: str | None,
         accion: str,
         detalle: dict[str, Any],
     ) -> None:
@@ -163,7 +182,12 @@ class AdministracionPostgreSQL:
                 )
                 ficha = self._leer(conexion, institucion, identificador)
         except psycopg.errors.UniqueViolation as error:
-            raise ConflictoEstado("Ya existe una cuenta con ese correo.") from error
+            mensaje = (
+                "La institucion ya tiene un administrador activo."
+                if error.diag.constraint_name == "ux_un_admin_por_entidad"
+                else "Ya existe una cuenta con ese correo."
+            )
+            raise ConflictoEstado(mensaje) from error
         except psycopg.errors.ForeignKeyViolation as error:
             raise DatosInvalidos("El area (departamento) o un permiso no existe.") from error
         except psycopg.errors.CheckViolation as error:
@@ -187,13 +211,20 @@ class AdministracionPostgreSQL:
         try:
             with self._conectar() as conexion, conexion.transaction():
                 actual = conexion.execute(
-                    "SELECT rol, activo, bloqueado_hasta, id_departamento, nombres, apellidos "
+                    "SELECT rol, activo, bloqueado_hasta, id_departamento, "
+                    "nombres, apellidos, eliminado_en "
                     "FROM identidad.profesional WHERE id_profesional = %s "
-                    "AND establecimiento = %s AND rol <> %s FOR UPDATE",
-                    (identificador, institucion.value, ROL_ADMINISTRADOR),
+                    "AND establecimiento = %s AND rol <> 'superusuario' "
+                    "AND (rol <> 'administrador' OR EXISTS "
+                    "(SELECT 1 FROM identidad.profesional actor "
+                    "WHERE actor.id_profesional = %s AND actor.rol = 'superusuario' "
+                    "AND actor.activo AND actor.eliminado_en IS NULL)) FOR UPDATE",
+                    (identificador, institucion.value, UUID(id_actor)),
                 ).fetchone()
                 if actual is None:
                     raise RegistroNoEncontrado("El profesional no existe en tu institucion.")
+                if actual["eliminado_en"] is not None:
+                    raise ConflictoEstado("La cuenta fue eliminada definitivamente.")
                 antes = self._leer(conexion, institucion, identificador)
                 detalle: dict[str, Any] = {}
                 asignaciones: list[str] = []
@@ -271,6 +302,8 @@ class AdministracionPostgreSQL:
             raise
         except psycopg.errors.ForeignKeyViolation as error:
             raise DatosInvalidos("El area (departamento) o un permiso no existe.") from error
+        except psycopg.errors.UniqueViolation as error:
+            raise ConflictoEstado("La institucion ya tiene un administrador activo.") from error
         except psycopg.errors.CheckViolation as error:
             raise DatosInvalidos("La base rechazo el area o los permisos.") from error
         except psycopg.Error as error:
@@ -298,7 +331,7 @@ class AdministracionPostgreSQL:
                     # Quita el bloqueo por intentos fallidos, no el puesto por administracion.
                     "bloqueado_hasta = CASE WHEN bloqueado_hasta >= %s "
                     "THEN bloqueado_hasta ELSE NULL END "
-                    "WHERE id_profesional = %s RETURNING establecimiento",
+                    "WHERE id_profesional = %s AND eliminado_en IS NULL RETURNING establecimiento",
                     (
                         contrasena_cifrada,
                         debe_cambiar,
@@ -325,9 +358,13 @@ class AdministracionPostgreSQL:
         id_departamento: int | None = None,
         estado: EstadoCuenta | None = None,
         limite: int = 200,
+        incluir_administradores: bool = False,
     ) -> list[FichaProfesional]:
-        filtros = []
-        parametros: dict[str, Any] = {"institucion": institucion.value, "limite": limite}
+        filtros = [self._alcance(institucion, incluir_administradores)]
+        parametros: dict[str, Any] = {
+            "institucion": institucion.value if institucion else None,
+            "limite": limite,
+        }
         if rol is not None:
             filtros.append("AND p.rol = %(rol)s")
             parametros["rol"] = rol
@@ -350,13 +387,25 @@ class AdministracionPostgreSQL:
             ) from error
         return [_ficha(f) for f in filas]
 
-    def obtener(self, institucion: Institucion, id_profesional: str) -> FichaProfesional | None:
+    def obtener(
+        self,
+        institucion: Institucion | None,
+        id_profesional: str,
+        incluir_administradores: bool = False,
+        incluir_eliminados: bool = False,
+    ) -> FichaProfesional | None:
         identificador = _uuid(id_profesional)
         if identificador is None:
             return None
         try:
             with self._conectar() as conexion:
-                return self._leer(conexion, institucion, identificador)
+                return self._leer(
+                    conexion,
+                    institucion,
+                    identificador,
+                    incluir_administradores,
+                    incluir_eliminados,
+                )
         except psycopg.Error as error:
             raise IntegracionNoConfigurada(
                 "El directorio de profesionales no esta disponible."
@@ -368,7 +417,9 @@ class AdministracionPostgreSQL:
                 filas = conexion.execute(
                     "SELECT id_profesional, nombres, apellidos, rol, id_departamento "
                     "FROM identidad.profesional WHERE establecimiento = %s AND activo "
-                    "AND rol NOT IN ('secretaria', 'administrador') "
+                    "AND eliminado_en IS NULL "
+                    "AND (bloqueado_hasta IS NULL OR bloqueado_hasta <= now()) "
+                    "AND rol NOT IN ('secretaria', 'administrador', 'superusuario') "
                     "ORDER BY apellidos, nombres, id_profesional",
                     (institucion.value,),
                 ).fetchall()
@@ -386,3 +437,123 @@ class AdministracionPostgreSQL:
             )
             for f in filas
         ]
+
+    def eliminar(self, id_profesional: str, id_actor: str) -> None:
+        identificador = _uuid(id_profesional)
+        if identificador is None:
+            raise RegistroNoEncontrado("El profesional no existe.")
+        try:
+            with self._conectar() as conexion, conexion.transaction():
+                fila = conexion.execute(
+                    "SELECT establecimiento, eliminado_en FROM identidad.profesional "
+                    "WHERE id_profesional = %s AND rol <> 'superusuario' FOR UPDATE",
+                    (identificador,),
+                ).fetchone()
+                if fila is None:
+                    raise RegistroNoEncontrado("El profesional no existe.")
+                if fila["eliminado_en"] is not None:
+                    raise ConflictoEstado("La cuenta ya fue eliminada.")
+                conexion.execute(
+                    "UPDATE identidad.profesional SET activo = FALSE, eliminado_en = now(), "
+                    "actualizado_en = now(), version_token = version_token + 1 "
+                    "WHERE id_profesional = %s",
+                    (identificador,),
+                )
+                self._bitacora(
+                    conexion, id_actor, identificador, fila["establecimiento"], "eliminar", {}
+                )
+        except psycopg.Error as error:
+            raise IntegracionNoConfigurada("No se pudo eliminar la cuenta.") from error
+
+    def consultar_bitacora(
+        self, institucion, accion=None, desde=None, hasta=None, limite=50, antes_de=None
+    ):
+        filtros, valores = [], {"limite": limite}
+        for condicion, clave, valor in (
+            (
+                "b.establecimiento = %(institucion)s",
+                "institucion",
+                institucion.value if institucion else None,
+            ),
+            ("b.accion = %(accion)s", "accion", accion),
+            ("b.ocurrido_en >= %(desde)s", "desde", desde),
+            ("b.ocurrido_en < %(hasta)s", "hasta", hasta),
+            ("b.id_evento < %(antes_de)s", "antes_de", antes_de),
+        ):
+            if valor is not None:
+                filtros.append(condicion)
+                valores[clave] = valor
+        donde = " WHERE " + " AND ".join(filtros) if filtros else ""
+        try:
+            with self._conectar() as conexion:
+                filas = conexion.execute(
+                    "SELECT b.*, "
+                    "COALESCE(a.nombres || ' ' || a.apellidos, 'superusuario') AS actor, "
+                    "COALESCE(a.rol, 'superusuario') AS rol_actor, "
+                    "p.nombres || ' ' || p.apellidos AS cuenta "
+                    "FROM identidad.bitacora_profesionales b "
+                    "LEFT JOIN identidad.profesional a ON a.id_profesional = b.id_actor "
+                    "JOIN identidad.profesional p ON p.id_profesional = b.id_profesional "
+                    + donde
+                    + " ORDER BY b.id_evento DESC LIMIT %(limite)s",
+                    valores,
+                ).fetchall()
+        except psycopg.Error as error:
+            raise IntegracionNoConfigurada("No se pudo consultar la bitacora.") from error
+        return [
+            EventoProfesional(
+                f["id_evento"],
+                f["ocurrido_en"],
+                Institucion(f["establecimiento"]) if f["establecimiento"] else None,
+                f["actor"],
+                f["rol_actor"],
+                str(f["id_profesional"]),
+                f["cuenta"],
+                f["accion"],
+                f["detalle"],
+            )
+            for f in filas
+        ]
+
+    def resumen(self, institucion: Institucion) -> ResumenPersonal:
+        try:
+            with self._conectar() as conexion:
+                admin = conexion.execute(
+                    "SELECT nombres || ' ' || apellidos AS nombre FROM identidad.profesional "
+                    "WHERE establecimiento = %s AND rol = 'administrador' AND activo "
+                    "AND eliminado_en IS NULL",
+                    (institucion.value,),
+                ).fetchone()
+                filas = conexion.execute(
+                    f"SELECT {_ESTADO_SQL} AS estado, p.rol, d.descripcion AS departamento, "
+                    "(p.bloqueado_hasta > now() AND p.bloqueado_hasta < %s "
+                    "AND p.activo) AS por_intentos, "
+                    "p.debe_cambiar_contrasena FROM identidad.profesional p "
+                    "LEFT JOIN departamento d ON d.id_departamento = p.id_departamento "
+                    "WHERE p.establecimiento = %s AND p.eliminado_en IS NULL "
+                    "AND p.rol <> 'administrador'",
+                    (BLOQUEO_ADMINISTRATIVO, institucion.value),
+                ).fetchall()
+        except psycopg.Error as error:
+            raise IntegracionNoConfigurada(
+                "No se pudo consultar el resumen de personal."
+            ) from error
+        estados = {e.value: 0 for e in EstadoCuenta if e != EstadoCuenta.ELIMINADA}
+        roles, areas = {}, {} if institucion == Institucion.HOSPITAL_GENERAL else None
+        for fila in filas:
+            estados[fila["estado"]] += 1
+            if fila["estado"] == "activa":
+                rol = fila["rol"]
+                roles[rol] = roles.get(rol, 0) + 1
+                if areas is not None:
+                    area = fila["departamento"] or "Sin area"
+                    areas[area] = areas.get(area, 0) + 1
+        return ResumenPersonal(
+            estados,
+            sum(bool(f["por_intentos"]) for f in filas),
+            sum(f["debe_cambiar_contrasena"] for f in filas),
+            roles,
+            areas,
+            self.consultar_bitacora(institucion, limite=5),
+            admin["nombre"] if admin else None,
+        )

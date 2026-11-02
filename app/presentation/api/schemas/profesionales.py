@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
@@ -13,6 +14,9 @@ class Entrada(BaseModel):
 
 
 class ProfesionalCrear(Entrada):
+    establecimiento: Institucion | None = Field(
+        default=None, description="Solo para el superusuario; obligatorio en ese caso."
+    )
     correo: str = Field(min_length=3, max_length=254)
     nombres: str = Nombre
     apellidos: str = Nombre
@@ -42,7 +46,7 @@ class ProfesionalCambios(Entrada):
     permisos: list[str] | None = Field(
         default=None, max_length=30, description="Reemplaza la lista completa de permisos."
     )
-    estado: EstadoCuenta | None = None
+    estado: Literal["activa", "bloqueada", "inactiva"] | None = None
 
 
 class ProfesionalResponse(BaseModel):
@@ -115,3 +119,28 @@ class DepartamentoResponse(BaseModel):
 class CambiarContrasenaRequest(Entrada):
     contrasena_actual: SecretStr = Field(min_length=1, max_length=1024)
     contrasena_nueva: SecretStr = Field(min_length=12, max_length=128)
+
+
+class EventoProfesionalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_evento: int
+    ocurrido_en: datetime
+    institucion: Institucion | None
+    actor: str
+    rol_actor: str
+    id_profesional: str
+    cuenta: str
+    accion: str
+    detalle: dict
+
+
+class ResumenPersonalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    por_estado: dict[str, int]
+    bloqueadas_por_intentos: int
+    pendientes_cambio_contrasena: int
+    activos_por_rol: dict[str, int]
+    activos_por_departamento: dict[str, int] | None
+    ultimos_movimientos: list[EventoProfesionalResponse]

@@ -26,7 +26,7 @@ pieza contra baja simultánea, 500 al agotar reintentos, consulta de alergias po
 
 Las pruebas de `tests/integration/test_firestore.py` pasan contra el proyecto real. Con el
 emulador 1.19.8 las de concurrencia se omiten. Lo administrativo del mockup para la clínica
-depende del commit `d611ab6` de la rama `Hospital-pediatrico`.
+viene de `Develop`, ya fusionada en esta rama.
 
 ## Estado vigente (23 de octubre de 2026, noche) — leer primero
 

@@ -4,8 +4,9 @@ Ver montos exige pagos:ver; abrir, cargar, pagar, anular o cerrar exige pagos:re
 """
 
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Path, Query, Request, status
 
 from app.application.use_cases.cobros import (
     AbrirCobro,
@@ -16,6 +17,7 @@ from app.application.use_cases.cobros import (
     ConsultarCobros,
     ConsultarServicios,
     RegistrarPago,
+    ResumenDeCobros,
 )
 from app.domain.cobros import EstadoCobro, NuevoCargo, NuevoPago
 from app.presentation.api.dependencies import ContextoRegistrarPagos, ContextoVerPagos
@@ -24,10 +26,21 @@ from app.presentation.api.schemas.cobros import (
     CobroCrear,
     CobroResponse,
     PagoCrear,
+    ResumenCobrosResponse,
     ServicioResponse,
 )
 
 router = APIRouter(tags=["Cobros"])
+
+
+@router.get("/cobros/resumen", response_model=ResumenCobrosResponse)
+def resumen_cobros(request: Request, contexto: ContextoVerPagos) -> ResumenCobrosResponse:
+    return ResumenCobrosResponse.model_validate(
+        ResumenDeCobros(
+            contexto.unidad, ZoneInfo(request.app.state.settings.zona_horaria)
+        ).ejecutar()
+    )
+
 
 IdPaciente = Annotated[str, Path(min_length=1, max_length=128)]
 IdCobro = Annotated[str, Path(min_length=1, max_length=20)]

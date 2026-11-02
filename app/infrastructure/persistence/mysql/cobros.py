@@ -6,6 +6,7 @@ lleguen a la vez. El modelo no tiene cierre ni anulacion: esas operaciones respo
 """
 
 from datetime import datetime
+from decimal import Decimal
 
 import pymysql
 
@@ -17,6 +18,7 @@ from app.domain.cobros import (
     NuevoCargo,
     NuevoPago,
     Pago,
+    ResumenCobros,
     Servicio,
 )
 from app.domain.errores import ConflictoEstado, DatosInvalidos, RegistroNoEncontrado
@@ -46,6 +48,24 @@ _PAGADA = "(f.total_facturado > 0 AND f.total_pagado = f.total_facturado)"
 class RepositorioCobrosMySQL:
     def __init__(self, conexion: pymysql.Connection) -> None:
         self.conexion = conexion
+
+    def resumen(self, desde: datetime, hasta: datetime) -> ResumenCobros:
+        estados = {e.value: 0 for e in EstadoCobro}
+        filas = self._filas(
+            "SELECT count(*),COALESCE(sum(total_facturado-total_pagado),0), "
+            "COALESCE(sum(total_facturado>0 AND total_facturado=total_pagado),0) FROM facturacion"
+        )
+        total, saldo, pagados = filas[0]
+        estados["pagado"], estados["abierto"] = int(pagados), int(total - pagados)
+        metodos = {m.value: Decimal(0) for m in MetodoPago}
+        for nombre, monto in self._filas(
+            "SELECT t.nombre,sum(p.monto) FROM pago p "
+            "JOIN tipo_de_pago t ON t.id_tipo_pago=p.id_tipo_pago "
+            "WHERE p.fecha_pago >= %s AND p.fecha_pago < %s GROUP BY t.nombre",
+            (utc_ingenuo(desde), utc_ingenuo(hasta)),
+        ):
+            metodos[METODO_DOMINIO[nombre].value] += monto
+        return ResumenCobros(estados, saldo, sum(metodos.values(), Decimal(0)), 0, metodos)
 
     def _filas(self, sql: str, parametros: tuple = ()) -> tuple[tuple, ...]:
         with self.conexion.cursor() as cursor:

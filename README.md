@@ -60,7 +60,7 @@ falla con tablas inexistentes, por ejemplo en citas, aplicar esto **una sola vez
 del arranque normal. Conserva los datos. Las migraciones de MySQL no se deben repetir.
 
 ```powershell
-docker compose exec -T postgres sh -c 'for f in /docker-entrypoint-initdb.d/009_*.sql /docker-entrypoint-initdb.d/01[0-4]_*.sql; do psql -q -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general -f $f || exit 1; done'
+docker compose exec -T postgres sh -c 'for f in /docker-entrypoint-initdb.d/009_*.sql /docker-entrypoint-initdb.d/01[0-5]_*.sql; do psql -q -v ON_ERROR_STOP=1 -U historiales_admin -d hospital_general -f $f || exit 1; done'
 docker compose exec -T mysql sh -c 'for f in /docker-entrypoint-initdb.d/00[6-9]_*.sql /docker-entrypoint-initdb.d/01[0-4]_*.sql; do MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysql -uroot --default-character-set=utf8mb4 hospital_pediatrico < $f || exit 1; done'
 docker compose exec -T mongo sh -c 'mongosh --quiet -u historiales_admin -p $MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin /docker-entrypoint-initdb.d/001_laboratorio.js'
 .\.venv\Scripts\python.exe -m scripts.sincronizar_profesionales
@@ -112,12 +112,11 @@ responden 501 en los demás.
 
 - **Backend:** funcional. Referencia completa de rutas, permisos y motores en
   [documentacion-backend.md](documentacion-backend.md).
-- **Frontend:** sin construir. El [mockup](docs/referencia/Historiales%20identidad%20visual.html)
-  está listo y el cliente será HTML/JS servido por la misma FastAPI ([plan](docs/frontend.md)).
+- **Frontend:** en <http://127.0.0.1:8000/app/>: acceso y administración. HTML/JS servido por
+  la misma FastAPI, sin compilación ([cómo está construido](docs/frontend.md)).
 - **Documento comparativo:** pendiente de redactar ([avance](docs/avance.md)).
 - **Ramas:** el desarrollo se reparte por establecimiento. Este README describe la rama
-  `Clinica-Odontologica`. Las rutas `/profesionales/resumen` y `/profesionales/bitacora`
-  están en la rama del Centro Pediátrico y todavía no llegan aquí.
+  `Clinica-Odontologica`, al día con `Develop`.
 
 Para retomar el trabajo, leer el [contexto para el siguiente agente](docs/CONTEXTO_PARA_OTRO_AGENTE.md).
 

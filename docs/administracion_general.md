@@ -1,10 +1,15 @@
-# Administración en dos niveles (propuesta)
+# Administración en dos niveles
 
-Estado: **propuesta, sin aplicar**. Este documento describe los cambios exactos para
-agregar un superusuario de plataforma **sobre** el administrador que ya tiene cada
-institución. El mockup ya muestra el resultado (`docs/referencia/Historiales identidad visual.html`,
-escenarios «Administración general · superusuario» y «… · administración» de cada
-entidad). Nada de lo que sigue está implementado en el backend.
+Estado al 31 de octubre de 2026: **implementado en el backend** con la migración
+`015_administracion_dos_niveles.sql`. El mockup sigue siendo una referencia visual.
+El texto siguiente conserva la especificación que guio la implementación. Para los
+contratos vigentes, campos, cursores, instalación y pruebas, consultar
+[API del frontend de Hospital, Laboratorio y administración](api_frontend_hospital_laboratorio.md).
+
+Precisiones respecto al plan original: la bitácora permite `establecimiento` nulo
+para el cambio de contraseña propio del superusuario; su cursor es `id_evento`
+descendente. La lectura de pagos por paciente también acepta el selector de entidad
+de plataforma. La migración 016 completa los permisos del perfil hospitalario.
 
 ## 1. Decisiones
 

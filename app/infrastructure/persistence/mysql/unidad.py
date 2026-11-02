@@ -1036,3 +1036,24 @@ class UnidadTrabajoMySQL:
 
     def rollback(self) -> None:
         self.conexion.rollback()
+
+    def resumen_operativo(self, desde: datetime, hasta: datetime) -> dict:
+        with self.conexion.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM paciente")
+            pacientes = cursor.fetchone()[0]
+            cursor.execute(
+                "SELECT count(*) FROM cita WHERE inicio >= %s AND inicio < %s",
+                (utc_ingenuo(desde), utc_ingenuo(hasta)),
+            )
+            citas = cursor.fetchone()[0]
+            cursor.execute(
+                "SELECT count(*), COALESCE(sum(total_facturado - total_pagado),0) "
+                "FROM facturacion WHERE total_facturado = 0 OR total_pagado < total_facturado"
+            )
+            abiertos, saldo = cursor.fetchone()
+        return {
+            "pacientes_registrados": pacientes,
+            "citas_hoy": citas,
+            "cobros_abiertos": abiertos,
+            "saldo_pendiente": saldo,
+        }

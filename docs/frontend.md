@@ -1,10 +1,34 @@
 # Frontend: decisión y plan de trabajo
 
-Estado (31 de octubre de 2026): **tecnología decidida y mockup listo, cliente sin construir**.
-El mockup es [`referencia/Historiales identidad visual.html`](referencia/Historiales%20identidad%20visual.html).
-Para la Clínica Odontológica, el contrato pantalla por pantalla está en
-[contrato_clinica_odontologica.md](contrato_clinica_odontologica.md) y manda sobre las notas
-atrasadas del mockup.
+Estado (31 de octubre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
+`/app/` desde la misma API, sin Node ni compilación. Incluye acceso, cambio obligatorio de
+contraseña y la administración completa (superusuario y administrador de cada entidad). Las
+pantallas clínicas de cada institución se agregan como módulos en su rama. El mockup sigue
+siendo la referencia visual: `docs/referencia/Historiales identidad visual.html`. Los contratos
+están en [la guía del frontend](api_frontend_hospital_laboratorio.md). El plan que sigue es histórico.
+
+## Cómo está construida
+
+- **Agregar pantallas:** cada institución declara un módulo con `registrarModulo` en
+  `js/modulos/` (a quién aplica, menú y vistas) y se importa en `js/main.js`. El marco, el tema
+  y la sesión no se tocan. Una cuenta sin módulo ve un aviso, no una pantalla rota.
+- **Cristal para el marco, papel para el dato:** barra lateral, barra superior y diálogos usan
+  `backdrop-filter`; tablas y formularios van sobre superficies casi opacas (`--papel`). Con
+  `prefers-reduced-transparency` o sin soporte de desenfoque, todo pasa a superficies sólidas.
+- **Temas:** `data-tema` fija el color, la geometría y el suelo de cada institución en
+  `css/tokens.css`. El suelo es fijo y estático para que el desenfoque no se recalcule al desplazar.
+- **Recursos locales:** Inter (OFL) y un sprite de Lucide (ISC, generado con los SVG de
+  `lucide-static` 0.460.0) están en `assets/` con sus licencias.
+- **CSP:** va en un `<meta>`, así que no aplican `frame-ancestors` ni `report-uri`; si se
+  necesitan, hay que enviarla como cabecera desde el servidor. Prohíbe estilos en línea: los
+  valores dinámicos se asignan con `style.setProperty`.
+- **Sesión:** el token vive en `sessionStorage` y dura 30 minutos sin renovación; se avisa
+  5 minutos antes y, al vencer, se vuelve a la misma pantalla tras iniciar sesión.
+- **Límite conocido:** el detalle de la bitácora guarda el ID del área, no su nombre.
+
+Estado (23 de octubre de 2026): **tecnología decidida, nada construido**. Faltan los
+mockups; este documento deja listo qué debe tener cada pantalla para diseñarlos y
+después programarlos sin volver a discutir lo básico.
 
 ## Decisión del equipo
 

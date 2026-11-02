@@ -1,0 +1,132 @@
+/* ===== Marca: el simbolo de cuatro cuadrados ===== */
+.marca { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 26px; height: 26px; flex: none; }
+.marca i { display: block; border-radius: 5px; }
+.marca i:nth-child(1) { background: var(--c-hospital); }
+.marca i:nth-child(2) { background: var(--c-pediatrico); }
+.marca i:nth-child(3) { background: var(--c-laboratorio); }
+.marca i:nth-child(4) { background: var(--c-dental); }
+
+/* ===== Aplicacion ===== */
+.app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100dvh; }
+.saltar { position: fixed; top: 10px; left: 10px; z-index: 20; padding: 8px 14px; border-radius: 8px; background: #fff; color: var(--text); font-weight: 600; transform: translateY(-200%); }
+.saltar:focus { transform: none; }
+
+/* Barra lateral: cristal teñido con el color de la institucion. */
+.lado {
+  position: sticky; top: 0; display: flex; flex-direction: column; height: 100dvh; overflow-y: auto;
+  background: var(--side); color: #fff;
+  -webkit-backdrop-filter: var(--glass-desenfoque); backdrop-filter: var(--glass-desenfoque);
+  border-right: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, .05);
+}
+.lado-logo { display: flex; gap: 10px; align-items: center; padding: 18px 20px 6px; font-size: 16px; font-weight: 720; letter-spacing: -.01em; }
+.lado-logo .marca { width: 32px; height: 32px; padding: 4px; border-radius: 9px; background: #fff; }
+.lado-logo .marca i { border-radius: 3px; }
+.lado-inst { display: flex; gap: 11px; align-items: center; margin: 14px 14px 6px; padding: 11px 12px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 12px; background: rgba(255, 255, 255, .1); }
+.lado-inst b { display: block; font-size: 13.5px; font-weight: 620; line-height: 1.25; }
+.lado-inst small { color: var(--side-tenue); font-size: 12px; }
+.emblema { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 10px; background: rgba(255, 255, 255, .95); color: var(--brand-ink); }
+.nav { display: grid; gap: 2px; padding: 8px 12px; }
+.nav ul { display: grid; gap: 2px; }
+.nav-grupo { margin: 12px 12px 4px; color: var(--side-tenue); font-size: 12px; font-weight: 560; }
+.nav a {
+  display: flex; gap: 11px; align-items: center; min-height: 40px; padding: 0 12px;
+  border-radius: var(--r-btn); color: rgba(255, 255, 255, .9); font-weight: 530; text-decoration: none;
+  transition: var(--tr-hover);
+}
+.nav a:hover { background: var(--side-hover); color: #fff; }
+.nav a[aria-current=page] { background: rgba(255, 255, 255, .95); color: var(--brand-ink); font-weight: 630; }
+[data-tema=plataforma] .nav a[aria-current=page] { color: #172B3A; }
+.nav a:focus-visible, .lado button:focus-visible { outline-color: #fff; }
+.lado-pie { margin-top: auto; padding: 14px 20px; color: var(--side-tenue); font-size: 12px; }
+
+.principal { display: flex; flex-direction: column; min-width: 0; }
+/* Barra superior: cristal claro; el contenido pasa por debajo al desplazar. */
+.arriba {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px;
+  min-height: 60px; padding: 8px 28px;
+  background: var(--glass-marco); -webkit-backdrop-filter: var(--glass-desenfoque); backdrop-filter: var(--glass-desenfoque);
+  border-bottom: 1px solid rgba(255, 255, 255, .6);
+  box-shadow: 0 1px 0 rgba(23, 43, 58, .07);
+}
+.quien { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; margin-left: auto; }
+.quien-datos { display: grid; text-align: right; line-height: 1.25; }
+.quien-datos b { font-size: 13.5px; font-weight: 600; }
+.quien-datos small { color: var(--text-2); font-size: 12px; }
+.contenido { display: grid; gap: 18px; align-content: start; width: 100%; max-width: 1280px; margin: 0 auto; padding: 26px 28px 56px; }
+.contenido.entra { animation: entrar-vista 220ms var(--ease-out); }
+@keyframes entrar-vista { from { opacity: 0; transform: translateY(6px); } }
+.cabeza { display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: space-between; align-items: flex-end; }
+.cabeza p { max-width: 72ch; margin-top: 3px; color: var(--text-2); }
+
+/* Laboratorio: navegacion superior, como en la referencia aprobada. */
+.app.superior { grid-template-columns: minmax(0, 1fr); }
+.barra-lab {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: stretch; gap: 0 20px; padding: 0 28px;
+  background: var(--glass-marco); -webkit-backdrop-filter: var(--glass-desenfoque); backdrop-filter: var(--glass-desenfoque);
+  border-bottom: 1px solid rgba(255, 255, 255, .6); box-shadow: 0 1px 0 rgba(74, 34, 150, .12);
+}
+.barra-lab-marca { display: flex; gap: 11px; align-items: center; padding: 10px 8px 10px 0; }
+.barra-lab-marca .emblema { background: var(--brand-btn); color: #fff; }
+.barra-lab-marca b { display: block; color: var(--brand-ink); font-size: 16px; font-weight: 720; line-height: 1.15; }
+.barra-lab-marca small { color: var(--text-2); font-size: 12px; }
+.barra-lab .nav { display: flex; gap: 2px; flex: 1 1 auto; padding: 0; overflow-x: auto; scrollbar-width: none; }
+.barra-lab .nav ul { display: flex; gap: 2px; }
+.barra-lab .nav a { min-height: 62px; padding: 0 14px; border-radius: 0; border-bottom: 3px solid transparent; color: var(--text); white-space: nowrap; }
+.barra-lab .nav a:hover { background: rgba(167, 95, 241, .1); color: var(--brand-ink); }
+.barra-lab .nav a[aria-current=page] { background: rgba(167, 95, 241, .14); color: #4B1F9E; border-bottom-color: #6A37C4; }
+
+/* ===== Acceso: el simbolo de cuatro cuadrados visto a traves del cristal ===== */
+.acceso { position: relative; display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 40px; align-items: center; min-height: 100dvh; padding: 32px clamp(20px, 5vw, 72px); }
+.acceso-panel {
+  display: grid; gap: 18px; padding: 34px 36px;
+  border: 1px solid var(--glass-borde); border-radius: 26px;
+  background: rgba(255, 255, 255, .72); -webkit-backdrop-filter: var(--glass-desenfoque); backdrop-filter: var(--glass-desenfoque);
+  box-shadow: var(--sombra-panel), inset 0 1px 0 var(--glass-brillo);
+}
+.acceso-logo { display: flex; gap: 12px; align-items: center; font-size: 18px; font-weight: 720; letter-spacing: -.012em; }
+.acceso h1 { font-size: 28px; }
+.acceso form { display: grid; gap: 16px; }
+.acceso .btn[type=submit] { min-height: 44px; }
+.cuatro { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: min(100%, 520px); aspect-ratio: 1; justify-self: center; }
+.cuatro > div {
+  --tinte: var(--c-hospital);
+  position: relative; display: grid; align-content: end; gap: 8px; padding: 22px; overflow: hidden;
+  border: 1px solid var(--glass-borde); border-radius: 12px;
+  background: color-mix(in srgb, var(--tinte) 12%, rgba(255, 255, 255, .58));
+  -webkit-backdrop-filter: var(--glass-desenfoque); backdrop-filter: var(--glass-desenfoque);
+  box-shadow: var(--sombra-panel), inset 0 1px 0 var(--glass-brillo);
+  animation: asentar 620ms var(--ease-out) backwards;
+}
+.cuatro > div:nth-child(1) { border-top-left-radius: 44px; }
+.cuatro > div:nth-child(2) { --tinte: var(--c-pediatrico); border-top-right-radius: 44px; animation-delay: 60ms; }
+.cuatro > div:nth-child(3) { --tinte: var(--c-laboratorio); border-bottom-left-radius: 44px; animation-delay: 120ms; }
+.cuatro > div:nth-child(4) { --tinte: var(--c-dental); border-bottom-right-radius: 44px; animation-delay: 180ms; }
+.cuatro b { font-size: 19px; font-weight: 660; line-height: 1.15; letter-spacing: -.016em; }
+.cuatro .ic { color: color-mix(in srgb, var(--tinte) 78%, #172B3A); }
+@keyframes asentar { from { opacity: 0; transform: scale(.94); } }
+.pantalla-sola { display: grid; place-items: center; min-height: 100dvh; padding: 24px; }
+.pantalla-sola .acceso-panel { width: min(100%, 480px); }
+
+/* ===== Pantallas estrechas ===== */
+@media (max-width: 980px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .lado { position: static; height: auto; }
+  .lado-logo { padding-bottom: 0; }
+  .lado-inst, .lado-pie, .nav-grupo { display: none; }
+  .lado .nav { display: flex; gap: 4px; padding: 10px 12px; overflow-x: auto; scrollbar-width: none; }
+  .lado .nav ul { display: flex; gap: 4px; }
+  .lado .nav a { white-space: nowrap; }
+  .arriba { padding: 8px 16px; }
+  .barra-lab { padding: 0 16px; }
+  .contenido { padding: 20px 16px 44px; }
+  .acceso { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .acceso-panel { width: min(100%, 480px); padding: 26px 22px; }
+  .cuatro { display: none; }
+}
+@media (max-width: 560px) {
+  .quien-datos { display: none; }
+  .arriba > .ruta { display: none; }
+}
