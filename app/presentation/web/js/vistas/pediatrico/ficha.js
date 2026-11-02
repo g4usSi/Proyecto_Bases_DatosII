@@ -8,6 +8,7 @@ import { aviso, cargando, chip, estadoDeError, vacio } from '../../ui/componente
 import { cargarProfesionales, chipCita, claseCita, estaPorAtender, nombreProfesional } from './comun.js';
 import { abrirAdenda, abrirAlergias, abrirArchivar, abrirConsulta, abrirEditar } from './formularios.js';
 import { abrirCita } from './agendar.js';
+import { pestanaCrecimiento } from './crecimiento.js';
 
 const POR_PAGINA = 10;
 
@@ -169,6 +170,7 @@ function pestanasDe() {
   const lista = [['resumen', 'user-round', 'Resumen']];
   if (sesion.tiene('historiales:leer')) lista.push(['historial', 'notebook-text', 'Historial']);
   if (sesion.tiene('citas:leer')) lista.push(['citas', 'calendar-days', 'Citas']);
+  if (sesion.tiene('historiales:leer')) lista.push(['crecimiento', 'ruler', 'Crecimiento']);
   return lista;
 }
 
@@ -235,6 +237,7 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
     resumen: pestanaResumen,
     historial: pestanaHistorial,
     citas: pestanaCitas,
+    crecimiento: pestanaCrecimiento,
   }[actual];
 
   zona.replaceChildren(...[
