@@ -5,6 +5,7 @@ import { vistaPacientes } from '../vistas/pediatrico/pacientes.js';
 import { vistaRegistrar } from '../vistas/pediatrico/registrar.js';
 import { vistaAgenda } from '../vistas/pediatrico/agenda.js';
 import { vistaCatalogoVacunas } from '../vistas/pediatrico/vacunacion.js';
+import { vistaFacturacion } from '../vistas/pediatrico/facturacion.js';
 
 registrarModulo({
   aplica: (usuario) => usuario.institucion === 'centro_pediatrico',
@@ -15,6 +16,7 @@ registrarModulo({
     if (tiene('pacientes:registrar')) items.push({ ruta: 'registrar', icono: 'user-plus', texto: 'Registrar paciente' });
     if (tiene('citas:leer')) items.push({ ruta: 'agenda', icono: 'calendar-days', texto: 'Agenda de citas' });
     if (tiene('historiales:leer')) items.push({ ruta: 'vacunas', icono: 'syringe', texto: 'Catálogo de vacunas' });
+    if (tiene('pagos:ver')) items.push({ ruta: 'facturacion', icono: 'receipt', texto: 'Facturación' });
     return [{ items }];
   },
   vistas: {
@@ -22,5 +24,6 @@ registrarModulo({
     registrar: vistaRegistrar,
     agenda: vistaAgenda,
     vacunas: vistaCatalogoVacunas,
+    facturacion: vistaFacturacion,
   },
 });

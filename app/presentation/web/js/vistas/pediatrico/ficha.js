@@ -11,6 +11,7 @@ import { abrirCita } from './agendar.js';
 import { pestanaCrecimiento } from './crecimiento.js';
 import { pestanaVacunacion } from './vacunacion.js';
 import { pestanaTutores } from './tutores.js';
+import { abrirEmision, pestanaFacturas } from './facturacion.js';
 
 const POR_PAGINA = 10;
 
@@ -114,7 +115,9 @@ function nodoConsulta(c, p, ctx) {
           h('td', { text: r.via_administracion || '—' }), h('td', { text: r.duracion_dias ?? '—' }))))))),
     h('div', { class: 'fila' },
       sesion.tiene('consultas:registrar') && !p.archivado
-      && h('button', { class: 'btn tenue sm', type: 'button', onclick: () => abrirAdenda(c, p, ctx.repintar) }, ic('file-plus', 14), 'Agregar adenda')));
+      && h('button', { class: 'btn tenue sm', type: 'button', onclick: () => abrirAdenda(c, p, ctx.repintar) }, ic('file-plus', 14), 'Agregar adenda'),
+      sesion.tiene('pagos:registrar')
+      && h('button', { class: 'btn tenue sm', type: 'button', onclick: () => abrirEmision({ paciente: p, consulta: c, alCambiar: ctx.repintar }) }, ic('receipt', 14), 'Emitir factura')));
 }
 
 function pestanaHistorial(p, ctx) {
@@ -175,6 +178,7 @@ function pestanasDe() {
   if (sesion.tiene('historiales:leer')) lista.push(['crecimiento', 'ruler', 'Crecimiento']);
   if (sesion.tiene('historiales:leer')) lista.push(['vacunacion', 'syringe', 'Vacunación']);
   if (sesion.tiene('pacientes:leer')) lista.push(['tutores', 'users', 'Tutores']);
+  if (sesion.tiene('pagos:ver')) lista.push(['facturas', 'receipt', 'Facturas']);
   return lista;
 }
 
@@ -244,6 +248,7 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
     crecimiento: pestanaCrecimiento,
     vacunacion: pestanaVacunacion,
     tutores: pestanaTutores,
+    facturas: pestanaFacturas,
   }[actual];
 
   zona.replaceChildren(...[
