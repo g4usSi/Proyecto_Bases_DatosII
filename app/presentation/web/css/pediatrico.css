@@ -1,0 +1,177 @@
+/* Centro Pediatrico: pantallas portadas del mockup sobre los tokens del frontend. */
+.bloque { display: block; }
+.capital { text-transform: capitalize; }
+.cifra-tabular { font-variant-numeric: tabular-nums; }
+.fila.fin { justify-content: flex-end; }
+.con-saltos { white-space: pre-wrap; overflow-wrap: anywhere; }
+.formulario-angosto { max-width: 760px; }
+.titulo-papel { margin-bottom: 12px; }
+.subtitulo { margin-bottom: 6px; color: var(--text-2); font-size: 12px; font-weight: 620; letter-spacing: .05em; text-transform: uppercase; }
+.fila-datos { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lista-simple { margin: 0; padding-left: 18px; }
+.reservado { display: flex; gap: 8px; align-items: flex-start; color: var(--text-2); }
+.repetibles { display: grid; gap: 10px; }
+.repetibles:empty { display: none; }
+.repetible { display: grid; gap: 8px; justify-items: stretch; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-in); background: var(--papel); }
+.repetible > .btn { justify-self: end; }
+
+/* ===== Pacientes ===== */
+.dividido { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
+.buscador { position: relative; }
+.buscador .ic { position: absolute; left: 12px; top: 11px; color: var(--text-2); }
+.buscador .in { padding-left: 38px; }
+.item-paciente {
+  display: grid; gap: 3px; width: 100%; padding: 11px 14px;
+  border: 1px solid var(--border); border-radius: calc(var(--r-card) - 8px); background: var(--papel);
+  color: inherit; text-align: left; text-decoration: none; cursor: pointer;
+  transition: var(--tr-hover);
+}
+.item-paciente:hover { border-color: var(--border-strong); }
+.item-paciente[aria-current=true] { border-color: var(--brand); background: var(--brand-tint); }
+.item-paciente b { font-weight: 620; overflow-wrap: anywhere; }
+.item-paciente .fila-datos { color: var(--text-2); font-size: 12.5px; }
+
+/* ===== Ficha ===== */
+.ficha-cab { display: grid; gap: 14px; }
+.ficha-cab > .enlace { justify-self: start; text-decoration: none; }
+.ficha-titulo { display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: space-between; align-items: flex-start; }
+.ficha-nombre { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.ficha-nombre h2 { overflow-wrap: anywhere; }
+.avatar { display: grid; place-items: center; flex: none; width: 52px; height: 52px; border: 1px solid var(--brand-line); border-radius: 14px; background: var(--brand-tint); color: var(--brand-ink); font-size: 18px; font-weight: 700; }
+.mosaicos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.mosaico { display: flex; gap: 10px; align-items: center; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border)); border-radius: 12px; background: var(--brand-tint); min-width: 0; }
+.mosaico small { display: block; color: #40525F; font-size: 12px; line-height: 1.2; }
+.mosaico b { display: block; font-size: 15px; font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.mosaico.aviso { background: var(--warn-tint); border-color: var(--warn-line); }
+.mosaico.ok { background: var(--ok-tint); border-color: var(--ok-line); }
+.pestanas { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border-strong); scrollbar-width: none; }
+.pestanas button {
+  display: inline-flex; gap: 8px; align-items: center; min-height: 42px; margin-bottom: -1px; padding: 0 14px;
+  border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2);
+  font-weight: 560; white-space: nowrap; cursor: pointer; transition: var(--tr-hover);
+}
+.pestanas button:hover { color: var(--text); }
+.pestanas button[aria-selected=true] { border-bottom-color: var(--brand); color: var(--brand-ink); font-weight: 640; }
+
+/* ===== Historial ===== */
+.consulta { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--papel); box-shadow: var(--sombra-1); }
+.consulta header { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: space-between; align-items: baseline; }
+.consulta h3 { overflow-wrap: anywhere; }
+.etiquetas { display: flex; flex-wrap: wrap; gap: 6px; }
+.etiquetas .chip { white-space: normal; }
+.codigo { font-family: var(--mono); font-size: 12px; }
+
+/* ===== Citas ===== */
+.titulo-dia { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.titulo-dia small { color: var(--text-2); font-size: 13px; font-weight: 400; }
+.fila-cita {
+  display: grid; grid-template-columns: 104px minmax(0, 1fr) auto auto; gap: 6px 14px; align-items: center;
+  padding: 11px 14px; border: 1px solid var(--border); border-left: 4px solid var(--brand);
+  border-radius: calc(var(--r-card) - 8px); background: var(--papel);
+}
+.fila-cita.cancelada { border-left-color: #A9B6C1; }
+.fila-cita.ausente { border-left-color: var(--warn); }
+.fila-cita.atendida { border-left-color: var(--ok); }
+.fila-cita time { display: grid; font-weight: 640; font-variant-numeric: tabular-nums; }
+.fila-cita time small { color: var(--text-2); font-size: 12px; font-weight: 400; }
+.cita-datos { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.cita-datos b { font-weight: 600; }
+.cita-datos small { color: var(--text-2); font-size: 12.5px; }
+.cargas { display: grid; gap: 10px; }
+.carga { display: grid; grid-template-columns: minmax(120px, 220px) minmax(60px, 1fr) auto; gap: 12px; align-items: center; }
+.medida { height: 8px; overflow: hidden; border-radius: 8px; background: rgba(23, 43, 58, .08); }
+.medida i { display: block; height: 100%; border-radius: 8px; background: var(--brand); }
+
+/* ===== Crecimiento ===== */
+.sin-margen { margin-bottom: 0; }
+.grafica { display: block; width: 100%; height: auto; }
+.graf-texto { fill: #55677A; font-size: 11px; }
+.graf-eje { fill: #40525F; font-size: 11.5px; }
+.graf-valor { fill: var(--text); font-size: 11px; font-weight: 600; }
+.graf-rejilla { stroke: #E3EAF0; }
+.graf-ref { stroke: #9FB0BE; stroke-dasharray: 3 4; }
+.graf-ref.central { stroke: #64748B; stroke-width: 1.4; stroke-dasharray: none; }
+.graf-banda { fill: var(--brand-tint); }
+.graf-banda.media { fill: var(--brand-line); opacity: .45; }
+.graf-linea { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.graf-punto { fill: #fff; stroke-width: 2.5; }
+.graf-linea.peso, .graf-punto.peso { stroke: var(--brand); }
+.graf-linea.talla, .graf-punto.talla { stroke: #D9776D; }
+.leyenda-graf { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; color: var(--text-2); font-size: 12.5px; }
+.leyenda-graf span { display: inline-flex; gap: 6px; align-items: center; }
+.leyenda-graf i { width: 14px; height: 4px; border-radius: 4px; }
+.leyenda-graf i.peso { background: var(--brand); }
+.leyenda-graf i.talla { background: #D9776D; }
+
+/* ===== Tutores ===== */
+.tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: start; }
+.tarjeta-tutor { display: grid; gap: 12px; }
+.tarjeta-tutor h3 { overflow-wrap: anywhere; }
+
+/* ===== Facturacion ===== */
+.der { text-align: right; font-variant-numeric: tabular-nums; }
+.tachado { color: var(--text-2); text-decoration: line-through; }
+.totales { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; padding: 12px 14px; border-radius: 12px; background: var(--brand-tint); font-variant-numeric: tabular-nums; }
+.totales dd { text-align: right; font-weight: 620; }
+.totales .saldo { font-size: 17px; font-weight: 720; }
+
+/* ===== Identidad del Centro Pediatrico (mockup): contorno marcado, botones de pildora,
+   acentos coral, mantequilla y menta. Los acentos solo rellenan; el texto usa la tinta oscura. */
+[data-tema=pediatrico] { --tinta: #1F4849; --contorno: #2B5B5C; --coral: #F19A91; --mantequilla: #F4D990; --menta: #BFDCCF; --crema: #FFFDF6; --side: #2F5F60; }
+/* Los circulos son fondo, no elementos: asi no agregan desplazamiento a la barra lateral. */
+[data-tema=pediatrico] .lado {
+  background-color: var(--side); -webkit-backdrop-filter: none; backdrop-filter: none;
+  background-image:
+    radial-gradient(circle 75px at right 31px bottom 35px, var(--coral) 99.5%, transparent 100%),
+    radial-gradient(circle 39px at right 131px bottom 103px, var(--mantequilla) 99%, transparent 100%),
+    radial-gradient(circle 25px at right 183px bottom 51px, var(--menta) 99%, transparent 100%);
+}
+[data-tema=pediatrico] .lado-logo .marca { border: 2px solid #fff; }
+[data-tema=pediatrico] .nav a { border-radius: 999px; font-weight: 620; }
+[data-tema=pediatrico] .nav a[aria-current=page] { background: var(--mantequilla); color: var(--tinta); font-weight: 760; }
+[data-tema=pediatrico] .arriba { background: var(--crema); -webkit-backdrop-filter: none; backdrop-filter: none; }
+[data-tema=pediatrico] .papel, [data-tema=pediatrico] .consulta { border: 1.5px solid var(--contorno); background: var(--crema); }
+[data-tema=pediatrico] .tabla { border: 2px solid var(--contorno); border-radius: 18px; background: var(--crema); }
+[data-tema=pediatrico] .tabla th { background: #F8E9B6; color: var(--tinta); }
+[data-tema=pediatrico] .in { border: 2px solid #7FA9A9; background: #fff; }
+[data-tema=pediatrico] .btn { border: 2px solid var(--contorno); font-weight: 650; }
+[data-tema=pediatrico] .btn.sec { background: #fff; color: var(--tinta); }
+[data-tema=pediatrico] .btn.tenue { border-color: transparent; }
+[data-tema=pediatrico] .btn.peligro { border-color: #E08A80; }
+[data-tema=pediatrico] .item-paciente { border: 2px solid #9CBFBD; border-radius: 18px; background: var(--crema); }
+[data-tema=pediatrico] .item-paciente[aria-current=true] { border-color: var(--contorno); background: var(--mantequilla); }
+[data-tema=pediatrico] .ficha-cab { position: relative; overflow: hidden; box-shadow: 5px 5px 0 var(--coral); }
+[data-tema=pediatrico] .mosaico { border: 1.5px solid color-mix(in srgb, var(--contorno) 45%, #fff); border-radius: 20px; background: #E9F2F2; }
+[data-tema=pediatrico] .mosaico:nth-child(4n+2) { background: #FBE3DF; }
+[data-tema=pediatrico] .mosaico:nth-child(4n+3) { background: #FBF1D3; }
+[data-tema=pediatrico] .mosaico:nth-child(4n+4) { background: #E4F1EB; }
+[data-tema=pediatrico] .mosaico:nth-child(n).aviso { border-color: #E9A94C; background: var(--warn-tint); }
+[data-tema=pediatrico] .mosaico:nth-child(n).ok { background: var(--ok-tint); }
+[data-tema=pediatrico] .pestanas { flex-wrap: wrap; gap: 6px; padding: 2px 2px 6px; border: 0; }
+[data-tema=pediatrico] .pestanas button { flex: none; min-height: 38px; margin: 0; padding: 0 12px; border: 1.5px solid var(--contorno); border-radius: 999px; background: var(--crema); color: var(--tinta); }
+[data-tema=pediatrico] .pestanas button[aria-selected=true] { border-color: var(--contorno); background: var(--contorno); color: #fff; }
+[data-tema=pediatrico] .fila-cita { border: 2px solid #9CBFBD; border-left: 8px solid var(--side); border-radius: 18px; background: var(--crema); }
+[data-tema=pediatrico] .fila-cita.cancelada { border-left-color: #A9B6C1; }
+[data-tema=pediatrico] .fila-cita.ausente { border-left-color: var(--warn); }
+[data-tema=pediatrico] .fila-cita.atendida { border-left-color: var(--ok); }
+.burbujas { display: flex; flex: none; gap: 8px; }
+.burbuja { display: grid; place-content: center; justify-items: center; width: 64px; height: 64px; border: 2px solid var(--tinta, var(--text)); border-radius: 50%; color: var(--tinta, var(--text)); line-height: 1; }
+.burbuja b { font-size: 25px; font-weight: 800; letter-spacing: -.03em; }
+.burbuja small { margin-top: 1px; font-size: 11px; font-weight: 650; }
+.burbuja.b1 { background: var(--coral, #F19A91); }
+.burbuja.b2 { align-self: flex-end; width: 56px; height: 56px; background: var(--mantequilla, #F4D990); }
+.burbuja.b2 b { font-size: 21px; }
+
+/* Una tabla ancha se desplaza dentro de su recuadro: la columna de la rejilla no debe crecer con ella. */
+.dividido .pila, .consulta { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 980px) {
+  .dividido { grid-template-columns: minmax(0, 1fr); }
+  [data-tema=pediatrico] .lado { background-image: none; }
+}
+@media (max-width: 680px) {
+  .fila-cita { grid-template-columns: minmax(0, 1fr); }
+  .fila-cita > .btn { justify-self: start; }
+  .fila-cita > span:empty { display: none; }
+  .carga { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
