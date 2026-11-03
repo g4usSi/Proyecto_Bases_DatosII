@@ -616,6 +616,9 @@ class RepositorioCitasPostgreSQL:
         ).fetchone()
         if fila is None:
             raise DatosInvalidos("El profesional no existe, no esta activo o no atiende.")
+        # Serializa reservas del mismo profesional antes de evaluar la exclusion GiST.
+        # Dos INSERT simultaneos pueden bloquearse mutuamente dentro de ese indice.
+        self.conexion.execute("SELECT pg_advisory_xact_lock(170018, %s)", (fila[0],))
         local = self._local(datos.inicio)
         try:
             id_cita = self.conexion.execute(
