@@ -52,6 +52,7 @@ def test_registrar_paciente_confirma_una_vez(settings: Settings) -> None:
         "archivado": False,
         "contacto": None,
         "alergias": None,
+        "grupo_sanguineo": None,
     }
     assert unidad.confirmaciones == 1
 

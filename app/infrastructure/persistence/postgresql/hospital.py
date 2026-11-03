@@ -28,7 +28,10 @@ from app.domain.hospital import (
     NuevoIngreso,
     OcupanteCama,
     OrdenMedica,
+    PerfilHospital,
+    ResumenAtencion,
     ResumenHospital,
+    TipoAtencion,
     TipoIngreso,
     TipoOrdenMedica,
 )
@@ -120,6 +123,105 @@ class RepositorioHospitalPostgreSQL:
         self._id_personal = id_personal
 
     # ------------------------------------------------------------------ infraestructura
+
+    def listar_atenciones(
+        self, id_paciente=None, tipo=None, desde=None, hasta=None, limite=50, antes_de=None
+    ):
+        filtros, valores = [], []
+        for condicion, valor in (
+            (
+                "a.id_paciente = %s",
+                entero_positivo(id_paciente) if id_paciente is not None else None,
+            ),
+            ("a.tipo_atencion = %s", tipo.value if tipo else None),
+            ("a.fecha_hora >= %s", utc_ingenuo(desde) if desde else None),
+            ("a.fecha_hora < %s", utc_ingenuo(hasta) if hasta else None),
+            ("a.id_atencion < %s", antes_de),
+        ):
+            if valor is not None:
+                filtros.append(condicion)
+                valores.append(valor)
+        if id_paciente is not None and entero_positivo(id_paciente) is None:
+            return []
+        donde = " WHERE " + " AND ".join(filtros) if filtros else ""
+        filas = self.conexion.execute(
+            "SELECT a.id_atencion, a.tipo_atencion, a.id_paciente, "
+            "p.nombres || ' ' || p.apellidos, "
+            f"{_PROFESIONAL}, pm.nombres || ' ' || pm.apellidos, a.fecha_hora, "
+            "COALESCE(a.motivo, a.detalle, ''), a.id_cita, c.codigo, i.tipo, i.fecha_hora_alta, "
+            "cb.id_cobro, cb.estado FROM atencion a "
+            "JOIN paciente p ON p.id_paciente = a.id_paciente "
+            "JOIN personal_medico pm ON pm.id_personal = a.id_personal "
+            "LEFT JOIN ingreso i ON i.id_atencion = a.id_atencion "
+            "LEFT JOIN cama c ON c.id_cama = i.id_cama "
+            "LEFT JOIN LATERAL (SELECT id_cobro, estado FROM cobro "
+            "WHERE id_atencion = a.id_atencion ORDER BY (estado <> 'Anulado') DESC, "
+            "id_cobro DESC LIMIT 1) cb ON TRUE " + donde + " ORDER BY a.id_atencion DESC LIMIT %s",
+            (*valores, limite),
+        ).fetchall()
+        return [
+            ResumenAtencion(
+                str(f[0]),
+                TipoAtencion(f[1]),
+                str(f[2]),
+                f[3],
+                f[4],
+                f[5],
+                con_utc(f[6]),
+                f[7],
+                str(f[8]) if f[8] else None,
+                f[9],
+                TIPO_INGRESO_DOMINIO[f[10]] if f[10] else None,
+                con_utc(f[11]) if f[11] else None,
+                str(f[12]) if f[12] else None,
+                f[13].lower() if f[13] else None,
+            )
+            for f in filas
+        ]
+
+    def obtener_atencion(self, id_paciente, id_atencion):
+        numero = entero_positivo(id_atencion)
+        if numero is None:
+            return None
+        filas = self.listar_atenciones(id_paciente=id_paciente, antes_de=numero + 1, limite=1)
+        return filas[0] if filas and int(filas[0].id_atencion) == numero else None
+
+    def perfil(self, id_profesional):
+        from uuid import UUID
+
+        try:
+            identificador = UUID(id_profesional)
+        except ValueError:
+            return None
+        fila = self.conexion.execute(
+            "SELECT pm.colegiado, pm.telefono, pm.estado, "
+            "COALESCE(array_agg(e.nombre ORDER BY e.nombre) "
+            "FILTER (WHERE e.nombre IS NOT NULL), '{}') "
+            "FROM personal_medico pm "
+            "LEFT JOIN personal_especialidad pe ON pe.id_personal = pm.id_personal "
+            "LEFT JOIN especialidad e ON e.id_especialidad = pe.id_especialidad "
+            "WHERE pm.id_profesional_central = %s GROUP BY pm.id_personal",
+            (identificador,),
+        ).fetchone()
+        return PerfilHospital(fila[0], tuple(fila[3]), fila[1], fila[2]) if fila else None
+
+    def cambiar_grupo_sanguineo(self, id_paciente, grupo):
+        if grupo is not None and grupo not in {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}:
+            from app.domain.errores import DatosInvalidos
+
+            raise DatosInvalidos("Grupo sanguineo invalido.")
+        fila = self.conexion.execute(
+            "SELECT estado FROM paciente WHERE id_paciente = %s FOR UPDATE",
+            (entero_positivo(id_paciente),),
+        ).fetchone()
+        if fila is None:
+            raise PacienteNoEncontrado("El paciente no existe.")
+        if fila[0] == "Inactivo":
+            raise PacienteArchivado("El historial esta archivado.")
+        self.conexion.execute(
+            "UPDATE paciente SET grupo_sanguineo = %s WHERE id_paciente = %s",
+            (grupo, entero_positivo(id_paciente)),
+        )
 
     def listar_departamentos(self) -> list[Departamento]:
         return [

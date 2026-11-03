@@ -38,6 +38,7 @@ class PacienteResponse(BaseModel):
     fecha_nacimiento: date | None = None
     archivado: bool = False
     contacto: ContactoSchema | None = None
+    grupo_sanguineo: str | None = None
     alergias: list[AlergiaSchema] | None = Field(
         default=None,
         description=(

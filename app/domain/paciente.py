@@ -39,6 +39,7 @@ class Paciente:
     # None = alergias NO evaluadas (o el motor no las guarda).
     # () = evaluadas, sin alergias conocidas. No son lo mismo clinicamente.
     alergias: tuple[Alergia, ...] | None = None
+    grupo_sanguineo: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

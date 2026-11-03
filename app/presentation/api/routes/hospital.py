@@ -7,19 +7,28 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Path, Query, Request, status
+from pydantic import AwareDatetime
 
 from app.application.use_cases.hospital import (
     AgregarDiagnosticoIngreso,
     AgregarOrdenIngreso,
     CambiarEstadoCama,
+    ConsultarAtenciones,
     ConsultarCamas,
     ConsultarIngresos,
     DarDeAlta,
+    GrupoSanguineoHospital,
     IngresarPaciente,
     ResumenDelHospital,
 )
 from app.domain.consulta import Diagnostico, Receta
-from app.domain.hospital import EstadoCama, NuevaOrdenMedica, NuevoIngreso, TipoIngreso
+from app.domain.hospital import (
+    EstadoCama,
+    NuevaOrdenMedica,
+    NuevoIngreso,
+    TipoAtencion,
+    TipoIngreso,
+)
 from app.presentation.api.dependencies import (
     ContextoGestionarCamas,
     ContextoLeerHistorial,
@@ -29,8 +38,12 @@ from app.presentation.api.dependencies import (
 from app.presentation.api.schemas.historial import DiagnosticoSchema
 from app.presentation.api.schemas.hospital import (
     AltaCrear,
+    AtencionResponse,
     CamaResponse,
+    DetalleAtencionResponse,
     EstadoCamaCambio,
+    GrupoSanguineoCambio,
+    GrupoSanguineoResponse,
     IngresoCrear,
     IngresoResponse,
     OrdenMedicaCrear,
@@ -38,6 +51,63 @@ from app.presentation.api.schemas.hospital import (
 )
 
 router = APIRouter(tags=["Hospital"])
+
+
+@router.get("/atenciones", response_model=list[AtencionResponse])
+def tablero_atenciones(
+    contexto: ContextoLeerHistorial,
+    tipo: TipoAtencion | None = None,
+    desde: AwareDatetime | None = None,
+    hasta: AwareDatetime | None = None,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+    antes_de: Annotated[int | None, Query(ge=1)] = None,
+) -> list[AtencionResponse]:
+    return [
+        AtencionResponse.model_validate(a)
+        for a in ConsultarAtenciones(contexto.unidad).listar(
+            tipo=tipo, desde=desde, hasta=hasta, limite=limite, antes_de=antes_de
+        )
+    ]
+
+
+@router.get("/pacientes/{id_paciente}/atenciones", response_model=list[AtencionResponse])
+def atenciones_paciente(
+    id_paciente: Annotated[str, Path(min_length=1, max_length=128)],
+    contexto: ContextoLeerHistorial,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+    antes_de: Annotated[int | None, Query(ge=1)] = None,
+) -> list[AtencionResponse]:
+    return [
+        AtencionResponse.model_validate(a)
+        for a in ConsultarAtenciones(contexto.unidad).listar(
+            id_paciente=id_paciente, limite=limite, antes_de=antes_de
+        )
+    ]
+
+
+@router.get(
+    "/pacientes/{id_paciente}/atenciones/{id_atencion}", response_model=DetalleAtencionResponse
+)
+def detalle_atencion(
+    id_paciente: Annotated[str, Path(min_length=1, max_length=128)],
+    id_atencion: Annotated[str, Path(min_length=1, max_length=20)],
+    contexto: ContextoLeerHistorial,
+) -> DetalleAtencionResponse:
+    return DetalleAtencionResponse.model_validate(
+        ConsultarAtenciones(contexto.unidad).una(id_paciente, id_atencion)
+    )
+
+
+@router.put("/pacientes/{id_paciente}/grupo-sanguineo", response_model=GrupoSanguineoResponse)
+def grupo_sanguineo(
+    id_paciente: Annotated[str, Path(min_length=1, max_length=128)],
+    datos: GrupoSanguineoCambio,
+    contexto: ContextoRegistrarConsulta,
+) -> GrupoSanguineoResponse:
+    return GrupoSanguineoResponse(
+        **GrupoSanguineoHospital(contexto.unidad).cambiar(id_paciente, datos.grupo_sanguineo)
+    )
+
 
 IdPaciente = Annotated[str, Path(min_length=1, max_length=128)]
 IdIngreso = Annotated[str, Path(min_length=1, max_length=20)]
