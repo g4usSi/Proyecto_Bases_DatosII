@@ -1,0 +1,127 @@
+/* Clinica Odontologica: pantallas portadas del mockup sobre los tokens del frontend. */
+.bloque { display: block; }
+.capital { text-transform: capitalize; }
+.cifra-tabular { font-variant-numeric: tabular-nums; }
+.fila.fin { justify-content: flex-end; }
+.con-saltos { white-space: pre-wrap; overflow-wrap: anywhere; }
+.formulario-angosto { max-width: 760px; }
+.titulo-papel { margin-bottom: 12px; }
+.subtitulo { margin-bottom: 6px; color: var(--text-2); font-size: 12px; font-weight: 620; letter-spacing: .05em; text-transform: uppercase; }
+.fila-datos { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lista-simple { margin: 0; padding-left: 18px; }
+.reservado { display: flex; gap: 8px; align-items: flex-start; color: var(--text-2); }
+.repetibles { display: grid; gap: 10px; }
+.repetibles:empty { display: none; }
+.repetible { display: grid; gap: 8px; justify-items: stretch; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-in); background: var(--papel); }
+.repetible > .btn { justify-self: end; }
+
+/* ===== Pacientes ===== */
+.dividido { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
+.buscador { position: relative; }
+.buscador .ic { position: absolute; left: 12px; top: 11px; color: var(--text-2); }
+.buscador .in { padding-left: 38px; }
+.item-paciente {
+  display: grid; gap: 3px; width: 100%; padding: 11px 14px;
+  border: 1px solid var(--border); border-radius: calc(var(--r-card) - 8px); background: var(--papel);
+  color: inherit; text-align: left; text-decoration: none; cursor: pointer;
+  transition: var(--tr-hover);
+}
+.item-paciente:hover { border-color: var(--border-strong); }
+.item-paciente[aria-current=true] { border-color: var(--brand); background: var(--brand-tint); }
+.item-paciente b { font-weight: 620; overflow-wrap: anywhere; }
+.item-paciente .fila-datos { color: var(--text-2); font-size: 12.5px; }
+
+/* ===== Ficha ===== */
+.ficha-cab { display: grid; gap: 14px; }
+.ficha-cab > .enlace { justify-self: start; text-decoration: none; }
+.ficha-titulo { display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: space-between; align-items: flex-start; }
+.ficha-nombre { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.ficha-nombre h2 { overflow-wrap: anywhere; }
+.avatar { display: grid; place-items: center; flex: none; width: 52px; height: 52px; border: 1px solid var(--brand-line); border-radius: 14px; background: var(--brand-tint); color: var(--brand-ink); font-size: 18px; font-weight: 700; }
+.mosaicos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.mosaico { display: flex; gap: 10px; align-items: center; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border)); border-radius: 12px; background: #E4F0F0; min-width: 0; }
+.mosaico:nth-child(4n+2) { background: #F5D7D2; }
+.mosaico:nth-child(4n+3) { background: #F3E5D8; }
+.mosaico:nth-child(4n+4) { background: #D8ECE7; }
+.mosaico small { display: block; color: #40525F; font-size: 12px; line-height: 1.2; }
+.mosaico b { display: block; font-size: 15px; font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.mosaico:nth-child(n).aviso { background: var(--warn-tint); border-color: var(--warn-line); }
+.mosaico:nth-child(n).ok { background: var(--ok-tint); border-color: var(--ok-line); }
+.pestanas { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border-strong); scrollbar-width: none; }
+.pestanas button {
+  display: inline-flex; gap: 8px; align-items: center; min-height: 42px; margin-bottom: -1px; padding: 0 14px;
+  border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2);
+  font-weight: 560; white-space: nowrap; cursor: pointer; transition: var(--tr-hover);
+}
+.pestanas button:hover { color: var(--text); }
+.pestanas button[aria-selected=true] { border-bottom-color: var(--brand); color: var(--brand-ink); font-weight: 640; }
+
+/* ===== Historial ===== */
+.consulta { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--papel); box-shadow: var(--sombra-1); }
+.consulta header { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: space-between; align-items: baseline; }
+.consulta h3 { overflow-wrap: anywhere; }
+.etiquetas { display: flex; flex-wrap: wrap; gap: 6px; }
+.etiquetas .chip { white-space: normal; }
+.codigo { font-family: var(--mono); font-size: 12px; }
+
+/* ===== Citas ===== */
+.titulo-dia { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.titulo-dia small { color: var(--text-2); font-size: 13px; font-weight: 400; }
+.fila-cita {
+  display: grid; grid-template-columns: 104px minmax(0, 1fr) auto auto; gap: 6px 14px; align-items: center;
+  padding: 11px 14px; border: 1px solid var(--border); border-left: 4px solid var(--brand);
+  border-radius: calc(var(--r-card) - 8px); background: var(--papel);
+}
+.fila-cita.cancelada { border-left-color: #A9B6C1; }
+.fila-cita.ausente { border-left-color: var(--warn); }
+.fila-cita.atendida { border-left-color: var(--ok); }
+.fila-cita time { display: grid; font-weight: 640; font-variant-numeric: tabular-nums; }
+.fila-cita time small { color: var(--text-2); font-size: 12px; font-weight: 400; }
+.cita-datos { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.cita-datos b { font-weight: 600; }
+.cita-datos small { color: var(--text-2); font-size: 12.5px; }
+.cargas { display: grid; gap: 10px; }
+.carga { display: grid; grid-template-columns: minmax(120px, 220px) minmax(60px, 1fr) auto; gap: 12px; align-items: center; }
+.medida { height: 8px; overflow: hidden; border-radius: 8px; background: rgba(23, 43, 58, .08); }
+.medida i { display: block; height: 100%; border-radius: 8px; background: var(--brand); }
+
+/* ===== Odontograma ===== */
+.od { display: grid; gap: 16px; }
+.od-carta, .od-panel { display: grid; gap: 12px; min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--papel); box-shadow: var(--sombra-1); }
+.od-arriba { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; }
+.od-dibujo { overflow-x: auto; }
+.od-dibujo svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.od-leyenda { display: flex; flex-wrap: wrap; gap: 6px; }
+.od-ley { display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px 2px 3px; border: 1px solid var(--border); border-radius: 999px; background: #fff; font-size: 12.5px; }
+.od-ley b { font-weight: 700; }
+.muestra { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 3px; border: 1px solid rgba(0, 0, 0, .16); border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 1; }
+.muestra.sin-registrar { border: 1.5px dashed #8E9AA5; background: #fff; }
+.od-panel { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px 22px; align-content: start; }
+.od-panel > h3, .od-panel > p, .od-panel > .error-campo, .od-panel > .fila, .od-panel > .od-previa { grid-column: 1 / -1; }
+.od-previa { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 8px 12px; border-radius: 12px; background: #F6F9FB; }
+.od-previa svg { display: block; }
+.od-estados { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.od-estado { display: flex; gap: 8px; align-items: center; min-height: 40px; padding: 4px 8px 4px 5px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font-size: 13px; line-height: 1.15; text-align: left; cursor: pointer; }
+.od-estado:not([disabled]):hover { border-color: var(--border-strong); }
+.od-estado[disabled] { cursor: not-allowed; opacity: .7; }
+.od-estado[aria-checked=true] { padding: 3px 7px 3px 4px; border: 2px solid var(--brand); background: var(--brand-tint); font-weight: 620; }
+.od-superficies { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.pieza { cursor: pointer; }
+.pieza:focus-visible { outline: none; }
+.aro { fill: none; stroke: var(--brand); stroke-width: 3; opacity: 0; transition: opacity 150ms ease; }
+.pieza:hover .aro { opacity: .35; }
+.pieza[aria-pressed=true] .aro, .pieza:focus-visible .aro { opacity: 1; }
+tr.elegida td { background: var(--brand-tint); }
+
+/* Una tabla ancha se desplaza dentro de su recuadro: la columna de la rejilla no debe crecer con ella. */
+.dividido .pila, .consulta { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 980px) {
+  .dividido { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 680px) {
+  .fila-cita { grid-template-columns: minmax(0, 1fr); }
+  .fila-cita > .btn { justify-self: start; }
+  .fila-cita > span:empty { display: none; }
+  .carga { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}

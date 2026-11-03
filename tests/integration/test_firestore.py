@@ -205,12 +205,7 @@ def test_citas_sin_cruces_y_cancelacion_libera_horario(
                 NuevaCita(paciente_sintetico, profesional, inicio, 60, "Reprogramada"), "P F", "s"
             )
     finally:
-        for agenda in (
-            cliente_firestore.collection("agendas")
-            .where(filter=FieldFilter("id_profesional", "==", profesional))
-            .stream()
-        ):
-            agenda.reference.delete()
+        _borrar_agendas(cliente_firestore, profesional)
 
 
 def test_odontograma_actualiza_solo_la_pieza(unidad_firestore, paciente_sintetico):
@@ -307,9 +302,17 @@ def test_adenda_agrega_sin_reemplazar_y_se_lee(unidad_firestore, paciente_sintet
     assert leida.recetas[0].medicamento == "Amoxicilina"
 
 
+def _solo_en_proyecto_real():
+    # El emulador 1.19.8 no conserva el turno de una transaccion al reintentar: con varias
+    # sobre el mismo documento se abortan todas. El servicio real si resuelve la contencion.
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        pytest.skip("El emulador no resuelve la contencion entre transacciones.")
+
+
 def test_adendas_simultaneas_no_se_pierden_en_firestore(unidad_firestore, paciente_sintetico):
     from app.domain.consulta import Adenda, Diagnostico
 
+    _solo_en_proyecto_real()
     id_consulta = _consulta_base(unidad_firestore, paciente_sintetico)
     errores = []
 
@@ -408,9 +411,349 @@ def test_cita_confirmada_ocupa_y_atendida_libera(
                     "s",
                 )
     finally:
-        for agenda in (
-            cliente_firestore.collection("agendas")
-            .where(filter=FieldFilter("id_profesional", "==", profesional))
-            .stream()
-        ):
-            agenda.reference.delete()
+        _borrar_agendas(cliente_firestore, profesional)
+
+
+def _borrar_agendas(cliente, profesional):
+    for agenda in (
+        cliente.collection("agendas")
+        .where(filter=FieldFilter("id_profesional", "==", profesional))
+        .stream()
+    ):
+        agenda.reference.delete()
+
+
+# --- Concurrencia: dos usuarios a la vez sobre el mismo dato ---
+
+
+def _simultaneos(*operaciones):
+    """Ejecuta cada operacion en su hilo y devuelve el resultado o el error de cada una."""
+    barrera = threading.Barrier(len(operaciones))
+    resultados = [None] * len(operaciones)
+
+    def correr(indice, operacion):
+        barrera.wait(timeout=30)
+        try:
+            resultados[indice] = operacion()
+        except Exception as error:  # noqa: BLE001 - la prueba compara el tipo de error
+            resultados[indice] = error
+
+    hilos = [threading.Thread(target=correr, args=par) for par in enumerate(operaciones)]
+    [h.start() for h in hilos]
+    [h.join(timeout=120) for h in hilos]
+    return resultados
+
+
+def test_dos_citas_simultaneas_una_sola_reserva(
+    cliente_firestore, unidad_firestore, paciente_sintetico
+):
+    from app.domain.cita import NuevaCita
+    from app.domain.errores import ConflictoAgenda
+
+    _solo_en_proyecto_real()
+    profesional = f"prueba-{uuid4()}"
+    inicio = datetime(2030, 3, 15, 15, 0, tzinfo=UTC)
+
+    def reservar(motivo):
+        def operacion():
+            with unidad_firestore() as unidad:
+                return unidad.citas.agendar(
+                    NuevaCita(paciente_sintetico, profesional, inicio, 30, motivo), "P F", "s"
+                )
+
+        return operacion
+
+    try:
+        resultados = _simultaneos(*(reservar(f"Cita {n}") for n in range(4)))
+        errores = [r for r in resultados if isinstance(r, Exception)]
+        assert len(resultados) - len(errores) == 1, resultados
+        assert all(isinstance(e, ConflictoAgenda) for e in errores), errores
+        with unidad_firestore() as unidad:
+            agenda = unidad.citas.listar_agenda(
+                inicio - timedelta(hours=1), inicio + timedelta(hours=1), profesional
+            )
+        assert len(agenda) == 1
+    finally:
+        _borrar_agendas(cliente_firestore, profesional)
+
+
+def test_dos_bajas_simultaneas_solo_una_gana(unidad_firestore, paciente_sintetico):
+    from app.domain.errores import PacienteArchivado
+    from app.domain.paciente import Baja, MotivoBaja
+
+    _solo_en_proyecto_real()
+
+    def archivar(profesional):
+        def operacion():
+            with unidad_firestore() as unidad:
+                unidad.pacientes.archivar(
+                    paciente_sintetico, Baja(MotivoBaja.TRASLADO, profesional, datetime.now(UTC))
+                )
+                return "archivado"
+
+        return operacion
+
+    resultados = _simultaneos(archivar("a"), archivar("b"))
+    assert sorted(type(r).__name__ for r in resultados) == ["PacienteArchivado", "str"]
+    assert any(isinstance(r, PacienteArchivado) for r in resultados)
+
+
+def test_consulta_contra_baja_no_deja_consulta_en_archivado(unidad_firestore, paciente_sintetico):
+    from app.domain.consulta import NuevaConsulta
+    from app.domain.errores import PacienteArchivado
+    from app.domain.paciente import Baja, MotivoBaja
+
+    _solo_en_proyecto_real()
+
+    def registrar():
+        with unidad_firestore() as unidad:
+            return unidad.historial.registrar_consulta(
+                paciente_sintetico, "p", NuevaConsulta("Carrera")
+            )
+
+    def archivar():
+        with unidad_firestore() as unidad:
+            unidad.pacientes.archivar(
+                paciente_sintetico, Baja(MotivoBaja.TRASLADO, "p", datetime.now(UTC))
+            )
+            return "archivado"
+
+    consulta, baja = _simultaneos(registrar, archivar)
+    assert baja == "archivado"
+    # Vale cualquier orden, pero la consulta o entro antes de la baja o se rechazo.
+    assert isinstance(consulta, PacienteArchivado) or consulta.motivo == "Carrera"
+    with unidad_firestore() as unidad:
+        guardadas = unidad.historial.listar_consultas(paciente_sintetico, 5)
+        assert unidad.pacientes.obtener_por_id(paciente_sintetico).archivado
+    assert len(guardadas) == (0 if isinstance(consulta, PacienteArchivado) else 1)
+
+
+def test_pieza_de_historial_archivado_se_rechaza_en_el_adaptador(
+    unidad_firestore, paciente_sintetico
+):
+    """Sin pasar por el caso de uso: la regla la sostiene la transaccion del motor."""
+    from app.domain.errores import PacienteArchivado, PacienteNoEncontrado
+    from app.domain.odontograma import EstadoPieza
+    from app.domain.paciente import Baja, MotivoBaja
+
+    pieza = EstadoPieza("36", EstadoDental.CARIES, "p", datetime.now(UTC))
+    with unidad_firestore() as unidad:
+        with pytest.raises(PacienteNoEncontrado):
+            unidad.odontograma.actualizar_pieza("no-existe", pieza)
+        with pytest.raises(PacienteNoEncontrado):
+            unidad.odontograma.actualizar_pieza("a/b", pieza)
+        unidad.pacientes.archivar(
+            paciente_sintetico, Baja(MotivoBaja.TRASLADO, "p", datetime.now(UTC))
+        )
+        with pytest.raises(PacienteArchivado):
+            unidad.odontograma.actualizar_pieza(paciente_sintetico, pieza)
+        assert unidad.odontograma.obtener(paciente_sintetico).piezas == {}
+
+
+def test_piezas_simultaneas_no_se_pisan(unidad_firestore, paciente_sintetico):
+    from app.domain.odontograma import EstadoPieza
+
+    _solo_en_proyecto_real()
+
+    def guardar(codigo):
+        def operacion():
+            with unidad_firestore() as unidad:
+                unidad.odontograma.actualizar_pieza(
+                    paciente_sintetico,
+                    EstadoPieza(codigo, EstadoDental.SANA, "p", datetime.now(UTC)),
+                )
+                return codigo
+
+        return operacion
+
+    codigos = ["11", "12", "21", "22"]
+    assert sorted(_simultaneos(*(guardar(c) for c in codigos))) == codigos
+    with unidad_firestore() as unidad:
+        assert set(unidad.odontograma.obtener(paciente_sintetico).piezas) == set(codigos)
+
+
+# --- Flujo por HTTP: las pantallas de la clinica contra el adaptador real ---
+
+
+@pytest.fixture
+def api_clinica(cliente_firestore, settings):
+    from fastapi.testclient import TestClient
+
+    from app.bootstrap.container import Contenedor
+    from app.domain import permisos
+    from app.domain.identidad import UsuarioAutenticado
+    from app.domain.institucion import Institucion
+    from app.domain.profesional import ProfesionalLocal
+    from app.infrastructure.persistence.firestore.unidad import UnidadTrabajoFirestore
+    from app.main import create_app
+    from tests.doubles import AutenticadorDoble
+
+    clinica = Institucion.CLINICA_ODONTOLOGICA
+    odontologo = f"prueba-{uuid4()}"
+    secretaria = f"prueba-{uuid4()}"
+    contenedor = Contenedor(
+        autenticador=AutenticadorDoble(
+            {
+                "sec": UsuarioAutenticado(
+                    secretaria, clinica, permisos.PERMISOS_POR_ROL["secretaria"]
+                ),
+                "odo": UsuarioAutenticado(
+                    odontologo,
+                    clinica,
+                    permisos.PERMISOS_POR_ROL["odontologo"] | {permisos.HISTORIALES_ARCHIVAR},
+                ),
+            }
+        ),
+        unidades_trabajo={clinica: lambda: UnidadTrabajoFirestore(cliente_firestore)},
+    )
+    with UnidadTrabajoFirestore(cliente_firestore) as unidad:
+        unidad.profesionales.sincronizar(ProfesionalLocal(odontologo, "Odo", "Zz", "odontologo"))
+        unidad.profesionales.sincronizar(ProfesionalLocal(secretaria, "Sec", "Zz", "secretaria"))
+        unidad.commit()
+    pacientes = []
+    try:
+        with TestClient(create_app(settings, contenedor)) as cliente:
+            yield cliente, odontologo, pacientes
+    finally:
+        for identificador in pacientes:
+            _borrar_paciente(cliente_firestore, identificador)
+        _borrar_agendas(cliente_firestore, odontologo)
+        for identificador in (odontologo, secretaria):
+            cliente_firestore.collection("profesionales").document(identificador).delete()
+
+
+def test_recorrido_de_secretaria_y_odontologo_por_http(api_clinica):
+    cliente, odontologo, pacientes = api_clinica
+    sec = {"Authorization": "Bearer sec"}
+    odo = {"Authorization": "Bearer odo"}
+    base = "/api/v1/pacientes"
+
+    # Secretaria: registrar (con alergia que luego no ve), buscar, editar y agendar.
+    alta = cliente.post(
+        base,
+        json={
+            "nombres": "Zzficha Diego",
+            "apellidos": "Oliva",
+            "fecha_nacimiento": "1992-04-17",
+            "contacto": {"telefono": "0000-0000"},
+            "alergias": [{"sustancia": "Latex", "severidad": "Moderada"}],
+        },
+        headers=sec,
+    )
+    assert alta.status_code == 201
+    id_paciente = alta.json()["id_paciente"]
+    pacientes.append(id_paciente)
+    assert alta.json()["alergias"] is None
+    encontrados = cliente.get(base, params={"nombre": "zzficha oliva"}, headers=sec).json()
+    assert [p["id_paciente"] for p in encontrados] == [id_paciente]
+    assert encontrados[0]["archivado"] is False
+    editado = cliente.patch(
+        f"{base}/{id_paciente}",
+        json={"contacto": {"correo": "x@example.invalid", "telefono": None, "direccion": None}},
+        headers=sec,
+    )
+    assert editado.json()["contacto"]["telefono"] is None
+    assert (
+        cliente.post(
+            f"{base}/{id_paciente}/alergias",
+            json={"alergias": [{"sustancia": "Latex"}]},
+            headers=sec,
+        ).status_code
+        == 403
+    )
+    assert cliente.get(f"{base}/{id_paciente}/historial", headers=sec).status_code == 403
+    assert cliente.get(f"{base}/{id_paciente}/odontograma", headers=sec).status_code == 403
+
+    inicio = datetime(2030, 4, 1, 15, 0, tzinfo=UTC)
+    cita = {
+        "id_paciente": id_paciente,
+        "id_profesional": odontologo,
+        "inicio": inicio.isoformat(),
+        "duracion_minutos": 30,
+        "motivo": "Control",
+    }
+    agendada = cliente.post("/api/v1/citas", json=cita, headers=sec)
+    assert agendada.status_code == 201
+    assert agendada.json()["nombre_paciente"] == "Zzficha Diego Oliva"
+    assert cliente.post("/api/v1/citas", json=cita, headers=sec).status_code == 409
+    semana = cliente.get(
+        "/api/v1/citas",
+        params={
+            "desde": inicio.isoformat(),
+            "hasta": (inicio + timedelta(days=7)).isoformat(),
+            "id_profesional": odontologo,
+        },
+        headers=sec,
+    )
+    assert [c["id_cita"] for c in semana.json()] == [agendada.json()["id_cita"]]
+    del_paciente = cliente.get(f"{base}/{id_paciente}/citas", headers=sec)
+    assert del_paciente.json()[0]["estado"] == "programada"
+
+    # Odontologo: ve alergias, registra consulta y adenda, y cambia piezas.
+    ficha = cliente.get(f"{base}/{id_paciente}", headers=odo).json()
+    assert ficha["alergias"][0]["sustancia"] == "Latex"
+    consulta = cliente.post(
+        f"{base}/{id_paciente}/consultas",
+        json={
+            "motivo": "Dolor",
+            "notas": "Sensibilidad en pieza 37.",
+            "diagnosticos": [{"descripcion": "Caries", "codigo": "K02.1"}],
+            "tratamientos": [{"descripcion": "Obturacion"}],
+            "recetas": [{"medicamento": "Ibuprofeno", "dosis": "1", "frecuencia": "c/8h"}],
+        },
+        headers=odo,
+    )
+    assert consulta.status_code == 201
+    adenda = cliente.post(
+        f"{base}/{id_paciente}/consultas/{consulta.json()['id_consulta']}/adenda",
+        json={"nota": "Radiografia revisada"},
+        headers=odo,
+    )
+    assert "[Adenda " in adenda.json()["notas"]
+    historial = cliente.get(f"{base}/{id_paciente}/historial", params={"limite": 1}, headers=odo)
+    assert historial.json()["consultas"][0]["motivo"] == "Dolor"
+    pieza = cliente.put(
+        f"{base}/{id_paciente}/odontograma/piezas/37",
+        json={"estado": "caries", "superficies": ["oclusal"], "nota": "Lesion"},
+        headers=odo,
+    )
+    assert pieza.status_code == 200
+    cliente.put(
+        f"{base}/{id_paciente}/odontograma/piezas/55",
+        json={"estado": "en_erupcion"},
+        headers=odo,
+    )
+    odontograma = cliente.get(f"{base}/{id_paciente}/odontograma", headers=odo).json()
+    assert [p["pieza"] for p in odontograma["piezas"]] == ["37", "55"]
+    assert odontograma["piezas"][0]["actualizado_por"] == odontologo
+
+    # Archivar: se conserva todo, pero ya no admite nada nuevo.
+    assert (
+        cliente.post(
+            f"{base}/{id_paciente}/archivo",
+            json={"motivo": "traslado", "detalle": "Otra clinica"},
+            headers=odo,
+        ).status_code
+        == 200
+    )
+    assert cliente.get(f"{base}/{id_paciente}", headers=sec).json()["archivado"] is True
+    rechazos = [
+        cliente.put(
+            f"{base}/{id_paciente}/odontograma/piezas/11", json={"estado": "sana"}, headers=odo
+        ),
+        cliente.post(f"{base}/{id_paciente}/consultas", json={"motivo": "x"}, headers=odo),
+        cliente.patch(f"{base}/{id_paciente}", json={"nombres": "X"}, headers=sec),
+        cliente.post(
+            "/api/v1/citas",
+            json={**cita, "inicio": (inicio + timedelta(hours=2)).isoformat()},
+            headers=sec,
+        ),
+    ]
+    assert [r.status_code for r in rechazos] == [409, 409, 409, 409]
+    # Una cita ya agendada se puede cancelar aunque el historial este archivado.
+    cancelada = cliente.post(
+        f"/api/v1/citas/{agendada.json()['id_cita']}/estado",
+        json={"estado": "cancelada", "motivo": "Traslado"},
+        headers=sec,
+    )
+    assert cancelada.json()["motivo_cambio"] == "Traslado"

@@ -1,17 +1,23 @@
 """Rol secretaria, citas y odontograma, con dobles (sin Firestore)."""
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import Aborted
 
+from app.application.errores import IntegracionNoConfigurada
 from app.bootstrap.container import Contenedor
 from app.core.config import Settings
 from app.domain import permisos
+from app.domain.administracion import permisos_finales
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.institucion import Institucion
-from app.domain.odontograma import EstadoDental
+from app.domain.odontograma import PIEZAS_FDI, EstadoDental, Superficie
 from app.domain.paciente import Alergia, Paciente
 from app.domain.profesional import ProfesionalLocal
+from app.infrastructure.persistence.firestore.unidad import UnidadTrabajoFirestore
 from app.main import create_app
 from tests.doubles import AutenticadorDoble, UnidadTrabajoDoble
 
@@ -233,3 +239,146 @@ def test_secretaria_recibe_403_al_archivar(settings: Settings) -> None:
             "/api/v1/pacientes/p1/archivo", json={"motivo": "traslado"}, headers=SEC
         )
     assert response.status_code == 403
+
+
+def test_secretaria_no_descubre_alergias_al_agregarlas(settings: Settings) -> None:
+    """Un 422 por duplicado le diria que el paciente ya tiene esa alergia."""
+    client, unidad = preparar(settings)
+    usuario = UsuarioAutenticado(
+        "clin-1",
+        Institucion.CLINICA_ODONTOLOGICA,
+        frozenset({permisos.PACIENTES_REGISTRAR, permisos.HISTORIALES_LEER}),
+    )
+    client.app.state.contenedor.autenticador.usuarios["clinico"] = usuario
+    ruta = "/api/v1/pacientes/p1/alergias"
+    with client:
+        repetida = client.post(ruta, json={"alergias": [{"sustancia": "Penicilina"}]}, headers=SEC)
+        nueva = client.post(ruta, json={"alergias": [{"sustancia": "Latex"}]}, headers=SEC)
+        clinico = client.post(
+            ruta,
+            json={"alergias": [{"sustancia": "Latex"}]},
+            headers={"Authorization": "Bearer clinico"},
+        )
+    assert repetida.status_code == 403
+    assert nueva.status_code == 403
+    assert clinico.status_code == 200
+    assert [a.sustancia for a in unidad.pacientes.registros["p1"].alergias] == [
+        "Penicilina",
+        "Latex",
+    ]
+
+
+def test_odontologo_recibe_por_defecto_lo_que_sugiere_el_alta() -> None:
+    por_defecto = permisos_finales(Institucion.CLINICA_ODONTOLOGICA, "odontologo", None)
+    assert por_defecto == {
+        permisos.PACIENTES_LEER,
+        permisos.PACIENTES_REGISTRAR,
+        permisos.HISTORIALES_LEER,
+        permisos.CONSULTAS_REGISTRAR,
+        permisos.CITAS_LEER,
+        permisos.CITAS_GESTIONAR,
+    }
+    # Archivar no va por defecto, pero el administrador puede concederlo.
+    assert permisos.HISTORIALES_ARCHIVAR in permisos_finales(
+        Institucion.CLINICA_ODONTOLOGICA,
+        "odontologo",
+        por_defecto | {permisos.HISTORIALES_ARCHIVAR},
+    )
+
+
+def test_pieza_de_historial_archivado_se_rechaza(settings: Settings) -> None:
+    client, unidad = preparar(settings)
+    unidad.pacientes.registros["p1"] = Paciente("p1", "Luis", "Perez", archivado=True)
+    with client:
+        escritura = client.put(
+            "/api/v1/pacientes/p1/odontograma/piezas/36", json={"estado": "caries"}, headers=ODO
+        )
+        lectura = client.get("/api/v1/pacientes/p1/odontograma", headers=ODO)
+    assert escritura.status_code == 409
+    assert lectura.status_code == 200 and lectura.json()["piezas"] == []
+
+
+def test_contrato_de_pieza_coincide_con_el_mockup(settings: Settings) -> None:
+    """El mockup lee estos campos de PiezaResponse y dibuja las 52 piezas FDI."""
+    client, _ = preparar(settings)
+    with client:
+        pieza = client.put(
+            "/api/v1/pacientes/p1/odontograma/piezas/55",
+            json={"estado": "en_erupcion", "superficies": ["oclusal"], "nota": "x" * 500},
+            headers=ODO,
+        )
+        larga = client.put(
+            "/api/v1/pacientes/p1/odontograma/piezas/55",
+            json={"estado": "sana", "nota": "x" * 501},
+            headers=ODO,
+        )
+    assert set(pieza.json()) == {
+        "pieza",
+        "estado",
+        "superficies",
+        "nota",
+        "actualizado_por",
+        "actualizado_en",
+    }
+    assert larga.status_code == 422
+    assert len(PIEZAS_FDI) == 52
+    assert {e.value for e in EstadoDental} == {
+        "sana",
+        "caries",
+        "obturada",
+        "corona",
+        "endodoncia",
+        "sellante",
+        "fractura",
+        "protesis",
+        "implante",
+        "extraccion_indicada",
+        "ausente",
+        "en_erupcion",
+    }
+    assert {s.value for s in Superficie} == {
+        "oclusal",
+        "incisal",
+        "mesial",
+        "distal",
+        "vestibular",
+        "lingual",
+        "palatino",
+    }
+
+
+def test_contrato_de_cita_coincide_con_la_agenda_del_mockup(settings: Settings) -> None:
+    client, _ = preparar(settings)
+    with client:
+        creada = client.post("/api/v1/citas", json=cita(manana(9), duracion=45), headers=SEC)
+        estado = client.post(
+            f"/api/v1/citas/{creada.json()['id_cita']}/estado",
+            json={"estado": "cancelada", "motivo": "La paciente avisó que no puede asistir."},
+            headers=SEC,
+        )
+    assert set(creada.json()) == {
+        "id_cita",
+        "id_paciente",
+        "nombre_paciente",
+        "id_profesional",
+        "inicio",
+        "fin",
+        "motivo",
+        "estado",
+        "creada_por",
+        "motivo_cambio",
+    }
+    inicio = datetime.fromisoformat(creada.json()["inicio"])
+    fin = datetime.fromisoformat(creada.json()["fin"])
+    assert fin - inicio == timedelta(minutes=45)  # la carga por profesional se calcula con esto
+    assert estado.json()["motivo_cambio"] == "La paciente avisó que no puede asistir."
+
+
+def test_transaccion_sin_reintentos_responde_503_y_otros_errores_siguen_igual() -> None:
+    """Firestore lanza ValueError al agotar reintentos: sin esto seria un 500."""
+    with pytest.raises(IntegracionNoConfigurada, match="simultaneas"):
+        with UnidadTrabajoFirestore(MagicMock()):
+            raise ValueError("Failed to commit transaction") from Aborted("contencion")
+    with pytest.raises(ValueError, match="otro error"):
+        with UnidadTrabajoFirestore(MagicMock()):
+            raise ValueError("otro error")

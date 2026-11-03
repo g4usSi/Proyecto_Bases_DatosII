@@ -114,6 +114,24 @@ def contexto_con_alguno(*permisos_validos: str) -> Callable[..., Contexto]:
     return dependencia
 
 
+def contexto_con_todos(*exigidos: str) -> Callable[..., Contexto]:
+    """Exige TODOS los permisos y abre el motor de la institucion del token."""
+
+    def dependencia(
+        request: Request,
+        usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
+        contenedor: Annotated[Contenedor, Depends(obtener_contenedor)],
+    ) -> Contexto:
+        for permiso in exigidos:
+            if permiso not in usuario.permisos:
+                _auditar(request, usuario, permiso, permitido=False)
+                raise AccesoDenegado("No tienes permiso para realizar esta operacion.")
+        _auditar(request, usuario, exigidos[0], permitido=True)
+        return Contexto(usuario, contenedor.crear_unidad_trabajo(usuario.institucion))
+
+    return dependencia
+
+
 def gestor_de_profesionales(
     usuario: Annotated[UsuarioAutenticado, Depends(obtener_usuario_actual)],
 ) -> UsuarioAutenticado:
@@ -167,6 +185,12 @@ def contexto_departamentos(
 _con = contexto_con_permiso
 ContextoLeerPaciente = Annotated[Contexto, Depends(_con(permisos.PACIENTES_LEER))]
 ContextoRegistrarPaciente = Annotated[Contexto, Depends(_con(permisos.PACIENTES_REGISTRAR))]
+# Agregar compara con las ya registradas: un rechazo por duplicado revela que el paciente
+# tiene esa alergia, asi que tambien exige poder leerlas (la secretaria no puede).
+ContextoAgregarAlergias = Annotated[
+    Contexto,
+    Depends(contexto_con_todos(permisos.PACIENTES_REGISTRAR, permisos.HISTORIALES_LEER)),
+]
 ContextoLeerHistorial = Annotated[Contexto, Depends(_con(permisos.HISTORIALES_LEER))]
 ContextoRegistrarConsulta = Annotated[Contexto, Depends(_con(permisos.CONSULTAS_REGISTRAR))]
 ContextoArchivar = Annotated[Contexto, Depends(_con(permisos.HISTORIALES_ARCHIVAR))]

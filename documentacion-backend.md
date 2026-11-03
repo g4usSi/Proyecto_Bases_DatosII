@@ -196,7 +196,7 @@ a qué establecimiento corresponde.
 | `GET /pacientes?nombre=&limite=` | `pacientes:leer` | Busca por nombre. |
 | `GET /pacientes/{id}` | `pacientes:leer` | Ficha del paciente. Las alergias solo se muestran a quien tiene `historiales:leer`. |
 | `PATCH /pacientes/{id}` | `pacientes:registrar` | Corrige datos personales (solo los campos enviados). |
-| `POST /pacientes/{id}/alergias` | `pacientes:registrar` | Agrega alergias nuevas sin duplicar ni borrar las existentes. |
+| `POST /pacientes/{id}/alergias` | `pacientes:registrar` **y** `historiales:leer` | Agrega alergias nuevas sin duplicar ni borrar las existentes. Exige poder leerlas porque un rechazo por duplicado revela que el paciente ya tiene esa alergia. |
 | `GET /pacientes/{id}/historial?limite=&antes_de=` | `historiales:leer` | Consultas del paciente, paginadas. |
 | `POST /pacientes/{id}/consultas` | `consultas:registrar` | Registra una consulta con diagnósticos, tratamientos y recetas. Atómica. |
 | `GET /pacientes/{id}/consultas/{id_consulta}` | `historiales:leer` | Una consulta con todo su detalle y adendas. |
@@ -217,7 +217,9 @@ a qué establecimiento corresponde.
 | Ruta | Permiso | Qué hace |
 | --- | --- | --- |
 | `GET /pacientes/{id}/odontograma` | `historiales:leer` | Estado de cada pieza dental. |
-| `PUT /pacientes/{id}/odontograma/piezas/{pieza}` | `consultas:registrar` | Cambia el estado de una pieza. Solo valores de la lista fija (12), otro → 422. |
+| `PUT /pacientes/{id}/odontograma/piezas/{pieza}` | `consultas:registrar` | Cambia el estado de una pieza. Solo valores de la lista fija (12), otro → 422. 409 si el historial está archivado, aun si se archiva al mismo tiempo. |
+
+Qué llama cada pantalla de la clínica, con campos y límites: [docs/contrato_clinica_odontologica.md](docs/contrato_clinica_odontologica.md).
 
 ### 3.6 Pediatría (solo Centro Pediátrico; otros → 501)
 
@@ -347,7 +349,7 @@ paginar sin omitir órdenes con igual fecha, conservando el cursor anterior.
 | Permiso | Permite |
 | --- | --- |
 | `pacientes:leer` | Buscar y ver fichas. |
-| `pacientes:registrar` | Registrar, corregir datos, agregar alergias. |
+| `pacientes:registrar` | Registrar y corregir datos. Agregar alergias exige además `historiales:leer`. |
 | `historiales:leer` | Ver historial, consultas, alergias, odontograma, crecimiento, vacunas, resultados. |
 | `consultas:registrar` | Registrar consultas y adendas, odontograma, controles, dosis, solicitar/cancelar órdenes. |
 | `historiales:archivar` | Archivar historiales. |
@@ -366,9 +368,12 @@ fija los valores por defecto al crear la cuenta:
   `pacientes:registrar`, `citas:leer`, `citas:gestionar`. **No puede** tener permisos
   clínicos ni archivar; está bloqueado en el script, en triggers y en un `CHECK` de
   PostgreSQL. No cuenta como profesional de atención.
+* **odontologo**: `pacientes:leer`, `pacientes:registrar`, `historiales:leer`,
+  `consultas:registrar`, `citas:leer`, `citas:gestionar` (lo que sugiere la pantalla de alta).
+  `historiales:archivar` se concede aparte.
 * **administrador**: solo `profesionales:administrar` (una cuenta por institución, §0.4).
-* Otros roles (`medico`, `enfermeria`, `odontologo`): por defecto solo `pacientes:leer`; el
-  resto se concede con `--permiso` o desde `PATCH /profesionales/{id}`.
+* Otros roles (`medico`, `enfermeria`): por defecto solo `pacientes:leer`; el resto se concede
+  con `--permiso` o desde `PATCH /profesionales/{id}`.
 
 ## 5. Códigos de respuesta
 
@@ -463,10 +468,12 @@ Consistencia (servidor único, **sin transacciones multi-documento**):
 Colecciones por paciente con subcolecciones de consultas y odontograma, más
 `agendas/{profesional}_{fecha}` para las citas.
 
-* Escrituras múltiples con `WriteBatch`.
-* Lectura-modificación-escritura con `@firestore.transactional` (citas, baja, adendas).
-* Al agendar se verifica que el paciente siga activo; al cancelar/descartar una cita se
-  libera el horario en la agenda.
+* Altas con `WriteBatch`.
+* Lectura-modificación-escritura con `@firestore.transactional` (citas, baja, consultas,
+  adendas, correcciones y piezas del odontograma).
+* Al agendar o cambiar una pieza se verifica que el paciente siga activo; al cancelar o
+  cerrar una cita se libera el horario en la agenda.
+* Si una transacción agota sus reintentos por contención, la API responde 503.
 * Los permisos de Firestore se controlan con la cuenta de servicio (IAM), no con SQL.
 
 ---
@@ -543,8 +550,10 @@ python -m pytest
 * Integración por motor: PostgreSQL, MySQL (base temporal creada y eliminada por la
   suite, con la cuenta limitada), MongoDB y Firestore, incluyendo **concurrencia** (dos
   bajas, consulta vs. baja, dos citas en el mismo horario, validar vs. editar resultado).
-* Firestore: con `FIRESTORE_EMULATOR_HOST=127.0.0.1:8686` corre contra el emulador; sin
-  esa variable usa la clave real.
+* Firestore: con `FIRESTORE_EMULATOR_HOST=127.0.0.1:8686` corre contra el emulador, que omite
+  las pruebas de concurrencia (no resuelve la contención entre transacciones); sin esa
+  variable usa la clave real y las ejecuta todas. Incluye el recorrido por HTTP de la
+  secretaria y el odontólogo sobre el adaptador real, con la autenticación simulada.
 * Las pruebas usan datos sintéticos y los eliminan al terminar. No usar con datos reales.
 
 ## 12. Docker
@@ -577,6 +586,12 @@ Barrido de los cuatro modelos contra el enunciado del curso:
 | Tutores y facturación pediátrica sin endpoints. | §3.10 y §3.11 (MySQL 012 a 014). |
 | La facturación pediátrica no se anulaba ni estaba a nombre del tutor (mockup "Facturación"). | Anulación y `facturado_a` (MySQL 015 y 016, §3.10). |
 
+| Clínica: una pieza se podía guardar sobre un historial que se archivaba en ese momento. | La pieza se escribe en una transacción que relee al paciente (§6.4). |
+| Clínica: agotar los reintentos de una transacción respondía 500. | Responde 503 (§6.4). |
+| La secretaria podía descubrir alergias probando `POST .../alergias`. | Esa ruta exige también `historiales:leer` (§3.3). |
+| Un `odontologo` sin permisos explícitos solo podía leer pacientes. | Recibe por defecto lo que sugiere la pantalla de alta (§4). |
+| Faltaban pruebas de concurrencia y de flujo HTTP en Firestore. | `tests/integration/test_firestore.py`, ejecutadas contra el proyecto real. |
+
 ## 14. Cómo aplicar los cambios a bases ya creadas
 
 * **PostgreSQL**: ejecutar con la cuenta administradora, en orden, `009` a `014`.
@@ -591,7 +606,8 @@ Barrido de los cuatro modelos contra el enunciado del curso:
 
 ## 15. Límites conocidos
 
-* Lo nuevo de Firestore (citas de agenda, adendas, edición) se probó con el **emulador**; no se repitió contra el proyecto real.
+* El odontograma guarda solo el estado actual de cada pieza: sobrescribir conserva quién y
+  cuándo hizo el último cambio, no los valores anteriores.
 * El arranque desde cero con Docker no se ejecutó; sí se verificó la inicialización de
   los scripts contra motores locales equivalentes.
 * Las cuentas de administración se crean con el script, no por la API.

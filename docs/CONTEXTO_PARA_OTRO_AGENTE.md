@@ -24,6 +24,17 @@ de Git, Docker y las bases antes de basarse en los datos de entorno anotados aqu
 - Lo propio de esta rama es el Centro Pediátrico alineado con la pantalla «Facturación» del
   mockup: factura a nombre del tutor (`facturado_a`) y anulación. Migraciones MySQL `015` y `016`.
 
+## Actualización 31 de octubre de 2026 — Clínica Odontológica
+
+Rama `Clinica-Odontologica`, que parte de `Develop`. El backend de la clínica coincide con el
+mockup y el contrato por pantalla está en `docs/contrato_clinica_odontologica.md`. Se corrigió:
+pieza contra baja simultánea, 500 al agotar reintentos, consulta de alergias por la secretaria
+(afecta a la ruta común de los cuatro motores) y permisos por defecto del `odontologo`.
+
+Las pruebas de `tests/integration/test_firestore.py` pasan contra el proyecto real. Con el
+emulador 1.19.8 las de concurrencia se omiten. Lo administrativo del mockup para la clínica
+viene de `Develop`, ya fusionada en esta rama.
+
 ## Estado vigente (23 de octubre de 2026, noche) — leer primero
 
 Esta sección corrige lo que dicen las actualizaciones históricas de más abajo.

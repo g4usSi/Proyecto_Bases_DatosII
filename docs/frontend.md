@@ -2,8 +2,9 @@
 
 Estado (31 de octubre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
 `/app/` desde la misma API, sin Node ni compilación. Incluye acceso, cambio obligatorio de
-contraseña y la administración completa (superusuario y administrador de cada entidad). Las
-pantallas clínicas de cada institución se agregan como módulos en su rama. El mockup sigue
+contraseña, la administración completa (superusuario y administrador de cada entidad) y, en esta
+rama, las pantallas de la Clínica Odontológica (`js/modulos/clinica.js`, `js/vistas/clinica/`). Las
+de las demás instituciones se agregan como módulos en su rama. El mockup sigue
 siendo la referencia visual: `docs/referencia/Historiales identidad visual.html`. Los contratos
 están en [la guía del frontend](api_frontend_hospital_laboratorio.md). El plan que sigue es histórico.
 
@@ -111,12 +112,13 @@ la autorización: la API vuelve a validar cada llamada.
   - `alergias: []` → "sin alergias conocidas" (se preguntó y no tiene);
   - lista con elementos → mostrarlas.
   La secretaria **puede** anotarlas al registrar, pero la API no se las devuelve después
-  (llegan como `null`). La pantalla de quien no tiene `historiales:leer` no debe decir
-  "no registradas": simplemente no muestra esa sección.
+  (llegan como `null`) y responde 403 si intenta agregar más con `POST .../alergias`. La
+  pantalla de quien no tiene `historiales:leer` no debe decir "no registradas": muestra
+  el aviso de información reservada, como el mockup.
 - **Contacto** también es opcional (teléfono, correo, dirección).
 - **501**: mostrar "Esta función todavía no está disponible para tu institución". Hoy solo
-  lo devuelven citas y odontograma fuera de la clínica odontológica (los demás flujos
-  funcionan en los cuatro motores).
+  lo devuelven los módulos propios de una institución fuera de ella, como el odontograma
+  (los demás flujos funcionan en los cuatro motores).
   **503**: "El servicio de datos no está disponible, intenta más tarde".
 - **401**: volver al login. **409**: historial archivado u horario ocupado, con el
   mensaje de la API. **422**: marcar el campo.
@@ -189,24 +191,25 @@ caracteres.
   `Content-Security-Policy: default-src 'self'`.
 - Datos de demostración siempre sintéticos.
 
-## Mockups pendientes
+## Mockups
 
-Cada mockup debe indicar: qué rol lo ve, qué pasa con 403/501/503 y el estado vacío.
+Cubiertos en `referencia/Historiales identidad visual.html`, con qué rol ve cada pantalla, sus
+errores y su estado vacío.
 
-- [ ] Login
-- [ ] Menú principal según rol (secretaria / odontólogo / otros)
-- [ ] Registrar paciente (con contacto y alergias opcionales; el Centro Pediátrico exige fecha de nacimiento)
-- [ ] Buscar paciente por nombre (lista con marca de archivado)
-- [ ] Ficha del paciente
-- [ ] Historial de consultas
-- [ ] Nueva consulta con varios diagnósticos, tratamientos y recetas
-- [ ] Archivar historial (motivo y detalle)
-- [ ] Agenda de citas (día o semana) y nueva cita
-- [ ] Odontograma interactivo con panel de pieza
+- [x] Login
+- [x] Menú principal según rol (secretaria / odontólogo / otros)
+- [x] Registrar paciente (con contacto y alergias opcionales; el Centro Pediátrico exige fecha de nacimiento)
+- [x] Buscar paciente por nombre (lista con marca de archivado)
+- [x] Ficha del paciente
+- [x] Historial de consultas
+- [x] Nueva consulta con varios diagnósticos, tratamientos y recetas
+- [x] Archivar historial (motivo y detalle)
+- [x] Agenda de citas (semana) y nueva cita
+- [x] Odontograma interactivo con panel de pieza
 
 ## Orden de trabajo sugerido
 
-1. Mockups de las pantallas anteriores.
+1. ~~Mockups de las pantallas anteriores.~~ Hecho.
 2. Esqueleto: montaje de `/app`, login, `/auth/me`, menú por permisos, manejo de errores.
 3. Pacientes: registrar y ficha.
 4. Historial y nueva consulta.

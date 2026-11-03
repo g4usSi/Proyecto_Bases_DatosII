@@ -17,7 +17,7 @@ laboratorio) fuera de su motor. Referencia completa: [documentacion-backend.md](
 | `GET /api/v1/pacientes/{id}/historial?limite=20&antes_de=` | `ConsultarHistorial` | `historiales:leer` |
 | `POST /api/v1/pacientes/{id}/consultas` | `RegistrarConsulta` | `consultas:registrar` |
 | `PATCH /api/v1/pacientes/{id}` | `ActualizarPaciente` | `pacientes:registrar` |
-| `POST /api/v1/pacientes/{id}/alergias` | `AgregarAlergias` | `pacientes:registrar` |
+| `POST /api/v1/pacientes/{id}/alergias` | `AgregarAlergias` | `pacientes:registrar` y `historiales:leer` |
 | `GET /api/v1/pacientes/{id}/consultas/{id_consulta}` | `ConsultarConsulta` | `historiales:leer` |
 | `POST /api/v1/pacientes/{id}/consultas/{id_consulta}/adenda` | `AgregarAConsulta` | `consultas:registrar` |
 | `POST /api/v1/pacientes/{id}/archivo` | `ArchivarPaciente` | `historiales:archivar` |

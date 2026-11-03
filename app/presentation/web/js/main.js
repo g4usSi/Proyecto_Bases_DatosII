@@ -6,6 +6,7 @@ import { h } from './ui/dom.js';
 import { aviso_flotante, cabeza, vacio } from './ui/componentes.js';
 import { moduloDe } from './modulos/registro.js';
 import './modulos/admin.js';
+import './modulos/clinica.js';
 import { vistaCambioObligatorio, vistaLogin } from './vistas/acceso.js';
 import { chipDeSesion, marco, temaDe } from './vistas/marco.js';
 

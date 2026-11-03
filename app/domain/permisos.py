@@ -36,6 +36,17 @@ INSTITUCION_DE_SECRETARIA = "clinica_odontologica"
 PERMISOS_POR_ROL = {
     "laboratorista": frozenset({PACIENTES_LEER, LABORATORIO_RESULTADOS, LABORATORIO_VALIDAR}),
     "secretaria": frozenset({PACIENTES_LEER, PACIENTES_REGISTRAR, CITAS_LEER, CITAS_GESTIONAR}),
+    # Lo que sugiere la pantalla de alta. Archivar siempre se concede aparte.
+    "odontologo": frozenset(
+        {
+            PACIENTES_LEER,
+            PACIENTES_REGISTRAR,
+            HISTORIALES_LEER,
+            CONSULTAS_REGISTRAR,
+            CITAS_LEER,
+            CITAS_GESTIONAR,
+        }
+    ),
     "administrador": frozenset({PROFESIONALES_ADMINISTRAR}),
     "superusuario": frozenset({PLATAFORMA_ADMINISTRAR, PAGOS_VER}),
 }

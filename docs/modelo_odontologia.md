@@ -1,9 +1,10 @@
 # Clínica Odontológica en Cloud Firestore: modelo documental
 
-Estado (23 de octubre de 2026): modelo implementado y probado contra el proyecto
-`proyectobases2-83f2e`, base `(default)`. Código en
-`app/infrastructure/persistence/firestore/unidad.py`; pruebas reales en
-`tests/integration/test_firestore.py` (crean y borran datos sintéticos).
+Estado (31 de octubre de 2026): modelo implementado y probado contra el proyecto
+`proyectobases2-83f2e`, base `(default)`, incluidos citas, adendas, corrección de datos y
+concurrencia. Código en `app/infrastructure/persistence/firestore/unidad.py`; pruebas reales
+en `tests/integration/test_firestore.py` (crean y borran datos sintéticos). Lo que consume
+cada pantalla está en [contrato_clinica_odontologica.md](contrato_clinica_odontologica.md).
 
 Decisiones del equipo aplicadas:
 
@@ -23,6 +24,7 @@ pacientes/{idAuto}
   contacto { telefono, correo, direccion }            ← embebido
   alergias_evaluadas: bool
   alergias [ { sustancia, reaccion, severidad } ]     ← embebido
+  prefijos_nombre []                                  ← para buscar por comienzo de palabra
   estado "Activo" | "Archivado"
   fecha_baja, motivo_baja, detalle_baja, archivado_por (al archivar)
   creado_en, actualizado_en
@@ -69,15 +71,25 @@ Firestore no tiene llaves foráneas ni `UNIQUE`. La integridad se garantiza así
 
 | Operación | Mecanismo |
 | --- | --- |
-| Registrar paciente / actualizar pieza | `WriteBatch` en la unidad de trabajo, confirmado en `commit()`. |
-| Registrar consulta | Transacción: vuelve a leer el paciente; si está archivado, no escribe. |
+| Registrar paciente / sincronizar perfil | `WriteBatch` en la unidad de trabajo, confirmado en `commit()`. |
+| Registrar consulta / actualizar pieza | Transacción: vuelve a leer el paciente; si está archivado, no escribe. Dos piezas distintas a la vez no se pisan, porque cada una solo escribe su propia entrada del mapa. |
+| Adenda / corregir datos / agregar alergias | Transacción: lee el documento y lo reescribe; dos cambios simultáneos se aplican uno tras otro. |
 | Archivar | Transacción: solo si `estado == "Activo"`. Dos bajas simultáneas → una falla con 409. |
 | Agendar cita | Transacción: lee los documentos `agendas/{prof}_{día}`, comprueba cruces y crea la cita y el horario ocupado juntos. Si dos secretarias reservan a la vez, Firestore detecta que el documento cambió y repite la transacción de una: la segunda recibe 409. |
-| Cancelar cita | Transacción: cambia estado y libera el horario (`DELETE_FIELD`). |
-| Estados de cita | `programada → atendida \| cancelada \| no_asistio`. Los estados finales no cambian. Cancelar exige motivo; "atendida" solo después de la hora. |
+| Cambiar estado de cita | Transacción: cambia estado y, si es final, libera el horario (`DELETE_FIELD`). `confirmada` sigue ocupándolo. |
+| Estados de cita | `programada → confirmada → atendida`; también `cancelada` o `no_asistio`. Los estados finales no cambian. Cancelar exige motivo; "atendida" y "no asistió" solo después de la hora. |
 
 El día de la agenda se calcula en la zona `America/Guatemala` (`HISTORIALES_ZONA_HORARIA`).
 Si una cita cruza la medianoche, se bloquean los dos días.
+
+Si una transacción agota sus cinco reintentos, el SDK lanza `ValueError` con `Aborted` como
+causa. La unidad de trabajo lo convierte en 503 («intenta de nuevo»).
+
+Las pruebas de concurrencia (cuatro citas al mismo horario, cuatro adendas, dos bajas, consulta
+contra baja y cuatro piezas a la vez) se ejecutan contra el proyecto real. El emulador 1.19.8
+no conserva el turno de una transacción al reintentar: con varias sobre el mismo documento
+se abortan todas, algo que el servicio real no hizo en ninguna de las corridas. Por eso esas
+pruebas se omiten con `FIRESTORE_EMULATOR_HOST`.
 
 ## Índices
 
@@ -99,8 +111,8 @@ se crearía un índice `(id_profesional, inicio)` y el filtro se haría en Fires
 
 | Rol | Permisos | Ve |
 | --- | --- | --- |
-| secretaria | `pacientes:leer`, `pacientes:registrar`, `citas:leer`, `citas:gestionar` | Datos y contacto del paciente, agenda. Al registrar puede anotar alergias (opcional), pero **no** las ve después. **No** ve consultas, diagnósticos, recetas ni odontograma. **No** archiva. |
-| odontologo | los anteriores que se le asignen + `historiales:leer`, `consultas:registrar` | Todo el historial clínico; registra consultas y odontograma. |
+| secretaria | `pacientes:leer`, `pacientes:registrar`, `citas:leer`, `citas:gestionar` | Datos y contacto del paciente, agenda. Al registrar puede anotar alergias (opcional), pero **no** las ve después ni puede agregar más: un rechazo por duplicado le revelaría que el paciente ya tiene esa alergia. **No** ve consultas, diagnósticos, recetas ni odontograma. **No** archiva. |
+| odontologo | Por defecto, los anteriores + `historiales:leer`, `consultas:registrar`. `historiales:archivar` se concede aparte. | Todo el historial clínico; registra consultas, alergias y odontograma. |
 
 PostgreSQL impide con triggers que una secretaria reciba `historiales:leer`,
 `consultas:registrar` o `historiales:archivar` (`006_rol_secretaria_citas.sql` y

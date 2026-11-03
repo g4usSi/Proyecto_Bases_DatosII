@@ -18,6 +18,7 @@ from app.domain.consulta import Adenda, Diagnostico, NuevaConsulta, Receta, Trat
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.paciente import CambiosPaciente, NuevoPaciente, Paciente
 from app.presentation.api.dependencies import (
+    ContextoAgregarAlergias,
     ContextoArchivar,
     ContextoLeerCitas,
     ContextoLeerHistorial,
@@ -108,7 +109,7 @@ def actualizar_paciente(
 
 @router.post("/{id_paciente}/alergias", response_model=PacienteResponse)
 def agregar_alergias(
-    id_paciente: IdPaciente, datos: AlergiasAgregar, contexto: ContextoRegistrarPaciente
+    id_paciente: IdPaciente, datos: AlergiasAgregar, contexto: ContextoAgregarAlergias
 ) -> PacienteResponse:
     """Agrega alergias al historial. Nunca borra ni edita las ya registradas."""
     paciente = AgregarAlergias(contexto.unidad).ejecutar(
