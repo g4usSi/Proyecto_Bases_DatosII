@@ -1,5 +1,28 @@
 # Relevo del proyecto para otro agente
 
+## Actualización 3 de noviembre de 2026 — Integración en `Develop`
+
+- Integradas las cuatro ramas de entidades mediante commits de merge. Los conflictos de
+  documentación se resolvieron conservando facturación pediátrica y cambios odontológicos.
+- La administración de `Develop` conserva sus dos niveles y permisos originales.
+- `017_cuentas_demo.sql` crea el superadmin y los cuatro administradores faltantes;
+  se ejecuta en initdb, al arrancar la API de desarrollo y al finalizar
+  `python -m scripts.aplicar_migracion <archivos pendientes>`. No sobrescribe cuentas.
+- Los cinco usuarios y su contraseña inicial (`DemoSalud2026!`) están en el README y
+  se imprimen al arrancar. Si una cuenta tiene otra contraseña, se informa que se conserva.
+- La imagen incluye el seed y los JavaScript del frontend, antes excluidos por `.dockerignore`.
+- Se serializan las reservas de citas por profesional antes de evaluar la exclusion GiST:
+  corrige un deadlock detectado al probar dos reservas simultaneas; sigue devolviendo conflicto.
+- Verificado: 184 pruebas habituales; 179 pruebas de integracion local entre la corrida general
+  y la repeticion de las 43 de enrutamiento/PostgreSQL tras corregir dos fallos. Una prueba
+  de Firestore dentro de administracion se omitio por falta de clave; su suite cloud no se ejecuto.
+  Docker initdb desde cero creo las cinco cuentas y la imagen permitio sus cinco logins.
+- Las suites administrativas temporales omiten el seed porque crean sus propios admins;
+  `tests/integration/test_cuentas_demo.py` lo prueba en bases separadas, incluidos cinco logins,
+  permisos, idempotencia, preservación de cuentas y arranques concurrentes.
+- Las notas anteriores son históricas; el estado de las ramas ya es el integrado aquí.
+
+
 Actualizado el 21 de octubre de 2026. Este documento resume el estado observado y
 el trabajo pendiente para continuar en el mismo repositorio. Confirmar el estado vivo
 de Git, Docker y las bases antes de basarse en los datos de entorno anotados aquí.

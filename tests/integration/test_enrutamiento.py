@@ -26,7 +26,7 @@ def test_login_postgres_y_lectura_del_motor_autorizado(config_local, institucion
         port=int(config_local["MYSQL_PORT"]),
         user="root",
         password=config_local["MYSQL_ROOT_PASSWORD"],
-        database="hospital_pediatrico",
+        database=config_local.get("HISTORIALES_MYSQL_DATABASE", "hospital_pediatrico"),
         autocommit=True,
     )
     mongo = MongoClient(

@@ -67,6 +67,10 @@ def main():
             temporal_admin = make_conninfo(**(conninfo_to_dict(admin_dsn) | {"dbname": nombre}))
             with psycopg.connect(temporal_admin, autocommit=True) as conexion:
                 for ruta in sorted((PROJECT_ROOT / "database/postgresql").glob("*.sql")):
+                    # Las suites administrativas crean sus propios administradores unicos.
+                    # El seed se verifica aparte en test_cuentas_demo.py, con otra BD temporal.
+                    if ruta.name == "017_cuentas_demo.sql":
+                        continue
                     contenido = ruta.read_text(encoding="utf-8")
                     if ruta.name.startswith("004_"):
                         contenido = "\n".join(
@@ -85,6 +89,7 @@ def main():
                     **(conninfo_to_dict(app_dsn) | {"dbname": nombre})
                 ),
                 "HISTORIALES_TEST_INTEGRATION": "1",
+                "HISTORIALES_CUENTAS_DEMO": "false",
             }
             argumentos = sys.argv[1:] or [
                 "tests/integration/test_hospital.py",

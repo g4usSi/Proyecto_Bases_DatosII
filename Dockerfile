@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --system --gid app app
 
 COPY --chown=app:app app ./app
+COPY --chown=app:app database/postgresql/017_cuentas_demo.sql ./database/postgresql/017_cuentas_demo.sql
 USER app
 EXPOSE 8000
 

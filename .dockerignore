@@ -16,3 +16,9 @@ scripts
 *.pdf
 *.sql
 *.js
+
+# Recursos necesarios en la imagen de la API.
+!app/**/*.js
+!database/
+!database/postgresql/
+!database/postgresql/017_cuentas_demo.sql

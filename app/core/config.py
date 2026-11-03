@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     app_name: str = "Red de historiales clinicos"
     app_version: str = "0.1.0"
     environment: Literal["desarrollo", "pruebas", "produccion"] = "desarrollo"
+    cuentas_demo: bool = True
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = Field(default_factory=list)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

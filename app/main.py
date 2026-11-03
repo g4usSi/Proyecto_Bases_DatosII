@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.bootstrap.container import Contenedor
+from app.bootstrap.cuentas_demo import inicializar_cuentas_demo
 from app.bootstrap.factory import crear_contenedor
 from app.core.config import Settings
 from app.presentation.api.handlers import registrar_manejadores
@@ -17,11 +18,14 @@ def create_app(settings: Settings | None = None, contenedor: Contenedor | None =
     settings = settings if settings is not None else Settings()
     logging.basicConfig(level=settings.log_level, format="%(levelname)s %(name)s: %(message)s")
 
+    contenedor_inyectado = contenedor is not None
     contenedor = contenedor if contenedor is not None else crear_contenedor(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         try:
+            if not contenedor_inyectado:
+                inicializar_cuentas_demo(settings)
             yield
         finally:
             contenedor.cerrar()

@@ -28,6 +28,7 @@ services:
       - ./database/postgresql/014_cobros.sql:/docker-entrypoint-initdb.d/014_cobros.sql:ro
       - ./database/postgresql/015_administracion_dos_niveles.sql:/docker-entrypoint-initdb.d/015_administracion_dos_niveles.sql:ro
       - ./database/postgresql/016_frontend_hospital.sql:/docker-entrypoint-initdb.d/016_frontend_hospital.sql:ro
+      - ./database/postgresql/017_cuentas_demo.sql:/docker-entrypoint-initdb.d/017_cuentas_demo.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U historiales_admin -d hospital_general"]
       interval: 5s
@@ -93,6 +94,7 @@ services:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     environment:
       HISTORIALES_ENVIRONMENT: desarrollo
+      HISTORIALES_CUENTAS_DEMO: ${HISTORIALES_CUENTAS_DEMO:-true}
       HISTORIALES_POSTGRES_DSN: postgresql://historiales_app:${POSTGRES_APP_PASSWORD}@postgres:5432/hospital_general
       HISTORIALES_JWT_SECRET: ${HISTORIALES_JWT_SECRET:?Falta HISTORIALES_JWT_SECRET}
       HISTORIALES_MYSQL_HOST: mysql
