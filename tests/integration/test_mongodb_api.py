@@ -1236,3 +1236,43 @@ def test_versiones_de_una_prueba_del_catalogo(lab):
         ausente = client.get("/api/v1/laboratorio/pruebas/NOEXISTE-X/versiones", headers=h)
     assert [v["prueba"]["version"] for v in api.json()] == [3, 2, 1]
     assert api.json()[1]["vigente"] is True and ausente.status_code == 404
+
+
+def test_tablero_no_omite_ordenes_con_la_misma_fecha_y_resumen_global(lab):
+    identificador = registrar(lab)
+    codigo = cargar_prueba(lab, "CURSOR")
+    _, primera = orden_base(lab, identificador, (codigo,))
+    _, segunda = orden_base(lab, identificador, (codigo,))
+    instante = datetime.now(UTC).replace(microsecond=0)
+    lab.admin.ordenes_laboratorio.update_many(
+        {"_id": {"$in": [ObjectId(primera.id_orden), ObjectId(segunda.id_orden)]}},
+        {"$set": {"solicitada_en": instante}},
+    )
+    with lab.unidad() as unidad:
+        una = unidad.laboratorio.listar_institucion(None, 1)[0]
+        resto = unidad.laboratorio.listar_institucion(None, 200, una.solicitada_en, una.id_orden)
+        conteos = unidad.laboratorio.resumen()
+    assert {primera.id_orden, segunda.id_orden} <= {una.id_orden, *(o.id_orden for o in resto)}
+    assert conteos["solicitada"] >= 2
+    with TestClient(create_app(Settings())) as client:
+        login = client.post(
+            "/api/v1/auth/login", json={"correo": lab.correo, "password": lab.password}
+        )
+        h = {"Authorization": "Bearer " + login.json()["access_token"]}
+        siguiente = client.get(
+            "/api/v1/laboratorio/ordenes",
+            params={
+                "antes_de": una.solicitada_en.isoformat(),
+                "antes_de_id": una.id_orden,
+            },
+            headers=h,
+        )
+        assert siguiente.status_code == 200
+        resumen = client.get("/api/v1/laboratorio/resumen", headers=h)
+        assert resumen.status_code == 200 and resumen.json() == conteos
+        assert (
+            client.get(
+                "/api/v1/laboratorio/ordenes", params={"antes_de_id": una.id_orden}, headers=h
+            ).status_code
+            == 422
+        )

@@ -197,7 +197,11 @@ class LaboratorioNoAplica:
         estados: frozenset[EstadoOrden] | None,
         limite: int,
         antes_de: datetime | None = None,
+        antes_de_id: str | None = None,
     ) -> list[ResumenOrden]:
+        self._no()
+
+    def resumen(self):
         self._no()
 
     def solicitar(
