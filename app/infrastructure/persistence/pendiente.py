@@ -337,7 +337,12 @@ class CobrosNoAplica:
         self._no()
 
     def abrir(
-        self, id_paciente: str, id_atencion: str, descripcion: str | None, ahora: datetime
+        self,
+        id_paciente: str,
+        id_atencion: str,
+        descripcion: str | None,
+        ahora: datetime,
+        id_tutor: str | None = None,
     ) -> Cobro:
         self._no()
 

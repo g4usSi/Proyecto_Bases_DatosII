@@ -148,3 +148,36 @@ def test_cliente_no_elige_institucion_y_validacion_no_refleja_password(
         )
     assert response.status_code == invalido.status_code == 422
     assert PASSWORD not in invalido.text
+
+
+def test_token_del_superusuario_lleva_inst_null_y_no_abre_motores(settings: Settings):
+    cuenta = CuentaProfesional(
+        str(uuid4()),
+        "super@example.invalid",
+        PasswordHash.recommended().hash(PASSWORD),
+        None,
+        frozenset({"plataforma:administrar", "pagos:ver"}),
+        0,
+        True,
+        rol="superusuario",
+    )
+    directorio = DirectorioDoble(cuenta)
+    autenticador = AutenticadorCentral(directorio, SECRETO, "pruebas", "api-pruebas")
+    sesion = autenticador.iniciar_sesion(cuenta.correo, PASSWORD)
+    payload = jwt.decode(sesion.access_token, SECRETO, algorithms=["HS256"], audience="api-pruebas")
+    assert "inst" in payload and payload["inst"] is None
+    assert autenticador.verificar_token(sesion.access_token).institucion is None
+    # Un token sin el claim "inst" se rechaza aunque este firmado.
+    sin_inst = {k: v for k, v in payload.items() if k != "inst"}
+    with pytest.raises(TokenInvalido):
+        autenticador.verificar_token(jwt.encode(sin_inst, SECRETO, algorithm="HS256"))
+    # Si la cuenta pasa a tener entidad, el token anterior deja de valer.
+    directorio.cuenta = replace(cuenta, institucion=Institucion.HOSPITAL_GENERAL)
+    with pytest.raises(TokenInvalido):
+        autenticador.verificar_token(sesion.access_token)
+    directorio.cuenta = cuenta
+    contenedor = Contenedor(autenticador=autenticador, inicio_sesion=autenticador)
+    with TestClient(create_app(settings, contenedor)) as client:
+        h = {"Authorization": f"Bearer {sesion.access_token}"}
+        assert client.get("/api/v1/auth/me", headers=h).json()["institucion"] is None
+        assert client.get("/api/v1/pacientes/1", headers=h).status_code == 403

@@ -26,6 +26,14 @@ class CobroCrear(Entrada):
         ),
     )
     descripcion: str | None = Field(default=None, max_length=300)
+    id_tutor: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=20,
+        pattern=r"^\d+$",
+        description="Solo Centro Pediatrico: tutor a cuyo nombre se factura (vinculado al "
+        "paciente). Si se omite, el tutor principal. En el hospital enviarlo es 422.",
+    )
 
 
 class CargoCrear(Entrada):
@@ -68,6 +76,13 @@ class PagoResponse(BaseModel):
     referencia: str | None = None
 
 
+class TitularResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_tutor: str
+    nombre: str
+
+
 class CobroResponse(BaseModel):
     """Los montos viajan como texto decimal ("150.00") para no perder centavos."""
 
@@ -81,6 +96,9 @@ class CobroResponse(BaseModel):
     abierto_en: datetime
     cerrado_en: datetime | None = None
     descripcion: str | None = None
+    facturado_a: TitularResponse | None = Field(
+        default=None, description="Centro Pediatrico: tutor a cuyo nombre esta la factura."
+    )
     total: Decimal
     pagado: Decimal
     saldo: Decimal

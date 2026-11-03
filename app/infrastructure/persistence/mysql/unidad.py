@@ -1048,7 +1048,8 @@ class UnidadTrabajoMySQL:
             citas = cursor.fetchone()[0]
             cursor.execute(
                 "SELECT count(*), COALESCE(sum(total_facturado - total_pagado),0) "
-                "FROM facturacion WHERE total_facturado = 0 OR total_pagado < total_facturado"
+                "FROM facturacion WHERE anulada_en IS NULL "
+                "AND (total_facturado = 0 OR total_pagado < total_facturado)"
             )
             abiertos, saldo = cursor.fetchone()
         return {

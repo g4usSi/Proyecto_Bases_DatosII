@@ -151,7 +151,7 @@ obtiene de PostgreSQL. Una base sin pacientes responderá 404 al consultar un ID
 | `POST/GET/PATCH /api/v1/profesionales` | Administración del personal de tu institución (`profesionales:administrar`). |
 | `POST /api/v1/auth/cambiar-contrasena` | Cambia tu contraseña y devuelve un token nuevo. |
 | `/api/v1/camas`, `/api/v1/ingresos`, `/api/v1/hospital/resumen` | Hospital General: camas, emergencias e ingresos, inicio. |
-| `/api/v1/cobros`, `/api/v1/pacientes/{id}/cobros` | Cobros y pagos (hospital y centro pediátrico; `pagos:ver` / `pagos:registrar`). |
+| `/api/v1/cobros`, `/api/v1/pacientes/{id}/cobros` | Cobros y pagos (hospital y centro pediátrico; `pagos:ver` / `pagos:registrar`). En pediatría la factura va a nombre del tutor y se puede anular. |
 | `/api/v1/pacientes/{id}/tutores` | Tutores del paciente (centro pediátrico). |
 | `GET /api/v1/laboratorio/ordenes` | Tablero de órdenes del laboratorio. |
 | `GET/PUT /api/v1/pacientes/{id}/odontograma` | Odontograma FDI; el estado de la pieza debe estar en la lista fija, si no responde 422 (`historiales:leer` / `consultas:registrar`). |
@@ -171,6 +171,7 @@ disponible (por ejemplo, Firestore sin clave).
 - `database/postgresql/`: esquema del hospital, identidad y cuentas limitadas
   (`008`: escrituras de la API; `009`: citas/adendas; `010`: integridad; `011`: permisos de laboratorio).
 - `database/mysql/006`–`010`: citas, adendas, pediatría (crecimiento y vacunas), sus permisos y `010` (sin stock por lote).
+- `database/mysql/015` y `016`: factura a nombre del tutor y anulación (con sus permisos).
 - `scripts/cargar_catalogos.py` y `database/ejemplos/`: carga de catálogos de vacunas y pruebas (datos DEMO).
 - [Documentación del backend](documentacion-backend.md).
 - [Revisión de MySQL](docs/revision_mysql.md), [modelo del laboratorio](docs/modelo_laboratorio.md).
@@ -212,7 +213,7 @@ sin configurar un entorno de pruebas separado.
 El backend está completo (ver [documentacion-backend.md](documentacion-backend.md)).
 Pendiente: completar las pantallas clínicas del frontend ([plan](docs/frontend.md)), redactar el
 documento comparativo, probar el arranque desde cero con Docker y repetir las pruebas de Firestore contra el proyecto real. Si ya tienes volúmenes creados,
-aplica las migraciones nuevas (PostgreSQL 009–016, MySQL 006–014 y repetir el JS de MongoDB:
+aplica las migraciones nuevas (PostgreSQL 009–016, MySQL 006–016 y repetir el JS de MongoDB:
 sección 14 de la documentación) y crea la cuenta de administración de cada institución con
 `python -m scripts.crear_profesional ... --rol administrador`. MongoDB corre como servidor único: convertirlo a *replica set* permitiría
 usar transacciones y cerrar la ventana de milisegundos entre una consulta y una baja

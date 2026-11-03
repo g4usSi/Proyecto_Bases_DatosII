@@ -286,11 +286,12 @@ texto decimal (`"150.00"`).
 | --- | --- | --- |
 | `GET /servicios` | `pagos:ver` | Servicios con tarifa general vigente (solo hospital). |
 | `GET /cobros?estado=` | `pagos:ver` | Tablero de cobros (`abierto`, `cerrado`, `pagado`, `anulado`; repetible). |
-| `POST /pacientes/{id}/cobros` | `pagos:registrar` | Abre el cobro de una atención (`id_atencion`: consulta o ingreso en el hospital, consulta en pediatría). Uno vigente por atención (409). |
+| `POST /pacientes/{id}/cobros` | `pagos:registrar` | Abre el cobro de una atención (`id_atencion`: consulta o ingreso en el hospital, consulta en pediatría). Uno vigente por atención (409). Pediatría: `id_tutor` opcional (tutor vinculado al paciente; si se omite, el principal) y la respuesta trae `facturado_a`. En el hospital `id_tutor` → 422. |
 | `GET /pacientes/{id}/cobros`, `GET /pacientes/{id}/cobros/{id}` | `pagos:ver` | Cobros del paciente / uno con cargos, pagos, total, pagado y saldo. |
 | `POST .../cobros/{id}/cargos` | `pagos:registrar` | Hospital: `id_servicio` + cantidad (precio de la tarifa vigente del profesional o general, **congelado**). Pediatría: `concepto` + `precio_unitario`. 409 si el cobro ya no admite cargos. |
 | `POST .../cobros/{id}/pagos` | `pagos:registrar` | `metodo` (efectivo, tarjeta, transferencia, cheque*) y monto. 409 si excede el saldo, aun con dos pagos simultáneos. Saldado → `pagado`. |
-| `POST .../pagos/{id}/anular`, `.../cerrar`, `.../anular` | `pagos:registrar` | Solo hospital: el pago queda anulado (no se borra); cerrar impide más cargos; anular exige no tener pagos. |
+| `POST .../pagos/{id}/anular`, `.../cerrar` | `pagos:registrar` | Solo hospital: el pago queda anulado (no se borra); cerrar impide más cargos (pediatría → 501). |
+| `POST .../cobros/{id}/anular` | `pagos:registrar` | Hospital y pediatría: el cobro o la factura queda anulada (no se borra) y ya no admite cargos ni pagos; exige no tener pagos (409). En pediatría una anulada no impide volver a facturar la consulta. |
 
 \* El Centro Pediátrico no acepta cheque (422).
 
@@ -376,7 +377,7 @@ fija los valores por defecto al crear la cuenta:
 | 401 | Sin token, token inválido/expirado/revocado, credenciales incorrectas. |
 | 403 | Falta el permiso, cuenta inactiva o bloqueada. |
 | 404 | Paciente, cita, consulta, orden o dosis inexistente (también si pertenece a otra institución). |
-| 409 | Paciente archivado, horario ocupado, transición de estado inválida, orden ya validada, dosis que ya no está pendiente. |
+| 409 | Paciente archivado, horario ocupado, transición de estado inválida, orden ya validada, dosis que ya no está pendiente, factura anulada o con pagos. |
 | 422 | Datos inválidos (formato, rangos, estado de pieza fuera de la lista, etc.). |
 | 501 | La operación no aplica a ese motor (odontograma, pediatría, tutores, laboratorio, camas, cobros). |
 | 503 | Motor no disponible o integración sin configurar. |
@@ -432,6 +433,8 @@ Archivos en `database/mysql/` (001, 002, 004, 006, 008, 010, 013 son esquema; 00
 | `012_permisos_cobros.sql` | `SELECT/INSERT` en facturación, detalle y pago (sin `UPDATE`/`DELETE`). |
 | `013_tutores.sql` | Triggers: no se vinculan ni cambian tutores de un historial archivado. |
 | `014_permisos_tutores.sql` | Permisos por columna sobre `tutor` y `paciente_tutor`. |
+| `015_facturacion_anular_tutor.sql` | `facturacion.anulada_en` (anular solo sin pagos, `CHECK`; una anulada no admite cargos ni pagos y no se reabre) e `id_tutor_fk` (tutor vinculado al paciente, fijo tras emitir). |
+| `016_permisos_facturacion.sql` | `UPDATE (anulada_en)` en `facturacion` (sin `DELETE` ni cambios de montos). |
 
 Consistencia: `FOR UPDATE`/`FOR SHARE` en las filas del paciente, la dosis y la agenda; los
 triggers lanzan `SIGNAL 45000` y el adaptador (`_traducir_trigger`) los convierte en
@@ -572,6 +575,7 @@ Barrido de los cuatro modelos contra el enunciado del curso:
 | El laboratorio solo listaba órdenes por paciente; solo mostraba la versión vigente. | Tablero `/laboratorio/ordenes` y `/laboratorio/pruebas/{codigo}/versiones` (§3.12). |
 | Camas, ingresos y pagos del hospital sin endpoints. | §3.9 y §3.10 (migraciones 013 y 014). |
 | Tutores y facturación pediátrica sin endpoints. | §3.10 y §3.11 (MySQL 012 a 014). |
+| La facturación pediátrica no se anulaba ni estaba a nombre del tutor (mockup "Facturación"). | Anulación y `facturado_a` (MySQL 015 y 016, §3.10). |
 
 ## 14. Cómo aplicar los cambios a bases ya creadas
 
@@ -596,7 +600,7 @@ Barrido de los cuatro modelos contra el enunciado del curso:
   `scripts/sincronizar_profesionales.py`.
 * `debe_cambiar_contrasena` se informa en `/auth/me`; la API no bloquea las demás rutas
   mientras siga en `true` (lo pide el frontend).
-* Facturación pediátrica: sin cierre ni anulación de facturas o pagos (501); la hora de cada
+* Facturación pediátrica: sin cierre de facturas ni anulación de pagos (501); la hora de cada
   cargo es la de la factura (el modelo no la guarda).
 * Los tableros devuelven como máximo 500 filas (ingresos y cobros) o 200 (órdenes de
   laboratorio, con cursor `antes_de`).
