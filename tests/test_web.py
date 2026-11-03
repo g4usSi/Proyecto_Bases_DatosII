@@ -78,3 +78,20 @@ def test_las_rutas_de_los_modulos_importados_existen() -> None:
         for destino in re.findall(r"""from '(\.[^']+)'|import '(\.[^']+)'""", contenido):
             ruta = destino[0] or destino[1]
             assert (archivo.parent / ruta).resolve().is_file(), (archivo, ruta)
+
+
+def test_las_pantallas_pediatricas_se_cargan_y_respetan_la_csp() -> None:
+    principal = (DIRECTORIO / "js/main.js").read_text(encoding="utf-8")
+    assert "./modulos/pediatrico.js" in principal
+    assert 'href="css/pediatrico.css"' in (DIRECTORIO / "index.html").read_text(encoding="utf-8")
+    for archivo in (DIRECTORIO / "js/vistas/pediatrico").rglob("*.js"):
+        # style-src 'self' bloquea el atributo style; `estilo` usa el CSSOM, que si se permite.
+        assert not re.search(r"style:", archivo.read_text(encoding="utf-8")), archivo
+
+
+def test_pediatria_no_ofrece_lo_que_su_api_no_tiene() -> None:
+    """Cerrar facturas, anular pagos y el catalogo de servicios responden 501 en este centro."""
+    contenido = (DIRECTORIO / "js/vistas/pediatrico/facturacion.js").read_text(encoding="utf-8")
+    assert "/cerrar" not in contenido
+    assert "/servicios" not in contenido
+    assert not re.search(r"/pagos/[^`']*anular", contenido)

@@ -12,7 +12,7 @@ pacientes e historiales en su propio motor.
 | Clínica Odontológica | Cloud Firestore | Consultas, citas, odontograma y funciones de secretaria. |
 
 El frontend incluye acceso, administración general, administración institucional y
-pantallas de odontología. Las operaciones clínicas de las otras instituciones están
+pantallas de odontología y pediatría. Las operaciones clínicas de las otras instituciones están
 disponibles en la API y en `/docs`.
 
 ## Requisitos

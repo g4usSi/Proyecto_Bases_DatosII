@@ -58,3 +58,10 @@ export function fEdad(nacimiento) {
   const anos = Math.floor(meses / 12);
   return `${anos} años`;
 }
+
+/* Meses cumplidos a hoy: el Centro Pediatrico muestra la edad en anos y meses. */
+export function mesesCumplidos(nacimiento) {
+  const [ay, am, ad] = hoyLocal().split('-').map(Number);
+  const [ny, nm, nd] = nacimiento.split('-').map(Number);
+  return Math.max((ay - ny) * 12 + (am - nm) - (ad < nd ? 1 : 0), 0);
+}
