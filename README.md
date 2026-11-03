@@ -49,15 +49,15 @@ Puertos locales: API `8000`, PostgreSQL `5434`, MySQL `3307` y MongoDB `27018`.
 
 ## Cuentas de demostración
 
-El usuario es el correo. **Contraseña inicial de las cinco cuentas: `DemoSalud2026!`**.
+El usuario es el correo. Estas son las credenciales iniciales de las cuentas de demostración:
 
-| Cuenta | Usuario |
-| --- | --- |
-| Superadmin | `superadmin@demo.local` |
-| Hospital General | `admin.hospital@demo.local` |
-| Centro Pediátrico | `admin.pediatria@demo.local` |
-| Laboratorio Clínico | `admin.laboratorio@demo.local` |
-| Clínica Odontológica | `admin.odontologia@demo.local` |
+| Cuenta | Usuario | Contraseña inicial |
+| --- | --- | --- |
+| Superadmin | `superadmin@demo.local` | `DemoSalud2026!` |
+| Hospital General | `admin.hospital@demo.local` | `DemoSalud2026!` |
+| Centro Pediátrico | `admin.pediatria@demo.local` | `DemoSalud2026!` |
+| Laboratorio Clínico | `admin.laboratorio@demo.local` | `DemoSalud2026!` |
+| Clínica Odontológica | `admin.odontologia@demo.local` | `DemoSalud2026!` |
 
 Se crean al inicializar PostgreSQL, aplicar la migración `017`, finalizar el comando de
 migraciones y arrancar la API en desarrollo. Los accesos se imprimen en la consola de
