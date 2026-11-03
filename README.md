@@ -67,6 +67,17 @@ Si ya existe un administrador para ese alcance, se conservan su usuario, contras
 permisos y estado. No se duplican cuentas. Si la contraseña es distinta de la demo,
 la consola indica `contrasena existente conservada`.
 
+Si las credenciales de la tabla no funcionan porque la base ya tenía cuentas, ejecutar
+una vez, con PostgreSQL iniciado:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.restablecer_cuentas_demo
+```
+
+Este comando deja los cinco correos y contraseñas exactamente como en la tabla, conserva
+sus identificadores, permisos y datos, desbloquea el acceso y cierra las sesiones anteriores.
+El arranque normal sigue conservando las contraseñas; no hace falta restablecerlas cada vez.
+
 El superadmin administra la plataforma y cada administrador gestiona el personal de su
 institución. Estas cuentas no tienen acceso clínico; desde la administración se crean
 las cuentas de médicos, odontólogos y demás personal.

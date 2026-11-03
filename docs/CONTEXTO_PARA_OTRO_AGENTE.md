@@ -2,6 +2,17 @@
 
 ## Actualización 3 de noviembre de 2026 — Integración en `Develop`
 
+- Segunda integración: incorporados los commits de Henry hasta `f0c1ee4` desde
+  `Backend/hospital-pediatrico`. El frontend carga pediatría y odontología junto con
+  administración; se combinaron imports, estilos, iconos, formatos y pruebas comunes.
+- `python -m scripts.restablecer_cuentas_demo` recupera explícitamente los cinco accesos
+  del README en bases existentes, conservando IDs/permisos/datos y revocando sesiones.
+  El arranque normal sigue sin sobrescribir credenciales. En esta instalación se recuperó
+  el superadmin antiguo y se aplicaron las migraciones MySQL 004–014 que faltaban.
+- Verificación de esta actualización: 186 pruebas habituales, 6 de cuentas demo sobre
+  PostgreSQL temporal, 37 módulos JavaScript válidos, cinco logins HTTP y acceso web del
+  superadmin sin errores de consola. El resumen ya incluye los tres motores locales;
+  Firestore continúa sin clave de servicio en esta máquina.
 - Integradas las cuatro ramas de entidades mediante commits de merge. Los conflictos de
   documentación se resolvieron conservando facturación pediátrica y cambios odontológicos.
 - La administración de `Develop` conserva sus dos niveles y permisos originales.

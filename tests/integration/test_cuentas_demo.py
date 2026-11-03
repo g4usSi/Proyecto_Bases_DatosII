@@ -14,6 +14,7 @@ from app.core.config import PROJECT_ROOT, Settings
 from app.domain.permisos import PERMISOS_POR_ROL
 from app.infrastructure.identity.cifrado import CifradorArgon2
 from app.main import create_app
+from scripts.restablecer_cuentas_demo import CORREOS_DEMO, restablecer
 
 
 @pytest.fixture
@@ -146,3 +147,74 @@ def test_arranques_simultaneos_son_idempotentes(demo):
         list(ejecutor.map(inicializar_cuentas_demo, [settings] * 3))
     assert len(cuentas(conexion)) == 5
     assert conexion.execute("SELECT count(*) FROM identidad.profesional_permiso").fetchone()[0] == 6
+
+
+def test_recupera_cinco_accesos_conservando_ids_y_revocando_sesiones(demo, config_local):
+    conexion, settings = demo
+    inicializar_cuentas_demo(settings)
+    originales = cuentas(conexion)
+    with TestClient(create_app(settings)) as client:
+        anterior = client.post(
+            "/api/v1/auth/login",
+            json={"correo": "admin.hospital@demo.local", "password": CONTRASENA_DEMO},
+        ).json()["access_token"]
+        conexion.execute(
+            "UPDATE identidad.profesional SET correo='superusuario@example.invalid', "
+            "password_hash=%s, activo=FALSE, bloqueado_hasta='9999-12-31', fallos_login=5 "
+            "WHERE rol='superusuario'",
+            (CifradorArgon2().cifrar("OtraContrasenaAnterior!"),),
+        )
+        dsn = make_conninfo(
+            **(
+                conninfo_to_dict(config_local["HISTORIALES_POSTGRES_ADMIN_DSN"])
+                | {"dbname": conexion.info.dbname}
+            )
+        )
+        restablecer(dsn)
+        assert {fila[0] for fila in cuentas(conexion)} == {fila[0] for fila in originales}
+        assert (
+            client.get(
+                "/api/v1/auth/me", headers={"Authorization": "Bearer " + anterior}
+            ).status_code
+            == 401
+        )
+        for alcance, correo in CORREOS_DEMO.items():
+            respuesta = client.post(
+                "/api/v1/auth/login", json={"correo": correo, "password": CONTRASENA_DEMO}
+            )
+            assert respuesta.status_code == 200, respuesta.text
+            usuario = respuesta.json()["usuario"]
+            assert usuario["institucion"] == alcance
+            assert set(usuario["permisos"]) == PERMISOS_POR_ROL[usuario["rol"]]
+    assert (
+        conexion.execute("SELECT count(*) FROM identidad.bitacora_profesionales").fetchone()[0] == 5
+    )
+
+
+def test_recuperacion_rechaza_correo_ocupado_sin_cambiar_otros_accesos(demo, config_local):
+    conexion, settings = demo
+    inicializar_cuentas_demo(settings)
+    conexion.execute(
+        "UPDATE identidad.profesional SET correo='admin.original@example.invalid' "
+        "WHERE establecimiento='hospital_general'"
+    )
+    conexion.execute(
+        "INSERT INTO identidad.profesional "
+        "(id_profesional,correo,nombres,apellidos,password_hash,rol,establecimiento) "
+        "VALUES (%s,'admin.hospital@demo.local','Medico','Existente',"
+        "%s,'medico','hospital_general')",
+        (uuid4(), CifradorArgon2().cifrar("ClaveDeOtraCuenta2026!")),
+    )
+    anteriores = cuentas(conexion)
+    dsn = make_conninfo(
+        **(
+            conninfo_to_dict(config_local["HISTORIALES_POSTGRES_ADMIN_DSN"])
+            | {"dbname": conexion.info.dbname}
+        )
+    )
+    with pytest.raises(ValueError, match="pertenece a otra cuenta"):
+        restablecer(dsn)
+    assert cuentas(conexion) == anteriores
+    assert (
+        conexion.execute("SELECT count(*) FROM identidad.bitacora_profesionales").fetchone()[0] == 0
+    )

@@ -3,7 +3,7 @@
 Estado (3 de noviembre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
 `/app/` desde la misma API, sin Node ni compilación. Incluye acceso, cambio obligatorio de
 contraseña, la administración completa (superusuario y administrador de cada entidad) y, en
-esta versión, las pantallas de la Clinica Odontologica y del Centro Pediatrico
+esta versión, las pantallas de la Clínica Odontológica y del Centro Pediátrico
 (`js/modulos/clinica.js` y `js/modulos/pediatrico.js`). Las
 de las demás instituciones se agregan como módulos en su rama. El mockup sigue
 siendo la referencia visual: `docs/referencia/Historiales identidad visual.html`. Los contratos
