@@ -15,9 +15,9 @@ const POR_PAGINA = 10;
 const iniciales = (p) => `${p.nombres[0] || ''}${p.apellidos[0] || ''}`.toUpperCase();
 
 /* Cada lectura falla por separado: un odontograma caido no debe ocultar la ficha. */
-const lectura = (promesa) => promesa.then((valor) => ({ valor }), (error) => ({ error }));
+export const lectura = (promesa) => promesa.then((valor) => ({ valor }), (error) => ({ error }));
 
-function proximaCita(citas) {
+export function proximaCita(citas) {
   const ahora = Date.now();
   return citas.filter((c) => estaPorAtender(c) && new Date(c.inicio).getTime() > ahora)
     .sort((a, b) => a.inicio.localeCompare(b.inicio))[0] || null;
@@ -54,7 +54,7 @@ function indicadores(p, datos) {
   return lista.map(([clase, icono, titulo, valor]) => h('div', { class: `mosaico ${clase}` }, ic(icono, 20), h('div', null, h('small', { text: titulo }), h('b', { text: valor }))));
 }
 
-function pestanaResumen(p, ctx) {
+export function pestanaResumen(p, ctx) {
   const clinico = sesion.tiene('historiales:leer');
   const c = p.contacto;
   let alergias;
@@ -105,7 +105,7 @@ function nodoConsulta(c, p, ctx) {
     && h('div', null, h('button', { class: 'btn tenue sm', type: 'button', onclick: () => abrirAdenda(c, p, ctx.repintar) }, ic('file-plus', 14), 'Agregar adenda')));
 }
 
-function pestanaHistorial(p, ctx) {
+export function pestanaHistorial(p, ctx) {
   const { valor, error } = ctx.datos.historial;
   if (error) return estadoDeError(error, ctx.repintar);
   if (!valor.consultas.length) {
@@ -139,7 +139,7 @@ function pestanaHistorial(p, ctx) {
   return h('div', { class: 'pila' }, lista, zonaMas);
 }
 
-function pestanaCitas(p, ctx) {
+export function pestanaCitas(p, ctx) {
   const { valor, error } = ctx.datos.citas;
   if (error) return estadoDeError(error, ctx.repintar);
   if (!valor.length) {

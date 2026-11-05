@@ -19,7 +19,7 @@ const pie = (cancelar, texto) => {
 };
 
 /* ---------- Filas repetibles ---------- */
-function filaDiagnostico() {
+export function filaDiagnostico() {
   const descripcion = entrada(nuevoId('dx'), { maxlength: 500, placeholder: 'Descripción' });
   const codigo = entrada(nuevoId('dx-c'), { maxlength: 20, placeholder: 'p. ej. K02.1' });
   const sistema = entrada(nuevoId('dx-s'), { maxlength: 20, placeholder: 'CIE-10' });
@@ -39,7 +39,7 @@ function filaTratamiento() {
   };
 }
 
-function filaReceta() {
+export function filaReceta() {
   const medicamento = entrada(nuevoId('rx-m'), { maxlength: 200 });
   const dosis = entrada(nuevoId('rx-d'), { maxlength: 200 });
   const frecuencia = entrada(nuevoId('rx-f'), { maxlength: 200 });

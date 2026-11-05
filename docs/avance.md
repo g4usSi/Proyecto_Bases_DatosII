@@ -1,4 +1,4 @@
-# Avance de la Entrega II (estimado al 31 de octubre de 2026)
+# Avance de la Entrega II (estimado al 4 de noviembre de 2026)
 
 Estimación del equipo contra los "Resultados esperados" del PDF. Los pesos son
 propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
@@ -8,9 +8,9 @@ propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
 | Parte | Avance |
 | --- | --- |
 | Backend (API + motores) | **≈ 98 %** |
-| Frontend (cliente) | **0 %**: tecnología decidida (HTML/JS en FastAPI) y mockup listo; cliente sin construir |
+| Frontend (cliente) | **≈ 95 %**: acceso, administración y pantallas clínicas de las cuatro instituciones |
 | Documento comparativo | **≈ 30 %**: el material está repartido en `docs/`, sin redactar |
-| Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 52 %** |
+| Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 84 %** |
 
 ## Backend
 
@@ -38,15 +38,27 @@ La Clínica Odontológica quedó completa frente al mockup y probada contra Fire
 concurrencia incluida ([contrato](contrato_clinica_odontologica.md)). Lo que falta del backend:
 probar el arranque con Docker. Detalle en [documentacion-backend.md](../documentacion-backend.md).
 
-## Frontend (pendiente completo)
+## Frontend
 
-Decisión: HTML/JS sencillo servido por FastAPI. Mockup en `referencia/`; plan, pantallas por
-rol y odontograma en [frontend.md](frontend.md).
+HTML/JS sencillo servido por FastAPI en `/app/`, sin compilación. Detalle por institución en
+[frontend.md](frontend.md).
 
-Lo que pide el PDF: un cliente que permita iniciar sesión, ver toda la información de forma
-ordenada **sin que la interfaz cambie según el motor**, registrar pacientes, agregar consultas,
-diagnósticos, tratamientos y recetas, y archivar historiales. Para la clínica también
-hacen falta la agenda de citas y el odontograma. La API ya expone todo esto en `/docs`.
+| Módulo | Estado |
+| --- | --- |
+| Acceso, cambio de contraseña y administración (superusuario y por institución) | ✅ |
+| Clínica Odontológica: pacientes, historial, agenda, odontograma, secretaria | ✅ |
+| Centro Pediátrico: pacientes, crecimiento, vacunación, tutores, agenda, facturación | ✅ |
+| Hospital General: inicio, pacientes, emergencias, camas, ingresos, atenciones, agenda, pagos | ✅ |
+| Laboratorio Clínico: tablero de órdenes, muestras, resultados, validación, catálogo | ✅ |
+
+Lo que pide el PDF (iniciar sesión, ver la información ordenada **sin que la interfaz cambie
+según el motor**, registrar pacientes, consultas con diagnósticos, tratamientos y recetas, y
+archivar historiales) está cubierto en las cuatro instituciones: registro, ficha, historial y
+consultas son las mismas pantallas para todos los motores.
+
+El Hospital y el Laboratorio se recorrieron completos contra el backend real en Docker (ingreso,
+cobro, alta y limpieza de cama; orden, muestra, resultados, validación y cancelación). Falta
+una revisión visual final en móvil con datos reales y la prueba de arranque desde cero.
 
 ## Documento comparativo (pendiente de redactar)
 

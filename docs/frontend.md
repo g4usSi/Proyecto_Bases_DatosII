@@ -1,13 +1,30 @@
 # Frontend: decisión y plan de trabajo
 
-Estado (3 de noviembre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
+Estado (4 de noviembre de 2026): **la interfaz existe en `app/presentation/web/`** y se sirve en
 `/app/` desde la misma API, sin Node ni compilación. Incluye acceso, cambio obligatorio de
-contraseña, la administración completa (superusuario y administrador de cada entidad) y, en
-esta versión, las pantallas de la Clínica Odontológica y del Centro Pediátrico
-(`js/modulos/clinica.js` y `js/modulos/pediatrico.js`). Las
-de las demás instituciones se agregan como módulos en su rama. El mockup sigue
-siendo la referencia visual: `docs/referencia/Historiales identidad visual.html`. Los contratos
-están en [la guía del frontend](api_frontend_hospital_laboratorio.md). El plan que sigue es histórico.
+contraseña, la administración completa (superusuario y administrador de cada entidad) y las
+pantallas de las cuatro instituciones: Clínica Odontológica, Centro Pediátrico, Hospital General
+y Laboratorio Clínico (`js/modulos/clinica.js`, `pediatrico.js`, `hospital.js` y
+`laboratorio.js`). El mockup sigue siendo la referencia visual:
+`docs/referencia/Historiales identidad visual.html`. Los contratos están en
+[la guía del frontend](api_frontend_hospital_laboratorio.md). El plan que sigue es histórico.
+
+## Hospital General
+
+Inicio (ocupación, emergencias, citas de hoy, disponibilidad por área y cobros), pacientes con
+ficha (grupo sanguíneo, ingreso en curso, historial, citas y atenciones), emergencias, mapa de
+camas por área y habitación, ingresos (diagnósticos, órdenes médicas y alta), atenciones con su
+recorrido, agenda y pagos (cobros, cargos del catálogo de servicios, pagos y anulaciones).
+Las pantallas están en `js/vistas/hospital/`; registro de pacientes, agenda, consultas y citas
+reutilizan las de la clínica.
+
+## Laboratorio Clínico
+
+Tablero de órdenes por estado, detalle de la orden (muestras, resultados por prueba con lectura
+bajo/normal/alto, validación y cancelación), catálogo de pruebas con sus versiones y ficha del
+paciente con sus órdenes. El laboratorista ve órdenes y resultados sin acceso al historial
+clínico; el médico solicita la orden desde una consulta. Las pantallas están en
+`js/vistas/laboratorio/`. El buscador de pacientes es común (`js/vistas/compartido/`).
 
 ## Centro Pediátrico
 

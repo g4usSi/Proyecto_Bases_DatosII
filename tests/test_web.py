@@ -1,5 +1,6 @@
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -58,8 +59,10 @@ def test_todo_icono_usado_existe_en_el_sprite() -> None:
     usados: set[str] = set()
     for archivo in (DIRECTORIO / "js").rglob("*.js"):
         contenido = archivo.read_text(encoding="utf-8")
-        usados |= set(re.findall(r"""ic\('([a-z0-9-]+)'""", contenido))
-        usados |= set(re.findall(r"""chip\('[a-z]*', '([a-z0-9-]+)'""", contenido))
+        usados |= set(re.findall(r"""\bic\('([a-z0-9-]+)'""", contenido))
+        usados |= set(re.findall(r"""\bchip\('[a-z]*', '([a-z0-9-]+)'""", contenido))
+        # Catalogos de estados y menus: { icono: 'x' }.
+        usados |= set(re.findall(r"""\bicono: '([a-z0-9-]+)'""", contenido))
     assert usados - definidos == set()
 
 
@@ -69,7 +72,7 @@ def test_las_pantallas_de_la_clinica_se_cargan_y_respetan_la_csp() -> None:
     assert 'href="css/clinica.css"' in (DIRECTORIO / "index.html").read_text(encoding="utf-8")
     for archivo in (DIRECTORIO / "js/vistas/clinica").rglob("*.js"):
         # style-src 'self' bloquea el atributo style; `estilo` usa el CSSOM, que si se permite.
-        assert not re.search(r"style:", archivo.read_text(encoding="utf-8")), archivo
+        assert not re.search(r"\bstyle:", archivo.read_text(encoding="utf-8")), archivo
 
 
 def test_las_rutas_de_los_modulos_importados_existen() -> None:
@@ -86,6 +89,20 @@ def test_las_pantallas_pediatricas_se_cargan_y_respetan_la_csp() -> None:
     assert 'href="css/pediatrico.css"' in (DIRECTORIO / "index.html").read_text(encoding="utf-8")
     for archivo in (DIRECTORIO / "js/vistas/pediatrico").rglob("*.js"):
         # style-src 'self' bloquea el atributo style; `estilo` usa el CSSOM, que si se permite.
+        assert not re.search(r"style:", archivo.read_text(encoding="utf-8")), archivo
+
+
+@pytest.mark.parametrize(
+    ("modulo", "hoja", "carpeta"),
+    [("hospital", "hospital", "hospital"), ("laboratorio", "laboratorio", "laboratorio")],
+)
+def test_hospital_y_laboratorio_se_cargan_y_respetan_la_csp(modulo, hoja, carpeta) -> None:
+    principal = (DIRECTORIO / "js/main.js").read_text(encoding="utf-8")
+    assert f"./modulos/{modulo}.js" in principal
+    assert f'href="css/{hoja}.css"' in (DIRECTORIO / "index.html").read_text(encoding="utf-8")
+    archivos = list((DIRECTORIO / f"js/vistas/{carpeta}").rglob("*.js"))
+    assert archivos
+    for archivo in [*archivos, *(DIRECTORIO / "js/vistas/compartido").rglob("*.js")]:
         assert not re.search(r"style:", archivo.read_text(encoding="utf-8")), archivo
 
 

@@ -13,7 +13,7 @@ function inicioSugerido() {
   return `${dia}T09:00`;
 }
 
-function selectorDePaciente() {
+export function selectorDePaciente() {
   let elegido = null;
   let turno = 0;
   const resultados = h('div', { class: 'pila-s' });

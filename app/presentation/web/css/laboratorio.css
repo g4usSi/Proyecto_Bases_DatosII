@@ -1,0 +1,12 @@
+/* Laboratorio Clinico: ordenes, pruebas y resultados. */
+.prueba-orden { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line, #ccc); border-radius: 10px; }
+.prueba-orden tr.fuera-alto td { background: var(--crit-tint); }
+.prueba-orden tr.fuera-bajo td { background: var(--warn-tint); }
+.avance { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+.avance .medida { flex: 1; }
+.lista-pruebas { border: 0; padding: 0; margin: 0; }
+.opcion-prueba { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 8px; border: 1px solid var(--line, #ccc); border-radius: 10px; cursor: pointer; }
+.opcion-prueba input { margin-top: 4px; }
+.opcion-prueba:has(input:checked) { border-color: var(--accent, #A75FF1); }
+/* En el panel lateral (grid) las tablas anchas se desplazan dentro de su caja, no el panel entero. */
+.lateral-int > .cuerpo > section, .prueba-orden { min-width: 0; }

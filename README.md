@@ -11,9 +11,8 @@ pacientes e historiales en su propio motor.
 | Laboratorio Clínico | MongoDB 8 | Órdenes, muestras, resultados y validación. |
 | Clínica Odontológica | Cloud Firestore | Consultas, citas, odontograma y funciones de secretaria. |
 
-El frontend incluye acceso, administración general, administración institucional y
-pantallas de odontología y pediatría. Las operaciones clínicas de las otras instituciones están
-disponibles en la API y en `/docs`.
+El frontend incluye acceso, administración general, administración institucional y las
+pantallas clínicas de las cuatro instituciones: odontología, pediatría, hospital y laboratorio.
 
 ## Requisitos
 
@@ -85,6 +84,26 @@ las cuentas de médicos, odontólogos y demás personal.
 `HISTORIALES_CUENTAS_DEMO=false` desactiva la creación y la impresión al arrancar la API.
 El initdb de Docker y la migración `017` crean las cuentas demo por separado.
 
+## Datos de demostración del Hospital y del Laboratorio
+
+Las bases se inicializan vacías. Para probar las pantallas clínicas, cargar una vez la
+estructura del hospital (áreas, habitaciones, camas, servicios y tarifas) y el catálogo de
+pruebas del laboratorio:
+
+```powershell
+docker compose cp database/ejemplos/hospital_demo.sql postgres:/tmp/hospital_demo.sql
+docker compose exec postgres psql -U historiales_admin -d hospital_general -f /tmp/hospital_demo.sql
+.\.venv\Scripts\python.exe -m scripts.cargar_catalogos laboratorio database/ejemplos/catalogo_laboratorio_demo.json
+```
+
+Ambos comandos se pueden repetir sin duplicar datos. Son datos de demostración: el hospital y
+el laboratorio reales deben cargar su propia estructura, precios y rangos de referencia.
+
+Después, con el administrador de cada institución, crear el personal clínico en
+**Usuarios y accesos**: un médico en el Hospital General y un laboratorista (y un médico, que
+solicita las órdenes) en el Laboratorio Clínico. Cada cuenta nueva cambia su contraseña al
+primer ingreso.
+
 ## Iniciar y detener
 
 ```powershell
@@ -101,6 +120,14 @@ docker compose --profile api stop
 
 Conservar `.env` y los volúmenes existentes para mantener las credenciales y los datos.
 No usar `docker compose down -v` para actualizar: elimina las bases locales.
+
+Si se mueve la carpeta del proyecto, los contenedores existentes siguen apuntando a la ruta
+anterior y no arrancan (`error mounting ... /run/desktop/mnt/host/...`). Recrearlos desde la
+carpeta nueva; los datos están en volúmenes y se conservan:
+
+```powershell
+docker compose --profile api up -d --build --force-recreate
+```
 
 ## Migraciones en bases existentes
 

@@ -1,0 +1,37 @@
+/* Hospital General: camas, emergencias, pulsera y barras de estado. */
+[data-tema="hospital"] .mosaico, [data-tema="laboratorio"] .mosaico { background: var(--surface-2, transparent); }
+.mosaico.crit { background: var(--crit-tint); color: var(--crit-ink); border-color: var(--crit-line); }
+.mosaico.info { border-color: var(--accent, currentColor); }
+button.mosaico { text-align: left; cursor: pointer; font: inherit; }
+.grupo-sangre { display: inline-flex; flex-direction: column; align-items: center; padding: 4px 10px; border-radius: 8px; background: var(--crit-tint); color: var(--crit-ink); border: 1px solid var(--crit-line); }
+.grupo-sangre.sin-dato { background: transparent; color: var(--text-2); border-style: dashed; }
+.boton-grupo { background: none; border: 0; padding: 0; cursor: pointer; min-height: 44px; }
+.habitaciones { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.habitacion-nombre { display: block; margin-bottom: 6px; color: var(--text-2); }
+.camas { display: flex; flex-wrap: wrap; gap: 8px; }
+.cama { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 96px; min-height: 44px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line, #ccc); background: var(--surface, #fff); color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.cama.disponible { background: var(--ok-tint); border-color: var(--ok-line); }
+.cama.limpieza { background: var(--warn-tint); border-color: var(--warn-line); }
+.cama.mantenimiento { opacity: .75; border-style: dashed; }
+.cama-cod { display: inline-flex; gap: 4px; align-items: center; font-weight: 600; }
+.cama-est, .cama-ocupa { color: var(--text-2); }
+.emergencias { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.emergencia { display: flex; gap: 12px; padding: 14px; border-radius: 12px; border: 1px solid var(--line, #ccc); background: var(--surface, #fff); }
+.emergencia.larga { border-color: var(--warn-line); }
+.emergencia-cama, .emergencia-cama-chica { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 56px; padding: 6px; border-radius: 8px; background: var(--crit-tint); color: var(--crit-ink); }
+.emergencia-datos { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.emergencia-nombre { font-weight: 600; }
+.fila-datos { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.texto-aviso { color: var(--warn-ink); font-weight: 600; }
+.fila-emergencia { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line, #ccc); border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.barra-estados { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line, #ddd); }
+.barra-estados i, .leyenda-estados i { display: inline-block; }
+.leyenda-estados { display: flex; flex-wrap: wrap; gap: 12px; font-size: .875rem; }
+.leyenda-estados i { width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.barra-estados .disponible, .leyenda-estados .disponible { background: var(--ok); }
+.barra-estados .ocupada, .leyenda-estados .ocupada { background: var(--accent, #0068FF); }
+.barra-estados .limpieza, .leyenda-estados .limpieza { background: var(--warn); }
+.barra-estados .mantenimiento, .leyenda-estados .mantenimiento { background: var(--text-2); }
+.orden-medica { padding: 10px; border: 1px solid var(--line, #ccc); border-radius: 10px; }
+.bloque { display: block; }
+.filtros > select.in { width: auto; min-width: 200px; }

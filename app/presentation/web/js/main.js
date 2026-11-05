@@ -8,6 +8,8 @@ import { moduloDe } from './modulos/registro.js';
 import './modulos/admin.js';
 import './modulos/clinica.js';
 import './modulos/pediatrico.js';
+import './modulos/hospital.js';
+import './modulos/laboratorio.js';
 import { vistaCambioObligatorio, vistaLogin } from './vistas/acceso.js';
 import { chipDeSesion, marco, temaDe } from './vistas/marco.js';
 
