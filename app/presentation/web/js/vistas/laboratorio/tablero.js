@@ -27,7 +27,7 @@ function avance(o) {
 const filaOrden = (o, repintar) => {
   const abrir = () => abrirOrden(o.id_paciente, o.id_orden, { nombrePaciente: o.nombre_paciente, alCambiar: repintar });
   return h('tr', { class: 'clic', onclick: abrir },
-    h('td', null, h('button', { class: 'enlace num', type: 'button', text: o.numero_orden, onclick: (e) => { e.stopPropagation(); abrir(); } })),
+    h('td', null, h('button', { class: 'enlace num sin-corte', type: 'button', text: o.numero_orden, onclick: (e) => { e.stopPropagation(); abrir(); } })),
     h('td', { class: 'ajustar' }, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(o.id_paciente)}`, { origen: 'ordenes' }), text: o.nombre_paciente, onclick: (e) => e.stopPropagation() })),
     h('td', { class: 'ajustar' }, h('div', { class: 'etiquetas' }, o.pruebas.map((p) => h('span', { class: `chip ${p.con_resultados ? 'ok' : ''}`, text: p.nombre })))),
     h('td', null, avance(o)),

@@ -7,10 +7,10 @@ propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
 
 | Parte | Avance |
 | --- | --- |
-| Backend (API + motores) | **≈ 98 %** |
-| Frontend (cliente) | **≈ 95 %**: acceso, administración y pantallas clínicas de las cuatro instituciones |
+| Backend (API + motores) | **≈ 99 %** |
+| Frontend (cliente) | **≈ 98 %**: acceso, administración y pantallas clínicas de las cuatro instituciones |
 | Documento comparativo | **≈ 30 %**: el material está repartido en `docs/`, sin redactar |
-| Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 84 %** |
+| Entrega II completa (backend 50 %, frontend 30 %, documento 20 %) | **≈ 85 %** |
 
 ## Backend
 
@@ -20,7 +20,7 @@ propios, no de la rúbrica; actualizar esta tabla cuando cambie el estado.
 | Modelo por motor (20 %) | 85 % | Firestore 100 %. MySQL y MongoDB 90 %. PostgreSQL 70 % (reglas pendientes del SQL original: pagos, camas, cita/atención). |
 | Operaciones comunes en 4 motores (40 %) | 100 % | 20 de 20 (5 operaciones × 4 motores) más búsqueda por nombre. Citas y odontograma solo en Firestore (extra de la clínica). |
 | Consistencia demostrada (10 %) | 85 % | Pruebas de concurrencia (dos bajas, consulta vs. baja) en PostgreSQL, MySQL, MongoDB y Firestore. MongoDB: sin transacciones (servidor único); queda una ventana de milisegundos documentada. |
-| Pruebas (10 %) | 85 % | Unitarias de todas las rutas. Integración real por motor (datos sintéticos, cuenta limitada de la API, flujo completo con login). Faltan pruebas en contenedores nuevos desde cero (Docker). |
+| Pruebas (10 %) | 95 % | Unitarias de todas las rutas. Integración real por motor (datos sintéticos, cuenta limitada de la API, flujo completo con login). Arranque desde cero en Docker comprobado el 4 de noviembre (volúmenes nuevos, migraciones, cuentas demo y flujo de hospital y laboratorio). |
 
 Operaciones por motor (✅ hecho, — pendiente):
 
@@ -35,8 +35,8 @@ Se agregó desde entonces: adendas, corrección de datos y alergias, citas en lo
 motores, pediatría (crecimiento y vacunación), laboratorio (órdenes, resultados,
 validación), integridad del hospital (PostgreSQL `010`), auditoría y `/health/ready`.
 La Clínica Odontológica quedó completa frente al mockup y probada contra Firestore real,
-concurrencia incluida ([contrato](contrato_clinica_odontologica.md)). Lo que falta del backend:
-probar el arranque con Docker. Detalle en [documentacion-backend.md](../documentacion-backend.md).
+concurrencia incluida ([contrato](contrato_clinica_odontologica.md)). El arranque desde
+cero con Docker ya se comprobó. Detalle en [documentacion-backend.md](../documentacion-backend.md).
 
 ## Frontend
 
@@ -57,8 +57,9 @@ archivar historiales) está cubierto en las cuatro instituciones: registro, fich
 consultas son las mismas pantallas para todos los motores.
 
 El Hospital y el Laboratorio se recorrieron completos contra el backend real en Docker (ingreso,
-cobro, alta y limpieza de cama; orden, muestra, resultados, validación y cancelación). Falta
-una revisión visual final en móvil con datos reales y la prueba de arranque desde cero.
+cobro, alta y limpieza de cama; orden, muestra, resultados, validación y cancelación) y se
+revisaron en móvil (390 px) sin desplazamiento horizontal. Lo que queda es el documento
+comparativo.
 
 ## Documento comparativo (pendiente de redactar)
 

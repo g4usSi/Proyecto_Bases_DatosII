@@ -120,7 +120,8 @@ function nodoPrueba(orden, prueba, alGuardar) {
   return h('article', { class: 'prueba-orden' },
     h('header', { class: 'fila' },
       h('b', { text: prueba.nombre }), h('span', { class: 'hint codigo', text: `${prueba.codigo} · v${prueba.version}` }),
-      con ? chip('ok', 'circle-check', 'Con resultados') : chip('aviso', 'hourglass', 'Pendiente'),
+      con ? chip('ok', 'circle-check', 'Con resultados')
+        : (estaAbierta(orden) ? chip('aviso', 'hourglass', 'Pendiente') : chip('', 'ban', 'Sin resultados')),
       editable && h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirResultados(orden, prueba, alGuardar) },
         ic('pencil', 14), con ? 'Corregir resultados' : 'Registrar resultados')),
     con

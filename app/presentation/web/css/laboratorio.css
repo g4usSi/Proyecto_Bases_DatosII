@@ -10,3 +10,4 @@
 .opcion-prueba:has(input:checked) { border-color: var(--accent, #A75FF1); }
 /* En el panel lateral (grid) las tablas anchas se desplazan dentro de su caja, no el panel entero. */
 .lateral-int > .cuerpo > section, .prueba-orden { min-width: 0; }
+.sin-corte { white-space: nowrap; }
