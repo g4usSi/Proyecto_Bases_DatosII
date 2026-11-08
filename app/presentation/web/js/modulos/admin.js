@@ -4,6 +4,7 @@ import { vistaResumen } from '../vistas/admin/resumen.js';
 import { vistaUsuarios } from '../vistas/admin/usuarios.js';
 import { vistaBitacora } from '../vistas/admin/bitacora.js';
 import { vistaCobros } from '../vistas/admin/cobros.js';
+import { vistaCatalogoVacunas } from '../vistas/pediatrico/vacunacion.js';
 
 const tiene = (usuario, permiso) => usuario.permisos.includes(permiso);
 
@@ -23,6 +24,10 @@ registrarModulo({
         { titulo: 'Centro Pediátrico', items: [{ ruta: 'cobros/centro_pediatrico', vista: 'cobros', icono: 'receipt', texto: 'Facturación' }] },
       );
     }
+    /* El catalogo de vacunas no es un dato clinico: lo mantiene el administrador del centro. */
+    if (usuario.institucion === 'centro_pediatrico' && tiene(usuario, 'profesionales:administrar')) {
+      grupos.push({ titulo: 'Catálogos', items: [{ ruta: 'vacunas', icono: 'syringe', texto: 'Catálogo de vacunas' }] });
+    }
     return grupos;
   },
   vistas: {
@@ -30,5 +35,6 @@ registrarModulo({
     usuarios: vistaUsuarios,
     bitacora: vistaBitacora,
     cobros: vistaCobros,
+    vacunas: vistaCatalogoVacunas,
   },
 });
