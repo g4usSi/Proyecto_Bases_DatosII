@@ -5,6 +5,7 @@ import { enlace, irA } from '../../enrutador.js';
 import { fEdad, fFechaCivil, fFechaCorta, fFechaHora, fHora, nombreDe } from '../../formato.js';
 import { h, ic } from '../../ui/dom.js';
 import { aviso, cargando, chip, estadoDeError, vacio } from '../../ui/componentes.js';
+import { accionesFicha, indicadorFicha, resumenFicha } from '../compartido/ficha.js';
 import { cargarProfesionales, chipCita, claseCita, estaPorAtender, nombreProfesional } from './comun.js';
 import { abrirAdenda, abrirAlergias, abrirArchivar, abrirConsulta, abrirEditar } from './formularios.js';
 import { abrirCita } from './agendar.js';
@@ -51,7 +52,7 @@ function indicadores(p, datos) {
       ? ['aviso', 'triangle-alert', 'Requieren atención', `${atencion.length}: ${atencion.join(', ')}`]
       : ['ok', 'circle-check', 'Requieren atención', 'Ninguna']);
   }
-  return lista.map(([clase, icono, titulo, valor]) => h('div', { class: `mosaico ${clase}` }, ic(icono, 20), h('div', null, h('small', { text: titulo }), h('b', { text: valor }))));
+  return lista.map((dato) => indicadorFicha(...dato));
 }
 
 export function pestanaResumen(p, ctx) {
@@ -223,8 +224,8 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
       else irA(ruta('historial'), { q });
     },
   };
-  const mosaicos = h('div', { class: 'mosaicos' }, indicadores(paciente, datos));
-  const repintarIndicadores = () => mosaicos.replaceChildren(...indicadores(paciente, datos));
+  const resumen = resumenFicha(indicadores(paciente, datos));
+  const repintarIndicadores = () => resumen.querySelector('dl').replaceChildren(...indicadores(paciente, datos));
   const contenido = {
     resumen: pestanaResumen,
     historial: pestanaHistorial,
@@ -239,9 +240,8 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
       h('div', { class: 'ficha-titulo' },
         h('div', { class: 'ficha-nombre' }, h('span', { class: 'avatar', 'aria-hidden': 'true', text: iniciales(paciente) }),
           h('div', null, h('h2', { text: nombreDe(paciente) }),
-            h('p', { class: 'hint', text: paciente.fecha_nacimiento ? `Nació el ${fFechaCivil(paciente.fecha_nacimiento)}` : 'Sin fecha de nacimiento' }))),
-        h('div', { class: 'fila' }, acciones(paciente, ctx))),
-      mosaicos),
+            h('p', { class: 'hint', text: paciente.fecha_nacimiento ? `Nació el ${fFechaCivil(paciente.fecha_nacimiento)}` : 'Sin fecha de nacimiento' })))),
+      resumen, accionesFicha(acciones(paciente, ctx))),
     h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Secciones de la ficha' }, pestanas.map(([k, icono, texto]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': k === actual ? 'true' : 'false', onclick: () => irA(ruta(k), { q, origen }),
     }, ic(icono, 16), texto))),

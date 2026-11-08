@@ -1,5 +1,6 @@
 /* Usuarios y accesos. Alcance: el superusuario todas las entidades; el administrador, la suya. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
 import {
   ENTIDADES, ESTADOS_CUENTA, PERMISOS, PERMISOS_ASIGNABLES, PERMISOS_SUGERIDOS, ROLES_POR_ENTIDAD,
@@ -310,19 +311,20 @@ export function abrirUsuario(persona, { personal, alCambiar }) {
   }, ic('key-round', 16), 'Restablecer contraseña');
 
   const panel = lateral(nombreDe(persona), [
-    h('div', { class: 'fila' }, chipEstado(persona.estado), persona.debe_cambiar_contrasena && persona.estado === 'activa' && chip('aviso', 'key-round', 'Debe cambiar su contraseña')),
+    bloqueDatos('Datos de la cuenta',
+      h('div', { class: 'fila' }, chipEstado(persona.estado), persona.debe_cambiar_contrasena && persona.estado === 'activa' && chip('aviso', 'key-round', 'Debe cambiar su contraseña')),
+      h('dl', { class: 'lista-datos' },
+        h('dt', { text: 'Correo' }), h('dd', { text: persona.correo }),
+        h('dt', { text: 'Entidad' }), h('dd', { text: inst.nombre }),
+        h('dt', { text: 'Rol' }), h('dd', { text: textoRol(persona.rol) }),
+        h('dt', { text: 'Alta' }), h('dd', { text: fFecha(persona.creado_en) }))),
     zona,
-    h('dl', { class: 'lista-datos' },
-      h('dt', { text: 'Correo' }), h('dd', { text: persona.correo }),
-      h('dt', { text: 'Entidad' }), h('dd', { text: inst.nombre }),
-      h('dt', { text: 'Rol' }), h('dd', { text: textoRol(persona.rol) }),
-      h('dt', { text: 'Alta' }), h('dd', { text: fFecha(persona.creado_en) })),
     h('div', { class: 'dos' }, cN, cA),
     conArea && cAr,
     h('fieldset', null, h('legend', { class: 'leyenda', text: 'Permisos' }), permisos),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Contraseña' }), h('div', null, restablecer), h('p', { class: 'hint', text: 'Genera una nueva y la muestra una sola vez.' })),
     h('p', { class: 'hint', text: 'La entidad no se cambia: para que alguien trabaje en otra, se crea una cuenta nueva en esa entidad.' }),
-  ], acciones);
+  ], accionesFicha(acciones));
   return panel;
 }
 

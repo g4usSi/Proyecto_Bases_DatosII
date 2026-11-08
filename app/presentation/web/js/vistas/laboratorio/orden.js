@@ -1,6 +1,7 @@
 /* Orden de laboratorio: muestras, resultados por prueba, validacion y cancelacion.
    Una orden validada o cancelada ya no se modifica; el servidor lo vuelve a comprobar. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
 import { enlace } from '../../enrutador.js';
 import { fFechaHora } from '../../formato.js';
@@ -121,9 +122,7 @@ function nodoPrueba(orden, prueba, alGuardar) {
     h('header', { class: 'fila' },
       h('b', { text: prueba.nombre }), h('span', { class: 'hint codigo', text: `${prueba.codigo} · v${prueba.version}` }),
       con ? chip('ok', 'circle-check', 'Con resultados')
-        : (estaAbierta(orden) ? chip('aviso', 'hourglass', 'Pendiente') : chip('', 'ban', 'Sin resultados')),
-      editable && h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirResultados(orden, prueba, alGuardar) },
-        ic('pencil', 14), con ? 'Corregir resultados' : 'Registrar resultados')),
+        : (estaAbierta(orden) ? chip('aviso', 'hourglass', 'Pendiente') : chip('', 'ban', 'Sin resultados'))),
     con
       ? tabla(['Parámetro', 'Resultado', 'Lectura', 'Referencia'], prueba.resultados.map((r) => h('tr', { class: r.interpretacion && r.interpretacion !== 'normal' ? `fuera-${r.interpretacion}` : '' },
         h('td', { class: 'ajustar', text: r.nombre }),
@@ -133,7 +132,9 @@ function nodoPrueba(orden, prueba, alGuardar) {
       : h('ul', { class: 'lista-simple' }, prueba.parametros.map((param) => h('li', null, param.nombre,
         h('span', { class: 'hint', text: ` · ref. ${textoReferencia(param.referencia, param.unidad)}` })))),
     prueba.observaciones && h('p', { class: 'con-saltos hint', text: prueba.observaciones }),
-    prueba.registrado_en && h('small', { class: 'hint', text: `Registrado el ${fFechaHora(prueba.registrado_en)}` }));
+    prueba.registrado_en && h('small', { class: 'hint', text: `Registrado el ${fFechaHora(prueba.registrado_en)}` }),
+    editable && accionesFicha([h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirResultados(orden, prueba, alGuardar) },
+      ic('pencil', 14), con ? 'Corregir resultados' : 'Registrar resultados')]));
 }
 
 function contenidoOrden(orden, { nombrePaciente, alGuardar, panel }) {
@@ -163,16 +164,17 @@ function contenidoOrden(orden, { nombrePaciente, alGuardar, panel }) {
   }
 
   return [
-    h('div', { class: 'fila' }, chipOrden(orden.estado), h('b', { class: 'num', text: orden.numero_orden })),
+    bloqueDatos('Datos de la orden',
+      h('div', { class: 'fila' }, chipOrden(orden.estado), h('b', { class: 'num', text: orden.numero_orden })),
+      h('dl', { class: 'lista-datos' },
+        nombrePaciente && [h('dt', { text: 'Paciente' }), h('dd', null, h('a', {
+          class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(orden.id_paciente)}`, { origen: 'ordenes' }), text: nombrePaciente, onclick: () => panel.cerrar(),
+        }))],
+        h('dt', { text: 'Solicitada' }), h('dd', { text: fFechaHora(orden.solicitada_en) }),
+        orden.validada_en && [h('dt', { text: 'Validada' }), h('dd', { text: fFechaHora(orden.validada_en) })])),
     orden.motivo_cancelacion && aviso('', 'ban', h('b', { text: 'Cancelada: ' }), orden.motivo_cancelacion),
     abierta && !completas && sesion.tiene('laboratorio:validar') && h('p', { class: 'hint', text: 'Podrás validarla cuando cada prueba tenga resultados.' }),
-    h('dl', { class: 'lista-datos' },
-      nombrePaciente && [h('dt', { text: 'Paciente' }), h('dd', null, h('a', {
-        class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(orden.id_paciente)}`, { origen: 'ordenes' }), text: nombrePaciente, onclick: () => panel.cerrar(),
-      }))],
-      h('dt', { text: 'Solicitada' }), h('dd', { text: fFechaHora(orden.solicitada_en) }),
-      orden.validada_en && [h('dt', { text: 'Validada' }), h('dd', { text: fFechaHora(orden.validada_en) })]),
-    acciones.length > 0 && h('div', { class: 'fila' }, acciones),
+    accionesFicha(acciones),
     h('section', { class: 'pila-s' }, h('h3', { text: `Muestras (${orden.muestras.length})` }),
       orden.muestras.length
         ? h('ul', { class: 'lista-simple' }, orden.muestras.map((m) => h('li', null,

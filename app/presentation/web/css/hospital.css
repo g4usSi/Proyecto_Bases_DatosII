@@ -1,20 +1,46 @@
 /* Hospital General: camas, emergencias, pulsera y barras de estado. */
-[data-tema="hospital"] .mosaico, [data-tema="laboratorio"] .mosaico { background: var(--surface-2, transparent); }
-.mosaico.crit { background: var(--crit-tint); color: var(--crit-ink); border-color: var(--crit-line); }
-.mosaico.info { border-color: var(--accent, currentColor); }
-button.mosaico { text-align: left; cursor: pointer; font: inherit; }
-.grupo-sangre { display: inline-flex; flex-direction: column; align-items: center; padding: 4px 10px; border-radius: 8px; background: var(--crit-tint); color: var(--crit-ink); border: 1px solid var(--crit-line); }
-.grupo-sangre.sin-dato { background: transparent; color: var(--text-2); border-style: dashed; }
-.boton-grupo { background: none; border: 0; padding: 0; cursor: pointer; min-height: 44px; }
-.habitaciones { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.grupo-sangre { display: grid; gap: 2px; padding-inline-start: 10px; border-inline-start: 2px solid var(--border-strong); }
+.grupo-sangre small { color: var(--text-2); font-size: .75rem; }
+.area-camas .papel-cab { flex-wrap: wrap; }
+.habitaciones { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); }
 .habitacion-nombre { display: block; margin-bottom: 6px; color: var(--text-2); }
-.camas { display: flex; flex-wrap: wrap; gap: 8px; }
-.cama { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 96px; min-height: 44px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line, #ccc); background: var(--surface, #fff); color: inherit; font: inherit; cursor: pointer; text-align: left; }
-.cama.disponible { background: var(--ok-tint); border-color: var(--ok-line); }
-.cama.limpieza { background: var(--warn-tint); border-color: var(--warn-line); }
-.cama.mantenimiento { opacity: .75; border-style: dashed; }
-.cama-cod { display: inline-flex; gap: 4px; align-items: center; font-weight: 600; }
-.cama-est, .cama-ocupa { color: var(--text-2); }
+.camas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cama {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; min-height: 72px;
+  padding: 9px; border-radius: var(--r-btn); border: 1px solid var(--border-strong); background: var(--surface);
+  color: inherit; font: inherit; cursor: pointer; text-align: left; overflow-wrap: anywhere;
+}
+.cama.disponible { background: var(--ok-tint); border-color: var(--ok-line); --estado-cama: var(--ok-ink); }
+.cama.limpieza { background: var(--warn-tint); border-color: var(--warn-line); --estado-cama: var(--warn-ink); }
+.cama.mantenimiento { border-style: dashed; }
+.cama.ocupada { background: var(--brand-tint); border-color: var(--brand-line); --estado-cama: var(--brand-ink); }
+.cama.emergencia-activa { background: var(--crit-tint); border-color: var(--crit-line); --estado-cama: var(--crit-ink); }
+.cama-cod { display: flex; gap: 5px; align-items: center; width: 100%; font-weight: 650; }
+.cama-cod > .ic { margin-inline-start: auto; color: var(--text-2); }
+.cama-icono { position: relative; display: grid; place-items: center; flex: none; color: var(--estado-cama, var(--text-2)); }
+.cama-est { color: var(--estado-cama, var(--text-2)); font-weight: 600; line-height: 1.25; }
+.cama-ocupa { color: var(--text-2); font-size: .75rem; }
+@media (hover: hover) and (pointer: fine) {
+  .cama:hover { border-color: var(--estado-cama, var(--text-2)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .emergencia-activa .cama-icono::after {
+    content: ''; position: absolute; inset: -3px; border: 1px solid currentColor;
+    border-radius: 50%; pointer-events: none; animation: pulso-emergencia 250ms var(--ease-out) 2;
+  }
+  @keyframes pulso-emergencia {
+    from { opacity: .75; transform: scale(.95); }
+    to { opacity: 0; transform: scale(1.5); }
+  }
+}
+.emergencia-activa .cama-icono::after { opacity: 0; }
+.cama-cambio {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px;
+  padding: 12px; border-radius: var(--r-in); background: var(--app-bg);
+}
+.cama-cambio dl { display: grid; gap: 4px; flex: 1 1 105px; margin: 0; }
+.cama-cambio dd { margin: 0; }
+.cama-cambio > .ic { color: var(--text-2); }
 .emergencias { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 .emergencia { display: flex; gap: 12px; padding: 14px; border-radius: 12px; border: 1px solid var(--line, #ccc); background: var(--surface, #fff); }
 .emergencia.larga { border-color: var(--warn-line); }

@@ -5,6 +5,7 @@ import { enlace, irA } from '../../enrutador.js';
 import { fFechaCivil, fFechaCorta, fFechaHora, fHora, mesesCumplidos, nombreDe } from '../../formato.js';
 import { h, ic } from '../../ui/dom.js';
 import { aviso, cargando, chip, estadoDeError, vacio } from '../../ui/componentes.js';
+import { accionesFicha, indicadorFicha, resumenFicha } from '../compartido/ficha.js';
 import { cargarProfesionales, chipCita, claseCita, estaPorAtender, nombreProfesional } from './comun.js';
 import { abrirAdenda, abrirAlergias, abrirArchivar, abrirConsulta, abrirEditar } from './formularios.js';
 import { abrirCita } from './agendar.js';
@@ -63,7 +64,7 @@ function indicadores(p, datos) {
     const medida = (valor, unidad) => (valor == null ? '—' : `${valor} ${unidad}`);
     lista.push(['', 'scale', 'Último control', `${medida(ultimoControl.peso_kg, 'kg')} · ${medida(ultimoControl.talla_cm, 'cm')}`]);
   }
-  return lista.map(([clase, icono, titulo, valor]) => h('div', { class: `mosaico ${clase}` }, ic(icono, 20), h('div', null, h('small', { text: titulo }), h('b', { text: valor }))));
+  return lista.map((dato) => indicadorFicha(...dato));
 }
 
 function pestanaResumen(p, ctx) {
@@ -259,9 +260,8 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
         h('div', { class: 'ficha-nombre' },
           paciente.fecha_nacimiento ? burbujasDeEdad(paciente.fecha_nacimiento) : h('span', { class: 'avatar', 'aria-hidden': 'true', text: iniciales(paciente) }),
           h('div', null, h('h2', { text: nombreDe(paciente) }),
-            h('p', { class: 'hint', text: paciente.fecha_nacimiento ? `${textoDeEdad(paciente.fecha_nacimiento)}. Nació el ${fFechaCivil(paciente.fecha_nacimiento)}` : 'Sin fecha de nacimiento' }))),
-        h('div', { class: 'fila' }, acciones(paciente, ctx))),
-      h('div', { class: 'mosaicos' }, indicadores(paciente, datos))),
+            h('p', { class: 'hint', text: paciente.fecha_nacimiento ? `${textoDeEdad(paciente.fecha_nacimiento)}. Nació el ${fFechaCivil(paciente.fecha_nacimiento)}` : 'Sin fecha de nacimiento' })))),
+      resumenFicha(indicadores(paciente, datos)), accionesFicha(acciones(paciente, ctx))),
     h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Secciones de la ficha' }, pestanas.map(([k, icono, texto]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': k === actual ? 'true' : 'false', onclick: () => irA(ruta(k), { q, origen }),
     }, ic(icono, 16), texto))),

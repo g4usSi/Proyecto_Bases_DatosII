@@ -1,5 +1,6 @@
 /* Agendar una cita y cambiar su estado: se usan desde la agenda y desde la ficha. */
 import { api } from '../../api.js';
+import { indicadorFicha, resumenFicha } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
 import { conZona, fFechaHora, nombreDe } from '../../formato.js';
 import { h } from '../../ui/dom.js';
@@ -109,8 +110,11 @@ export function abrirEstadoCita(cita, alGuardar) {
   const zona = h('div');
   const boton = h('button', { class: 'btn', type: 'button', text: 'Guardar' });
   const ventana = modal('Actualizar estado de la cita', h('div', { class: 'pila-s' },
-    h('p', { class: 'muted', text: `${cita.nombre_paciente} · ${fFechaHora(cita.inicio)}` }),
-    h('fieldset', { class: 'pila-s' }, h('legend', { class: 'sr', text: 'Nuevo estado' }),
+    resumenFicha([
+      indicadorFicha('', 'user-round', 'Paciente', cita.nombre_paciente),
+      indicadorFicha('', 'calendar-days', 'Inicio', fFechaHora(cita.inicio)),
+    ], 'Datos de la cita'),
+    h('fieldset', { class: 'pila-s' }, h('legend', { class: 'ficha-etiqueta', text: 'Nuevo estado' }),
       opciones.map(([valor, texto]) => h('label', { class: 'casilla' },
         h('input', {
           type: 'radio', name: 'estado-cita', value: valor, checked: valor === elegido,

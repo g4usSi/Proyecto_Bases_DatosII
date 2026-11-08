@@ -1,6 +1,7 @@
 /* Facturacion: una factura por consulta, a nombre de un tutor. Pagada = saldo cero. En este
    centro una factura no se cierra y un pago no se anula (la API responde 501): no se ofrecen. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { METODOS_PAGO } from '../../catalogos.js';
 import { sesion } from '../../sesion.js';
 import { enlace, reflejar } from '../../enrutador.js';
@@ -72,20 +73,21 @@ function abrirFactura(cobro, alCambiar) {
   const panel = lateral(`Factura ${cobro.id_cobro}`, [
     h('div', { class: 'fila' }, chipFactura(cobro.estado)),
     !registra && aviso('info', 'eye', 'Solo lectura: tu cuenta puede ver las facturas, no registrar cobros.'),
-    h('dl', { class: 'lista-datos' },
-      h('dt', { text: 'Paciente' }), h('dd', null, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(cobro.id_paciente)}/facturas`), text: cobro.nombre_paciente, onclick: () => panel.cerrar() })),
-      h('dt', { text: 'Facturada a' }), h('dd', { text: cobro.facturado_a ? `${cobro.facturado_a.nombre} (tutor)` : 'Sin tutor asignado' }),
-      h('dt', { text: 'Emitida' }), h('dd', { text: fFechaHora(cobro.abierto_en) }),
-      cobro.cerrado_en && [h('dt', { text: 'Anulada' }), h('dd', { text: fFechaHora(cobro.cerrado_en) })],
-      h('dt', { text: 'Consulta' }), h('dd', { class: 'num', text: cobro.id_atencion }),
-      cobro.descripcion && [h('dt', { text: 'Descripción' }), h('dd', { text: cobro.descripcion })]),
+    bloqueDatos('Datos de la factura',
+      h('dl', { class: 'lista-datos' },
+        h('dt', { text: 'Paciente' }), h('dd', null, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(cobro.id_paciente)}/facturas`), text: cobro.nombre_paciente, onclick: () => panel.cerrar() })),
+        h('dt', { text: 'Facturada a' }), h('dd', { text: cobro.facturado_a ? `${cobro.facturado_a.nombre} (tutor)` : 'Sin tutor asignado' }),
+        h('dt', { text: 'Emitida' }), h('dd', { text: fFechaHora(cobro.abierto_en) }),
+        cobro.cerrado_en && [h('dt', { text: 'Anulada' }), h('dd', { text: fFechaHora(cobro.cerrado_en) })],
+        h('dt', { text: 'Consulta' }), h('dd', { class: 'num', text: cobro.id_atencion }),
+        cobro.descripcion && [h('dt', { text: 'Descripción' }), h('dd', { text: cobro.descripcion })])),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Cargos' }), cargos),
     h('dl', { class: 'totales' },
       h('dt', { text: 'Total' }), h('dd', { text: fMoneda(cobro.total) }),
       h('dt', { text: 'Pagado' }), h('dd', { text: fMoneda(cobro.pagado) }),
       h('dt', { class: 'saldo', text: 'Saldo' }), h('dd', { class: 'saldo', text: fMoneda(cobro.saldo) })),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Pagos' }), pagos),
-  ], acciones.length ? acciones : null);
+  ], accionesFicha(acciones));
 }
 
 function abrirCargo(cobro, alGuardar) {

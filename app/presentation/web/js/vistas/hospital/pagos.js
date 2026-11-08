@@ -1,6 +1,7 @@
 /* Pagos del Hospital General: un cobro por atencion, cargos del catalogo de servicios, pagos,
    anulacion de pagos y cierre. Ver montos exige pagos:ver; registrar, pagos:registrar. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { ESTADOS_COBRO, METODOS_PAGO } from '../../catalogos.js';
 import { sesion } from '../../sesion.js';
 import { enlace, reflejar } from '../../enrutador.js';
@@ -97,19 +98,20 @@ export function abrirCobro(cobro, alCambiar) {
   panel = lateral(`Cobro ${cobro.id_cobro}`, [
     h('div', { class: 'fila' }, chipCobro(cobro.estado)),
     !registra && aviso('info', 'eye', 'Solo lectura: tu cuenta puede ver los cobros, no registrar movimientos.'),
-    h('dl', { class: 'lista-datos' },
-      h('dt', { text: 'Paciente' }), h('dd', null, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(cobro.id_paciente)}`, { origen: 'pagos' }), text: cobro.nombre_paciente, onclick: () => panel.cerrar() })),
-      h('dt', { text: 'Atención' }), h('dd', { class: 'num', text: cobro.id_atencion }),
-      h('dt', { text: 'Abierto el' }), h('dd', { text: fFechaHora(cobro.abierto_en) }),
-      cobro.cerrado_en && [h('dt', { text: cobro.estado === 'anulado' ? 'Anulado el' : 'Cerrado el' }), h('dd', { text: fFechaHora(cobro.cerrado_en) })],
-      cobro.descripcion && [h('dt', { text: 'Descripción' }), h('dd', { text: cobro.descripcion })]),
+    bloqueDatos('Datos del cobro',
+      h('dl', { class: 'lista-datos' },
+        h('dt', { text: 'Paciente' }), h('dd', null, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(cobro.id_paciente)}`, { origen: 'pagos' }), text: cobro.nombre_paciente, onclick: () => panel.cerrar() })),
+        h('dt', { text: 'Atención' }), h('dd', { class: 'num', text: cobro.id_atencion }),
+        h('dt', { text: 'Abierto el' }), h('dd', { text: fFechaHora(cobro.abierto_en) }),
+        cobro.cerrado_en && [h('dt', { text: cobro.estado === 'anulado' ? 'Anulado el' : 'Cerrado el' }), h('dd', { text: fFechaHora(cobro.cerrado_en) })],
+        cobro.descripcion && [h('dt', { text: 'Descripción' }), h('dd', { text: cobro.descripcion })])),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Cargos' }), cargos),
     h('dl', { class: 'totales' },
       h('dt', { text: 'Total' }), h('dd', { text: fMoneda(cobro.total) }),
       h('dt', { text: 'Pagado' }), h('dd', { text: fMoneda(cobro.pagado) }),
       h('dt', { class: 'saldo', text: 'Saldo' }), h('dd', { class: 'saldo', text: fMoneda(cobro.saldo) })),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Pagos' }), pagos),
-  ], acciones.length ? acciones : null);
+  ], accionesFicha(acciones));
   return panel;
 }
 

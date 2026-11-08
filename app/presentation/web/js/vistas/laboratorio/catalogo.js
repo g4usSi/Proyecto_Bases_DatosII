@@ -1,6 +1,7 @@
 /* Catalogo de pruebas vigente; cada prueba muestra sus versiones publicadas. Las ordenes guardan
    copia de la version con que se pidieron, asi un cambio de rango no altera resultados viejos. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { h, ic } from '../../ui/dom.js';
 import { cabeza, cargando, chip, entrada, estadoDeError, lateral, tabla, vacio } from '../../ui/componentes.js';
 import { TIPOS_VALOR, textoReferencia } from './comun.js';
@@ -44,11 +45,12 @@ export async function vistaCatalogo({ contenedor, repintar }) {
     const visibles = pruebas.filter((p) => !q || p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q));
     zona.replaceChildren(...(visibles.length
       ? visibles.map((p) => h('article', { class: 'papel pila-s prueba-catalogo' },
-        h('div', { class: 'papel-cab' },
-          h('div', null, h('h3', { text: p.nombre }), h('small', { class: 'hint codigo', text: `${p.codigo} · versión ${p.version}${p.tipo_muestra ? ` · ${p.tipo_muestra}` : ''}` })),
-          h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirVersiones(p) }, ic('history', 14), 'Versiones')),
-        p.indicaciones && h('p', { class: 'hint', text: p.indicaciones }),
-        tablaParametros(p.parametros)))
+        h('h3', { text: p.nombre }),
+        bloqueDatos('Datos de la prueba',
+          h('small', { class: 'hint codigo', text: `${p.codigo} · versión ${p.version}${p.tipo_muestra ? ` · ${p.tipo_muestra}` : ''}` }),
+          p.indicaciones && h('p', { class: 'hint', text: p.indicaciones })),
+        tablaParametros(p.parametros),
+        accionesFicha([h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirVersiones(p) }, ic('history', 14), 'Ver versiones')])))
       : [vacio('flask-conical', 'Sin pruebas', q ? `Ninguna prueba coincide con «${buscar.value.trim()}».` : 'El catálogo está vacío.')]));
   };
   buscar.addEventListener('input', pintar);

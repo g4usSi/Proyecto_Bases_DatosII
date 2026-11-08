@@ -96,6 +96,31 @@ legend { padding: 0; margin-bottom: 8px; }
 
 /* ===== Superficies ===== */
 .papel { padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--papel); box-shadow: var(--sombra-1); }
+
+/* Fichas de pacientes: el resumen se lee como una lista de datos y las acciones tienen su propia fila. */
+.ficha-cab { display: grid; gap: 16px; }
+.ficha-cab > .enlace { justify-self: start; }
+.ficha-titulo { display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: space-between; align-items: center; }
+.ficha-nombre { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.ficha-nombre h2 { overflow-wrap: anywhere; }
+.ficha-resumen { padding: 12px 14px; border-radius: var(--r-in); background: var(--app-bg); }
+.ficha-etiqueta { margin: 0 0 8px; color: var(--text-2); font-size: .75rem; font-weight: 650; }
+.ficha-resumen > .ficha-etiqueta { margin: 0; }
+.ficha-resumen .lista-datos { grid-template-columns: minmax(84px, auto) minmax(0, 1fr); }
+.lateral-int > footer > .ficha-acciones { width: 100%; }
+.lateral-int > footer > .ficha-acciones > .fila { justify-content: flex-end; }
+.mosaicos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(128px, 100%), 1fr)); gap: 10px 16px; margin: 0; }
+.mosaico { min-width: 0; padding: 2px 0 2px 10px; border-inline-start: 2px solid var(--border-strong); }
+.mosaico dt { display: flex; gap: 6px; align-items: center; color: var(--text-2); font-size: .75rem; }
+.mosaico dd { margin: 2px 0 0; font-size: .9375rem; font-weight: 650; overflow-wrap: anywhere; }
+.mosaico.ok { border-color: var(--ok); }
+.mosaico.ok dd { color: var(--ok-ink); }
+.mosaico.aviso { border-color: var(--warn); }
+.mosaico.aviso dd { color: var(--warn-ink); }
+.mosaico.crit { border-color: var(--crit); }
+.mosaico.crit dd { color: var(--crit-ink); }
+.mosaico.info { border-color: var(--brand); }
+.mosaico.info dd { color: var(--brand-ink); }
 .papel-cab { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .lista-datos { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 8px 16px; }
 .lista-datos dt { color: var(--text-2); font-size: 13px; }
@@ -107,6 +132,7 @@ legend { padding: 0; margin-bottom: 8px; }
 .cifra span { color: var(--text-2); font-size: 13px; }
 .cifra b { font-size: 26px; line-height: 1.2; font-weight: 640; letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .cifra.crit b { color: var(--crit-ink); }
+.cifra.info b { color: var(--brand-ink); }
 .cifra.aviso b { color: var(--warn-ink); }
 .cifra small { color: var(--text-2); font-size: 12px; }
 

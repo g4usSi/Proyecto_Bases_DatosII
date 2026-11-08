@@ -1,6 +1,7 @@
 /* Tutores del paciente: el contacto es del tutor y lo comparten sus hermanos; el parentesco,
    ser principal y poder recoger al paciente son del vinculo con este paciente. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
 import { nombreDe } from '../../formato.js';
 import { h, ic } from '../../ui/dom.js';
@@ -50,12 +51,12 @@ export function pestanaTutores(p, ctx) {
       h('div', { class: 'fila' },
         v.es_principal && chip('info', 'badge-check', 'Tutor principal'),
         v.autorizado ? chip('ok', 'check', 'Autorizado para recoger') : chip('', 'ban', 'No autorizado para recoger')),
-      h('dl', { class: 'lista-datos' },
+      bloqueDatos('Datos del tutor', h('dl', { class: 'lista-datos' },
         h('dt', { text: 'Documento' }), h('dd', { text: v.tutor.documento || 'No registrado' }),
         h('dt', { text: 'Teléfono' }), h('dd', { text: v.tutor.telefono || 'No registrado' }),
         h('dt', { text: 'Correo' }), h('dd', { text: v.tutor.correo || 'No registrado' }),
-        h('dt', { text: 'Dirección' }), h('dd', { text: v.tutor.direccion || 'No registrada' })),
-      escribe && h('div', null, h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirCambios(p, v, ctx.repintar) }, ic('pencil', 14), 'Editar'))))));
+        h('dt', { text: 'Dirección' }), h('dd', { text: v.tutor.direccion || 'No registrada' }))),
+      escribe && accionesFicha([h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirCambios(p, v, ctx.repintar) }, ic('pencil', 14), 'Editar tutor')])))));
 }
 
 function abrirVincular(p, tutores, alGuardar) {

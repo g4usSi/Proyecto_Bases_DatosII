@@ -42,5 +42,5 @@ export function duracion(desde, hasta = Date.now()) {
 export const horasDesde = (desde) => (Date.now() - new Date(desde)) / 3600000;
 
 /* La pulsera muestra el grupo sanguineo; sin dato se distingue de un grupo conocido. */
-export const pulsera = (grupo) => h('span', { class: `grupo-sangre ${grupo ? '' : 'sin-dato'}`, title: 'Grupo sanguíneo' },
-  h('b', { text: grupo || '?' }), h('small', { text: grupo ? 'Grupo' : 'Sin dato' }));
+export const pulsera = (grupo) => h('span', { class: 'grupo-sangre' },
+  h('small', { text: 'Grupo sanguíneo' }), h('b', { text: grupo || 'Sin dato' }));

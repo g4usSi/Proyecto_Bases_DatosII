@@ -1,5 +1,6 @@
 /* Ingreso hospitalario: detalle con diagnosticos, ordenes medicas y alta; y el alta de un ingreso nuevo. */
 import { api } from '../../api.js';
+import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
 import { enlace } from '../../enrutador.js';
 import { fFechaHora, nombreDe } from '../../formato.js';
@@ -46,23 +47,24 @@ export async function abrirIngreso(ingreso, { alCambiar } = {}) {
       h('button', { class: 'btn', type: 'button', onclick: () => abrirAlta(ingreso, refrescar) }, ic('door-open', 16), 'Dar de alta'));
   }
   panel = lateral(`Ingreso de ${ingreso.nombre_paciente}`, [
-    h('div', { class: 'fila' }, chipDe(TIPOS_INGRESO, ingreso.tipo),
-      abierto ? chip('aviso', 'clock', `Lleva ${duracion(ingreso.ingreso_en)}`) : chip('ok', 'door-open', 'Dado de alta')),
-    h('dl', { class: 'lista-datos' },
-      h('dt', { text: 'Paciente' }), h('dd', null, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(ingreso.id_paciente)}`), text: ingreso.nombre_paciente, onclick: () => panel.cerrar() })),
-      h('dt', { text: 'Cama' }), h('dd', { text: `${ingreso.cama} · ${ingreso.departamento}` }),
-      h('dt', { text: 'Ingreso' }), h('dd', { text: fFechaHora(ingreso.ingreso_en) }),
-      h('dt', { text: 'Ingresó' }), h('dd', { text: nombreProfesional(profesionales, ingreso.id_profesional) }),
-      h('dt', { text: 'Motivo' }), h('dd', { class: 'con-saltos', text: ingreso.motivo }),
-      !abierto && [h('dt', { text: 'Alta' }), h('dd', { text: fFechaHora(ingreso.alta_en) }),
-        h('dt', { text: 'Motivo del alta' }), h('dd', { class: 'con-saltos', text: ingreso.motivo_alta || '—' })]),
+    bloqueDatos('Datos del ingreso',
+      h('div', { class: 'fila' }, chipDe(TIPOS_INGRESO, ingreso.tipo),
+        abierto ? chip('aviso', 'clock', `Lleva ${duracion(ingreso.ingreso_en)}`) : chip('ok', 'door-open', 'Dado de alta')),
+      h('dl', { class: 'lista-datos' },
+        h('dt', { text: 'Paciente' }), h('dd', null, h('a', { class: 'enlace', href: enlace(`pacientes/${encodeURIComponent(ingreso.id_paciente)}`), text: ingreso.nombre_paciente, onclick: () => panel.cerrar() })),
+        h('dt', { text: 'Cama' }), h('dd', { text: `${ingreso.cama} · ${ingreso.departamento}` }),
+        h('dt', { text: 'Ingreso' }), h('dd', { text: fFechaHora(ingreso.ingreso_en) }),
+        h('dt', { text: 'Ingresó' }), h('dd', { text: nombreProfesional(profesionales, ingreso.id_profesional) }),
+        h('dt', { text: 'Motivo' }), h('dd', { class: 'con-saltos', text: ingreso.motivo }),
+        !abierto && [h('dt', { text: 'Alta' }), h('dd', { text: fFechaHora(ingreso.alta_en) }),
+          h('dt', { text: 'Motivo del alta' }), h('dd', { class: 'con-saltos', text: ingreso.motivo_alta || '—' })])),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Diagnósticos' }), listaDiagnosticos(ingreso.diagnosticos)),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Órdenes médicas' }),
       ingreso.ordenes.length
         ? h('div', { class: 'pila-s' }, [...ingreso.ordenes].sort((a, b) => b.fecha_hora.localeCompare(a.fecha_hora)).map((o) => nodoOrden(o, profesionales)))
         : h('p', { class: 'muted', text: 'Sin órdenes médicas.' })),
     !abierto && aviso('info', 'lock', 'Un ingreso con alta ya no admite diagnósticos ni órdenes nuevas.'),
-  ], acciones.length ? acciones : null);
+  ], accionesFicha(acciones));
   return panel;
 }
 

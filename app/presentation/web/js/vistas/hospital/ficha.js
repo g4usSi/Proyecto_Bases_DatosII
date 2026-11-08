@@ -10,6 +10,7 @@ import { abrirArchivar, abrirConsulta, abrirEditar } from '../clinica/formulario
 import { abrirCita } from '../clinica/agendar.js';
 import { lectura, pestanaCitas, pestanaHistorial, pestanaResumen, proximaCita } from '../clinica/ficha.js';
 import { ORIGENES } from '../compartido/pacientes.js';
+import { accionesFicha, indicadorFicha, resumenFicha } from '../compartido/ficha.js';
 import { chipDe, duracion, GRUPOS_SANGUINEOS, pulsera, rutaPaciente, TIPOS_INGRESO } from './comun.js';
 import { abrirIngreso, abrirNuevoIngreso } from './ingreso.js';
 import { abrirAtencion, chipAtencion } from './atenciones.js';
@@ -32,11 +33,10 @@ function abrirGrupo(p, alGuardar) {
   }));
 }
 
-function indicadores(p, datos, repintar) {
+function indicadores(p, datos, ingreso) {
   const clinico = sesion.tiene('historiales:leer');
-  const lista = [h('div', { class: `mosaico ${p.archivado ? '' : 'ok'}` }, ic(p.archivado ? 'archive' : 'circle-check', 20),
-    h('div', null, h('small', { text: 'Estado' }), h('b', { text: p.archivado ? 'Archivado' : 'Activo' })))];
-  const mosaico = (clase, icono, titulo, valor) => h('div', { class: `mosaico ${clase}` }, ic(icono, 20), h('div', null, h('small', { text: titulo }), h('b', { text: valor })));
+  const mosaico = indicadorFicha;
+  const lista = [mosaico(p.archivado ? '' : 'ok', p.archivado ? 'archive' : 'circle-check', 'Estado', p.archivado ? 'Archivado' : 'Activo')];
   if (p.fecha_nacimiento) lista.push(mosaico('', 'cake', 'Edad', fEdad(p.fecha_nacimiento)));
   if (clinico && datos.historial?.valor) {
     const ultima = datos.historial.valor.consultas[0];
@@ -49,12 +49,10 @@ function indicadores(p, datos, repintar) {
   if (clinico && p.alergias?.length) {
     lista.push(mosaico('aviso', 'triangle-alert', 'Alergias', p.alergias.length === 1 ? '1 registrada' : `${p.alergias.length} registradas`));
   }
-  const ingreso = datos.ingresos?.valor?.find((i) => i.abierto);
   if (ingreso) {
     const emergencia = ingreso.tipo === 'emergencia';
-    lista.push(h('button', { class: `mosaico ${emergencia ? 'crit' : 'info'}`, type: 'button', onclick: () => abrirIngreso(ingreso, { alCambiar: repintar }) },
-      ic(emergencia ? 'siren' : 'bed-double', 20),
-      h('div', null, h('small', { text: emergencia ? 'En emergencia' : 'Hospitalizado' }), h('b', { text: `Cama ${ingreso.cama} · ${duracion(ingreso.ingreso_en)}` }))));
+    lista.push(mosaico(emergencia ? 'crit' : 'info', emergencia ? 'siren' : 'bed-double',
+      emergencia ? 'En emergencia' : 'Hospitalizado', `Cama ${ingreso.cama} · ${duracion(ingreso.ingreso_en)}`));
   }
   return lista;
 }
@@ -81,14 +79,17 @@ function pestanasDe() {
   return lista;
 }
 
-function acciones(p, datos, ctx) {
+function acciones(p, ingreso, ctx) {
   const lista = [];
+  const registraConsultas = sesion.tiene('consultas:registrar');
+  if (!p.archivado && registraConsultas) lista.push(h('button', { class: 'btn', type: 'button', onclick: () => abrirConsulta(p, ctx.alGuardarConsulta) }, ic('file-plus', 16), 'Nueva consulta'));
+  if (ingreso) lista.push(h('button', { class: 'btn sec', type: 'button', onclick: () => abrirIngreso(ingreso, { alCambiar: ctx.repintar }) }, ic('bed-double', 16), 'Ver ingreso'));
   if (p.archivado) return lista;
-  if (sesion.tiene('consultas:registrar')) {
-    lista.push(h('button', { class: 'btn', type: 'button', onclick: () => abrirConsulta(p, ctx.alGuardarConsulta) }, ic('file-plus', 16), 'Nueva consulta'));
-    if (!datos.ingresos?.valor?.some((i) => i.abierto)) {
+  if (registraConsultas) {
+    if (!ingreso) {
       lista.push(h('button', { class: 'btn sec', type: 'button', onclick: () => abrirNuevoIngreso({ paciente: p, tipo: 'programado', alGuardar: ctx.repintar }) }, ic('bed-double', 16), 'Ingresar'));
     }
+    if (sesion.tiene('historiales:leer')) lista.push(h('button', { class: 'btn sec', type: 'button', onclick: () => abrirGrupo(p, ctx.repintar) }, ic('droplet', 16), 'Editar grupo sanguíneo'));
   }
   if (sesion.tiene('citas:gestionar')) lista.push(h('button', { class: 'btn sec', type: 'button', onclick: () => abrirCita({ paciente: p, profesionales: ctx.profesionales, alGuardar: ctx.repintar }) }, ic('calendar-plus', 16), 'Agendar cita'));
   if (sesion.tiene('pacientes:registrar')) lista.push(h('button', { class: 'btn sec', type: 'button', onclick: () => abrirEditar(p, ctx.repintar) }, ic('pencil', 16), 'Editar datos'));
@@ -135,7 +136,7 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
     alGuardarConsulta: () => (actual === 'historial' ? repintar() : irA(ruta('historial'), { q })),
   };
   const contenido = { resumen: pestanaResumen, historial: pestanaHistorial, citas: pestanaCitas, atenciones: pestanaAtenciones }[actual];
-  const editaGrupo = sesion.tiene('consultas:registrar') && !paciente.archivado;
+  const ingreso = datos.ingresos?.valor?.find((i) => i.abierto);
 
   zona.replaceChildren(...[
     paciente.archivado && aviso('', 'archive', h('b', { text: 'Este historial está archivado. ' }), 'No admite consultas, citas ni cambios nuevos. La información clínica sigue disponible para consulta.'),
@@ -144,12 +145,9 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
       h('div', { class: 'ficha-titulo' },
         h('div', { class: 'ficha-nombre' }, h('span', { class: 'avatar', 'aria-hidden': 'true', text: iniciales(paciente) }),
           h('div', null, h('h2', { text: nombreDe(paciente) }),
-            h('p', { class: 'hint' }, paciente.fecha_nacimiento ? `Nació el ${fFechaCivil(paciente.fecha_nacimiento)} · ` : '', 'ID ', h('span', { class: 'num', text: paciente.id_paciente }))),
-          clinico && (editaGrupo
-            ? h('button', { class: 'boton-grupo', type: 'button', 'aria-label': `Grupo sanguíneo: ${paciente.grupo_sanguineo || 'sin dato'}. Cambiar`, onclick: () => abrirGrupo(paciente, repintar) }, pulsera(paciente.grupo_sanguineo))
-            : pulsera(paciente.grupo_sanguineo))),
-        h('div', { class: 'fila' }, acciones(paciente, datos, ctx))),
-      h('div', { class: 'mosaicos' }, indicadores(paciente, datos, repintar))),
+            h('p', { class: 'hint' }, paciente.fecha_nacimiento ? `Nació el ${fFechaCivil(paciente.fecha_nacimiento)} · ` : '', 'ID ', h('span', { class: 'num', text: paciente.id_paciente })))),
+        clinico && pulsera(paciente.grupo_sanguineo)),
+      resumenFicha(indicadores(paciente, datos, ingreso)), accionesFicha(acciones(paciente, ingreso, ctx))),
     h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Secciones de la ficha' }, pestanas.map(([k, icono, texto]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': k === actual ? 'true' : 'false', onclick: () => irA(ruta(k), { q, origen }),
     }, ic(icono, 16), texto))),

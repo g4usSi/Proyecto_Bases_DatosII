@@ -1,5 +1,6 @@
 /* Esquema de vacunacion del paciente y catalogo. Decision del equipo: sin lotes ni existencias. */
 import { api } from '../../api.js';
+import { accionesFicha, indicadorFicha, resumenFicha } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
 import { fFechaCivil, fFechaHora, hoyLocal, nombreDe } from '../../formato.js';
 import { h, ic } from '../../ui/dom.js';
@@ -49,8 +50,8 @@ export function pestanaVacunacion(p, ctx) {
   }, ic('list-checks', 16), 'Generar esquema recomendado');
   /* Sin catalogo no hay que programar: "generar" responderia una lista vacia, como si estuviera completo. */
   const sinCatalogo = vacunas?.length === 0;
-  const acciones = escribe && !sinCatalogo ? h('div', { class: 'fila' }, generar,
-    vacunas && h('button', { class: 'btn', type: 'button', onclick: () => abrirDosis(p, vacunas, ctx.repintar) }, ic('plus', 16), 'Programar dosis')) : null;
+  const acciones = escribe && !sinCatalogo ? accionesFicha([generar,
+    vacunas && h('button', { class: 'btn', type: 'button', onclick: () => abrirDosis(p, vacunas, ctx.repintar) }, ic('plus', 16), 'Programar dosis')]) : null;
 
   if (!dosis.length) {
     return sinCatalogo
@@ -60,14 +61,14 @@ export function pestanaVacunacion(p, ctx) {
 
   const cuenta = (filtro) => dosis.filter(filtro).length;
   const atrasadas = cuenta((d) => estaAtrasada(d, hoy));
-  const mosaico = (clase, icono, texto, valor) => h('div', { class: `mosaico ${clase}` }, ic(icono, 20), h('div', null, h('small', { text: texto }), h('b', { text: String(valor) })));
-
   return h('div', { class: 'pila' },
-    h('div', { class: 'papel-cab sin-margen' }, h('h2', { text: 'Esquema de vacunación' }), acciones),
-    h('div', { class: 'mosaicos' },
-      mosaico('ok', 'circle-check', 'Aplicadas', cuenta((d) => d.estado === 'aplicada')),
-      mosaico('', 'clock', 'Pendientes', cuenta((d) => d.estado === 'pendiente') - atrasadas),
-      atrasadas > 0 && mosaico('aviso', 'hourglass', 'Atrasadas', atrasadas)),
+    h('h2', { text: 'Esquema de vacunación' }),
+    resumenFicha([
+      indicadorFicha('ok', 'circle-check', 'Aplicadas', cuenta((d) => d.estado === 'aplicada')),
+      indicadorFicha('', 'clock', 'Pendientes', cuenta((d) => d.estado === 'pendiente') - atrasadas),
+      atrasadas > 0 && indicadorFicha('aviso', 'hourglass', 'Atrasadas', atrasadas),
+    ], 'Resumen de dosis'),
+    acciones,
     tabla(['Vacuna', 'Dosis', 'Programada', 'Estado', 'Aplicación', ''], dosis.map((d) => h('tr', null,
       h('td', null, h('b', { text: d.nombre_vacuna })),
       h('td', { class: 'num', text: d.numero_dosis ?? '—' }),

@@ -11,6 +11,7 @@ import { abrirArchivar, abrirConsulta, abrirEditar } from '../clinica/formulario
 import { abrirCita } from '../clinica/agendar.js';
 import { lectura, pestanaCitas, pestanaHistorial, pestanaResumen, proximaCita } from '../clinica/ficha.js';
 import { ORIGENES } from '../compartido/pacientes.js';
+import { accionesFicha, indicadorFicha, resumenFicha } from '../compartido/ficha.js';
 import { chipLectura, chipOrden, estaAbierta, textoValor } from './comun.js';
 import { abrirNuevaOrden, abrirOrden } from './orden.js';
 
@@ -20,7 +21,7 @@ const veOrdenes = () => sesion.tiene('historiales:leer') || sesion.tiene('labora
 const fuera = (orden) => orden.pruebas.flatMap((p) => p.resultados).filter((r) => r.interpretacion && r.interpretacion !== 'normal');
 
 function indicadores(p, datos) {
-  const mosaico = (clase, icono, titulo, valor) => h('div', { class: `mosaico ${clase}` }, ic(icono, 20), h('div', null, h('small', { text: titulo }), h('b', { text: valor })));
+  const mosaico = indicadorFicha;
   const lista = [mosaico(p.archivado ? '' : 'ok', p.archivado ? 'archive' : 'circle-check', 'Estado', p.archivado ? 'Archivado' : 'Activo')];
   if (p.fecha_nacimiento) lista.push(mosaico('', 'cake', 'Edad', fEdad(p.fecha_nacimiento)));
   if (datos.ordenes?.valor) {
@@ -143,9 +144,8 @@ export async function pintarFicha(zona, { idPaciente, pestana, q, origen, repint
       h('div', { class: 'ficha-titulo' },
         h('div', { class: 'ficha-nombre' }, h('span', { class: 'avatar', 'aria-hidden': 'true', text: iniciales(paciente) }),
           h('div', null, h('h2', { text: nombreDe(paciente) }),
-            h('p', { class: 'hint' }, paciente.fecha_nacimiento ? `Nació el ${fFechaCivil(paciente.fecha_nacimiento)} · ` : '', 'ID ', h('span', { class: 'num', text: paciente.id_paciente })))),
-        h('div', { class: 'fila' }, acciones(paciente, ctx))),
-      h('div', { class: 'mosaicos' }, indicadores(paciente, datos))),
+            h('p', { class: 'hint' }, paciente.fecha_nacimiento ? `Nació el ${fFechaCivil(paciente.fecha_nacimiento)} · ` : '', 'ID ', h('span', { class: 'num', text: paciente.id_paciente }))))),
+      resumenFicha(indicadores(paciente, datos)), accionesFicha(acciones(paciente, ctx))),
     !clinico && h('p', { class: 'hint' }, ic('lock', 14), ' Ves órdenes y resultados; el historial clínico es del personal médico.'),
     h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Secciones de la ficha' }, pestanas.map(([k, icono, texto]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': k === actual ? 'true' : 'false', onclick: () => irA(ruta(k), { q, origen }),

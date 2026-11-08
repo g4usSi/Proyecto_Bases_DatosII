@@ -1,5 +1,6 @@
 /* Cobros en solo lectura para el superusuario: los registra el personal de cada institucion. */
 import { api } from '../../api.js';
+import { bloqueDatos } from '../compartido/ficha.js';
 import { ESTADOS_COBRO, METODOS_PAGO, entidad } from '../../catalogos.js';
 import { fEntero, fFechaHora, fMoneda } from '../../formato.js';
 import { h } from '../../ui/dom.js';
@@ -22,15 +23,16 @@ function abrirCobro(cobro, inst) {
     : h('p', { class: 'muted', text: 'Sin pagos.' });
   lateral(`Cobro ${cobro.id_cobro}`, [
     aviso('info', 'eye', `Solo lectura: lo registra el personal de ${inst.nombre}.`),
-    h('div', { class: 'fila' }, chipCobro(cobro.estado)),
-    h('dl', { class: 'lista-datos' },
-      h('dt', { text: 'Paciente' }), h('dd', { text: cobro.nombre_paciente }),
-      h('dt', { text: 'Abierto' }), h('dd', { text: fFechaHora(cobro.abierto_en) }),
-      cobro.cerrado_en && [h('dt', { text: 'Cerrado' }), h('dd', { text: fFechaHora(cobro.cerrado_en) })],
-      cobro.descripcion && [h('dt', { text: 'Descripción' }), h('dd', { text: cobro.descripcion })],
-      h('dt', { text: 'Total' }), h('dd', { class: 'num', text: fMoneda(cobro.total) }),
-      h('dt', { text: 'Pagado' }), h('dd', { class: 'num', text: fMoneda(cobro.pagado) }),
-      h('dt', { text: 'Saldo' }), h('dd', { class: 'num', text: fMoneda(cobro.saldo) })),
+    bloqueDatos('Datos del cobro',
+      h('div', { class: 'fila' }, chipCobro(cobro.estado)),
+      h('dl', { class: 'lista-datos' },
+        h('dt', { text: 'Paciente' }), h('dd', { text: cobro.nombre_paciente }),
+        h('dt', { text: 'Abierto' }), h('dd', { text: fFechaHora(cobro.abierto_en) }),
+        cobro.cerrado_en && [h('dt', { text: 'Cerrado' }), h('dd', { text: fFechaHora(cobro.cerrado_en) })],
+        cobro.descripcion && [h('dt', { text: 'Descripción' }), h('dd', { text: cobro.descripcion })],
+        h('dt', { text: 'Total' }), h('dd', { class: 'num', text: fMoneda(cobro.total) }),
+        h('dt', { text: 'Pagado' }), h('dd', { class: 'num', text: fMoneda(cobro.pagado) }),
+        h('dt', { text: 'Saldo' }), h('dd', { class: 'num', text: fMoneda(cobro.saldo) }))),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Cargos' }), cargos),
     h('section', { class: 'pila-s' }, h('h3', { text: 'Pagos' }), pagos),
   ]);
