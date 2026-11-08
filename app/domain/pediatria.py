@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
+from app.domain.errores import DatosInvalidos
+
+EDAD_MAXIMA_MESES = 216  # el Centro Pediatrico atiende hasta los 18 anos
+
 
 @dataclass(frozen=True, slots=True)
 class NuevoControl:
@@ -50,6 +54,34 @@ class TipoVacuna:
     enfermedades_que_previene: str | None = None
     edad_recomendada_meses: int | None = None
     dosis_sugerida: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DescripcionVacuna:
+    """Lo que el administrador puede corregir de una vacuna del catalogo (el nombre no:
+    los esquemas de los pacientes ya la muestran con ese nombre).
+
+    edad_recomendada_meses es la edad de la primera dosis; sin ella, "generar esquema
+    recomendado" no la programa.
+    """
+
+    enfermedades_que_previene: str | None = None
+    edad_recomendada_meses: int | None = None
+    dosis_sugerida: str | None = None
+
+    def validar(self) -> None:
+        edad = self.edad_recomendada_meses
+        if edad is not None and not 0 <= edad <= EDAD_MAXIMA_MESES:
+            raise DatosInvalidos(
+                f"La edad recomendada va de 0 a {EDAD_MAXIMA_MESES} meses (18 anos)."
+            )
+
+
+def nombre_de_vacuna(texto: str) -> str:
+    limpio = " ".join(texto.split())
+    if not limpio:
+        raise DatosInvalidos("Escribe el nombre de la vacuna.")
+    return limpio
 
 
 class EstadoDosis(StrEnum):

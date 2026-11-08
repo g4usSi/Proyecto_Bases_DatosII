@@ -207,6 +207,12 @@ ContextoDepartamentos = Annotated[Contexto, Depends(contexto_departamentos)]
 ContextoVerPagos = Annotated[Contexto, Depends(contexto_pagos_lectura)]
 ContextoRegistrarPagos = Annotated[Contexto, Depends(_con(permisos.PAGOS_REGISTRAR))]
 ContextoGestionarCamas = Annotated[Contexto, Depends(_con(permisos.CAMAS_GESTIONAR))]
+# El catalogo de vacunas no es un dato clinico: lo lee tambien el administrador, que lo mantiene.
+ContextoLeerCatalogo = Annotated[
+    Contexto,
+    Depends(contexto_con_alguno(permisos.HISTORIALES_LEER, permisos.PROFESIONALES_ADMINISTRAR)),
+]
+ContextoAdministrarCatalogo = Annotated[Contexto, Depends(_con(permisos.PROFESIONALES_ADMINISTRAR))]
 ContextoLeerLab = Annotated[
     Contexto,
     Depends(contexto_con_alguno(permisos.HISTORIALES_LEER, permisos.LABORATORIO_RESULTADOS)),

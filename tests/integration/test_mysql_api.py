@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 
 from app.application.errores import IntegracionNoConfigurada, OperacionPendiente
+from app.bootstrap.container import Contenedor
 from app.core.config import PROJECT_ROOT, Settings
 from app.domain.cita import EstadoCita, NuevaCita
 from app.domain.cobros import EstadoCobro, MetodoPago, NuevoCargo, NuevoPago
@@ -32,6 +33,8 @@ from app.domain.errores import (
     ProfesionalNoVinculado,
     RegistroNoEncontrado,
 )
+from app.domain.identidad import UsuarioAutenticado
+from app.domain.institucion import Institucion
 from app.domain.paciente import (
     Alergia,
     Baja,
@@ -45,6 +48,7 @@ from app.domain.tutores import CambiosTutor, NuevoTutor, Vinculo
 from app.infrastructure.persistence.mysql.unidad import UnidadTrabajoMySQL
 from app.main import create_app
 from scripts.sincronizar_profesionales import sincronizar_centro_pediatrico
+from tests.doubles import AutenticadorDoble
 from tests.integration.conftest import ejecutar_script
 
 PERMISOS = [
@@ -82,6 +86,7 @@ def mysql_app(mysql_pruebas):
         "014_permisos_tutores.sql",
         "016_permisos_facturacion.sql",
         "017_permisos_religion_tutor.sql",
+        "018_permisos_catalogo_vacunas.sql",
     ):
         texto = (PROJECT_ROOT / "database/mysql" / archivo).read_text(encoding="utf-8")
         texto = texto.replace("historiales_app", usuario)
@@ -1080,7 +1085,7 @@ def test_un_control_no_se_modifica_ni_se_borra_ni_por_la_base(centro):
     conexion.close()
 
 
-def test_la_api_no_ve_precios_ni_cambia_el_catalogo(centro):
+def test_la_api_no_ve_precios_ni_renombra_ni_borra_vacunas(centro):
     tipo, lote = cargar_vacuna(centro)
     conexion = _conectar(centro.datos)
     with conexion.cursor() as cursor:
@@ -1089,7 +1094,8 @@ def test_la_api_no_ve_precios_ni_cambia_el_catalogo(centro):
         for sql in (
             "SELECT precio_unitario FROM catalogo_vacunas",
             "UPDATE catalogo_vacunas SET cantidad = 999",
-            "INSERT INTO nombre_vacuna (nombre) VALUES ('x')",
+            "UPDATE nombre_vacuna SET nombre = 'x'",
+            "DELETE FROM nombre_vacuna",
             "DELETE FROM esquema_vacunacion",
         ):
             with pytest.raises(pymysql.err.OperationalError) as error:
@@ -1793,3 +1799,76 @@ def test_religion_del_tutor_usa_el_catalogo_y_se_puede_borrar(centro):
                 cursor.execute(sql)
             assert error.value.args[0] in (1142, 1143), sql
     conexion.close()
+
+
+def test_el_administrador_del_centro_mantiene_el_catalogo_de_vacunas(centro):
+    """El administrador agrega y corrige vacunas; el personal clinico solo las lee y usa."""
+    usuarios = {
+        "admin": UsuarioAutenticado(
+            "admin-prueba",
+            Institucion.CENTRO_PEDIATRICO,
+            frozenset({"profesionales:administrar"}),
+        ),
+        "medico": UsuarioAutenticado(
+            centro.profesional,
+            Institucion.CENTRO_PEDIATRICO,
+            frozenset({"historiales:leer", "consultas:registrar"}),
+        ),
+    }
+    contenedor = Contenedor(
+        autenticador=AutenticadorDoble(usuarios),
+        unidades_trabajo={Institucion.CENTRO_PEDIATRICO: centro.unidad},
+    )
+    admin = {"Authorization": "Bearer admin"}
+    medico = {"Authorization": "Bearer medico"}
+    nombre = f"Vacuna {centro.marca}"
+    paciente = registrar(centro, fecha_nacimiento=date.today() - timedelta(days=400))
+    # Sin identidad real: el contenedor trae su propio autenticador y la unidad de MySQL.
+    configuracion = Settings(_env_file=None, environment="pruebas", postgres_dsn=None)
+    with TestClient(create_app(configuracion, contenedor)) as client:
+        creada = client.post(
+            "/api/v1/vacunas",
+            json={
+                "nombre": f"  {nombre} ",
+                "enfermedades_que_previene": "Sintetica",
+                "edad_recomendada_meses": 2,
+                "dosis_sugerida": "2 dosis",
+            },
+            headers=admin,
+        )
+        assert creada.status_code == 201, creada.text
+        vacuna = creada.json()
+        assert vacuna["nombre"] == nombre and vacuna["edad_recomendada_meses"] == 2
+        # El nombre es unico sin importar mayusculas (intercalacion de la base).
+        repetida = client.post("/api/v1/vacunas", json={"nombre": nombre.upper()}, headers=admin)
+        assert repetida.status_code == 409
+        assert client.post("/api/v1/vacunas", json={"nombre": "X"}, headers=medico).status_code == (
+            403
+        )
+
+        # El administrador la ve en el catalogo, igual que el personal clinico.
+        for h in (admin, medico):
+            catalogo = client.get("/api/v1/vacunas", headers=h)
+            assert catalogo.status_code == 200
+            assert vacuna["id_vacuna"] in {v["id_vacuna"] for v in catalogo.json()}
+
+        corregida = client.put(
+            f"/api/v1/vacunas/{vacuna['id_vacuna']}",
+            json={"edad_recomendada_meses": 4, "dosis_sugerida": "  "},
+            headers=admin,
+        )
+        assert corregida.status_code == 200, corregida.text
+        assert corregida.json() == {
+            **vacuna,
+            "enfermedades_que_previene": None,  # PUT reemplaza: lo no enviado queda vacio
+            "edad_recomendada_meses": 4,
+            "dosis_sugerida": None,
+        }
+        assert client.put("/api/v1/vacunas/999999999", json={}, headers=admin).status_code == 404
+
+        # La vacuna nueva entra al esquema recomendado con su edad.
+        esquema = client.post(
+            f"/api/v1/pacientes/{paciente}/vacunacion/esquema-recomendado", headers=medico
+        )
+        assert esquema.status_code == 201, esquema.text
+        assert vacuna["id_vacuna"] in {d["id_vacuna"] for d in esquema.json()}

@@ -3,6 +3,7 @@ from typing import Protocol
 
 from app.domain.pediatria import (
     ControlCrecimiento,
+    DescripcionVacuna,
     DosisVacuna,
     NuevoControl,
     TipoVacuna,
@@ -23,6 +24,14 @@ class RepositorioCrecimiento(Protocol):
 
 class RepositorioVacunacion(Protocol):
     def listar_tipos(self) -> list[TipoVacuna]: ...
+
+    def agregar_tipo(self, nombre: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        """Agrega una vacuna al catalogo. ConflictoEstado si el nombre ya existe."""
+        ...
+
+    def describir_tipo(self, id_vacuna: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        """Reemplaza la descripcion (no el nombre). RegistroNoEncontrado si no existe."""
+        ...
 
     def listar_esquema(self, id_paciente: str) -> list[DosisVacuna]: ...
 

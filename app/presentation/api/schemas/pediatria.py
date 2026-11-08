@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.pediatria import EstadoDosis
+from app.domain.pediatria import EDAD_MAXIMA_MESES, EstadoDosis
 
 
 class ControlCrear(BaseModel):
@@ -41,6 +41,25 @@ class TipoVacunaResponse(BaseModel):
     enfermedades_que_previene: str | None
     edad_recomendada_meses: int | None
     dosis_sugerida: str | None
+
+
+class DescripcionVacunaSchema(BaseModel):
+    """Se envia completa: un campo ausente o null queda vacio."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    enfermedades_que_previene: str | None = Field(default=None, max_length=1000)
+    edad_recomendada_meses: int | None = Field(
+        default=None,
+        ge=0,
+        le=EDAD_MAXIMA_MESES,
+        description="Edad de la primera dosis; sin ella no entra al esquema recomendado",
+    )
+    dosis_sugerida: str | None = Field(default=None, max_length=100)
+
+
+class TipoVacunaCrear(DescripcionVacunaSchema):
+    nombre: str = Field(min_length=1, max_length=150)
 
 
 class DosisProgramar(BaseModel):

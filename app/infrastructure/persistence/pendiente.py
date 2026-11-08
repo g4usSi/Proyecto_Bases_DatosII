@@ -33,6 +33,7 @@ from app.domain.laboratorio import (
 from app.domain.odontograma import EstadoPieza, Odontograma
 from app.domain.pediatria import (
     ControlCrecimiento,
+    DescripcionVacuna,
     DosisVacuna,
     NuevoControl,
     TipoVacuna,
@@ -146,6 +147,12 @@ class VacunacionNoAplica:
         pendiente(self.motor, "esquema de vacunacion" + _SOLO_PEDIATRIA)
 
     def listar_tipos(self) -> list[TipoVacuna]:
+        self._no()
+
+    def agregar_tipo(self, nombre: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        self._no()
+
+    def describir_tipo(self, id_vacuna: str, descripcion: DescripcionVacuna) -> TipoVacuna:
         self._no()
 
     def listar_esquema(self, id_paciente: str) -> list[DosisVacuna]:

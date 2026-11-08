@@ -14,11 +14,13 @@ from app.domain.identidad import UsuarioAutenticado
 from app.domain.paciente import Paciente
 from app.domain.pediatria import (
     ControlCrecimiento,
+    DescripcionVacuna,
     DosisVacuna,
     EstadoDosis,
     NuevoControl,
     TipoVacuna,
     meses_cumplidos,
+    nombre_de_vacuna,
     sumar_meses,
 )
 
@@ -73,6 +75,35 @@ class ConsultarCatalogoVacunas:
     def tipos(self) -> list[TipoVacuna]:
         with self.unidad_trabajo as unidad:
             return unidad.vacunacion.listar_tipos()
+
+
+class RegistrarTipoVacuna:
+    """El administrador del Centro Pediatrico agrega una vacuna al catalogo."""
+
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo) -> None:
+        self.unidad_trabajo = unidad_trabajo
+
+    def ejecutar(self, nombre: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        nombre = nombre_de_vacuna(nombre)
+        descripcion.validar()
+        with self.unidad_trabajo as unidad:
+            tipo = unidad.vacunacion.agregar_tipo(nombre, descripcion)
+            unidad.commit()
+            return tipo
+
+
+class DescribirTipoVacuna:
+    """Corrige lo que previene, la edad recomendada o la dosis sugerida de una vacuna."""
+
+    def __init__(self, unidad_trabajo: UnidadDeTrabajo) -> None:
+        self.unidad_trabajo = unidad_trabajo
+
+    def ejecutar(self, id_vacuna: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        descripcion.validar()
+        with self.unidad_trabajo as unidad:
+            tipo = unidad.vacunacion.describir_tipo(id_vacuna, descripcion)
+            unidad.commit()
+            return tipo
 
 
 class ConsultarEsquema:

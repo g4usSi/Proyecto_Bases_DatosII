@@ -40,6 +40,7 @@ from app.domain.errores import (
 from app.domain.paciente import Alergia, Baja, CambiosPaciente, Contacto, NuevoPaciente, Paciente
 from app.domain.pediatria import (
     ControlCrecimiento,
+    DescripcionVacuna,
     DosisVacuna,
     EstadoDosis,
     NuevoControl,
@@ -822,7 +823,10 @@ ESTADO_DOSIS_BD = {
 
 
 class RepositorioVacunacionMySQL:
-    """Esquema de vacunacion. El catalogo de tipos es de solo lectura para la API.
+    """Esquema de vacunacion y catalogo de tipos de vacuna (nombre_vacuna).
+
+    El administrador del centro agrega vacunas y corrige su descripcion (019); el nombre no
+    cambia ni se borra una vacuna, porque los esquemas ya apuntan a ella.
 
     Decision del equipo: no se controlan lotes ni existencias (migracion 010). Aplicar una
     dosis solo registra quien, cuando y las observaciones.
@@ -860,13 +864,61 @@ class RepositorioVacunacionMySQL:
             observaciones_reaccion=fila[9],
         )
 
+    _TIPOS = (
+        "SELECT id_nombre_vacuna, nombre, enfermedades_que_previene, edad_recomendada_meses, "
+        "dosis_sugerida FROM nombre_vacuna "
+    )
+
     def listar_tipos(self) -> list[TipoVacuna]:
         filas = self._filas(
-            "SELECT id_nombre_vacuna, nombre, enfermedades_que_previene, edad_recomendada_meses, "
-            "dosis_sugerida FROM nombre_vacuna "
-            "ORDER BY edad_recomendada_meses IS NULL, edad_recomendada_meses, nombre"
+            self._TIPOS + "ORDER BY edad_recomendada_meses IS NULL, edad_recomendada_meses, nombre"
         )
         return [TipoVacuna(str(f[0]), f[1], f[2], f[3], f[4]) for f in filas]
+
+    def _tipo(self, numero: int) -> TipoVacuna | None:
+        filas = self._filas(self._TIPOS + "WHERE id_nombre_vacuna = %s", (numero,))
+        return TipoVacuna(str(filas[0][0]), *filas[0][1:]) if filas else None
+
+    def agregar_tipo(self, nombre: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        try:
+            with self.conexion.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO nombre_vacuna (nombre, enfermedades_que_previene, "
+                    "edad_recomendada_meses, dosis_sugerida) VALUES (%s, %s, %s, %s)",
+                    (
+                        nombre,
+                        descripcion.enfermedades_que_previene,
+                        descripcion.edad_recomendada_meses,
+                        descripcion.dosis_sugerida,
+                    ),
+                )
+                numero = cursor.lastrowid
+        except IntegrityError as error:
+            if error.args and error.args[0] == ER_DUP_ENTRY:
+                raise ConflictoEstado("Ya existe una vacuna con ese nombre.") from error
+            raise
+        tipo = self._tipo(numero)
+        assert tipo is not None
+        return tipo
+
+    def describir_tipo(self, id_vacuna: str, descripcion: DescripcionVacuna) -> TipoVacuna:
+        numero = entero_positivo(id_vacuna)
+        if numero is None or self._tipo(numero) is None:
+            raise RegistroNoEncontrado("La vacuna no existe en el catalogo.")
+        with self.conexion.cursor() as cursor:
+            cursor.execute(
+                "UPDATE nombre_vacuna SET enfermedades_que_previene = %s, "
+                "edad_recomendada_meses = %s, dosis_sugerida = %s WHERE id_nombre_vacuna = %s",
+                (
+                    descripcion.enfermedades_que_previene,
+                    descripcion.edad_recomendada_meses,
+                    descripcion.dosis_sugerida,
+                    numero,
+                ),
+            )
+        tipo = self._tipo(numero)
+        assert tipo is not None
+        return tipo
 
     def listar_esquema(self, id_paciente: str) -> list[DosisVacuna]:
         numero = entero_positivo(id_paciente)
