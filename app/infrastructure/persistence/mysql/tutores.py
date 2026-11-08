@@ -1,6 +1,9 @@
 """Centro Pediatrico (MySQL): tutores (tabla tutor) y su vinculo con el paciente
 (paciente_tutor: parentesco, principal y autorizacion para recogerlo).
 
+La religion se guarda en el catalogo `religion` (tutor.id_religion_fk): se busca por nombre
+(la intercalacion ai_ci ignora mayusculas y tildes) y, si no existe, se agrega.
+
 El principal unico lo garantiza el indice uq_tutor_principal; el cambio de principal se hace
 en la misma transaccion bloqueando al paciente, asi dos cambios simultaneos no chocan.
 """
@@ -15,7 +18,14 @@ from app.domain.errores import (
     PacienteNoEncontrado,
     RegistroNoEncontrado,
 )
-from app.domain.tutores import CambiosTutor, NuevoTutor, Tutor, TutorDePaciente, Vinculo
+from app.domain.tutores import (
+    CambiosTutor,
+    NuevoTutor,
+    Tutor,
+    TutorDePaciente,
+    Vinculo,
+    nombre_de_religion,
+)
 from app.infrastructure.persistence.comun import entero_positivo
 
 ER_DUP_ENTRY = 1062
@@ -24,12 +34,21 @@ ER_CHECK_VIOLADO = 3819
 
 _COLUMNAS = (
     "t.id_tutor, t.nombre, t.apellido, t.dpi_pasaporte, t.telefono, t.correo_electronico, "
-    "t.direccion"
+    "t.direccion, r.nombre"
+)
+_TUTOR = "tutor t LEFT JOIN religion r ON r.id_religion = t.id_religion_fk"
+_VINCULO = (
+    f"SELECT {_COLUMNAS}, pt.parentesco, pt.es_principal, pt.autorizado "
+    f"FROM paciente_tutor pt JOIN {_TUTOR} ON t.id_tutor = pt.id_tutor "
 )
 
 
 def _tutor(fila: tuple) -> Tutor:
-    return Tutor(str(fila[0]), fila[1], fila[2], fila[3], fila[4], fila[5], fila[6])
+    return Tutor(str(fila[0]), fila[1], fila[2], fila[3], fila[4], fila[5], fila[6], fila[7])
+
+
+def _vinculo(fila: tuple) -> TutorDePaciente:
+    return TutorDePaciente(_tutor(fila), fila[8], bool(fila[9]), bool(fila[10]))
 
 
 class RepositorioTutoresMySQL:
@@ -63,26 +82,40 @@ class RepositorioTutoresMySQL:
 
     def _uno(self, paciente: int, tutor: int) -> TutorDePaciente | None:
         filas = self._filas(
-            f"SELECT {_COLUMNAS}, pt.parentesco, pt.es_principal, pt.autorizado "
-            "FROM paciente_tutor pt JOIN tutor t ON t.id_tutor = pt.id_tutor "
-            "WHERE pt.id_paciente = %s AND pt.id_tutor = %s",
-            (paciente, tutor),
+            _VINCULO + "WHERE pt.id_paciente = %s AND pt.id_tutor = %s", (paciente, tutor)
         )
-        if not filas:
+        return _vinculo(filas[0]) if filas else None
+
+    def _id_religion(self, nombre: str | None) -> int | None:
+        """Id del catalogo para ese nombre; lo agrega si es nuevo. None = sin religion."""
+        nombre = nombre_de_religion(nombre)
+        if nombre is None:
             return None
-        f = filas[0]
-        return TutorDePaciente(_tutor(f), f[7], bool(f[8]), bool(f[9]))
+        if len(nombre) > 100:
+            raise DatosInvalidos("La religion admite hasta 100 caracteres.")
+        consulta = "SELECT id_religion FROM religion WHERE nombre = %s"
+        filas = self._filas(consulta, (nombre,))
+        if filas:
+            return filas[0][0]
+        try:
+            return self._ejecutar("INSERT INTO religion (nombre) VALUES (%s)", (nombre,))
+        except IntegrityError as error:
+            # Otra solicitud la agrego al mismo tiempo: se usa la que ya quedo.
+            if error.args[0] != ER_DUP_ENTRY:
+                raise
+            return self._filas(consulta, (nombre,))[0][0]
+
+    def listar_religiones(self) -> list[str]:
+        return [f[0] for f in self._filas("SELECT nombre FROM religion ORDER BY nombre")]
 
     def listar(self, id_paciente: str) -> list[TutorDePaciente]:
         numero = entero_positivo(id_paciente)
         if numero is None:
             return []
         return [
-            TutorDePaciente(_tutor(f), f[7], bool(f[8]), bool(f[9]))
+            _vinculo(f)
             for f in self._filas(
-                f"SELECT {_COLUMNAS}, pt.parentesco, pt.es_principal, pt.autorizado "
-                "FROM paciente_tutor pt JOIN tutor t ON t.id_tutor = pt.id_tutor "
-                "WHERE pt.id_paciente = %s "
+                _VINCULO + "WHERE pt.id_paciente = %s "
                 "ORDER BY pt.es_principal DESC, t.apellido, t.nombre, t.id_tutor",
                 (numero,),
             )
@@ -90,7 +123,7 @@ class RepositorioTutoresMySQL:
 
     def buscar_por_documento(self, documento: str) -> Tutor | None:
         filas = self._filas(
-            f"SELECT {_COLUMNAS} FROM tutor t WHERE t.dpi_pasaporte = %s", (documento,)
+            f"SELECT {_COLUMNAS} FROM {_TUTOR} WHERE t.dpi_pasaporte = %s", (documento,)
         )
         return _tutor(filas[0]) if filas else None
 
@@ -111,10 +144,12 @@ class RepositorioTutoresMySQL:
     ) -> TutorDePaciente:
         paciente = self._bloquear_paciente(id_paciente)
         if nuevo is not None:
+            religion = self._id_religion(nuevo.religion)
             try:
                 tutor = self._ejecutar(
                     "INSERT INTO tutor (nombre, apellido, dpi_pasaporte, telefono, "
-                    "correo_electronico, direccion) VALUES (%s, %s, %s, %s, %s, %s)",
+                    "correo_electronico, direccion, id_religion_fk) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (
                         nuevo.nombres,
                         nuevo.apellidos,
@@ -122,6 +157,7 @@ class RepositorioTutoresMySQL:
                         nuevo.telefono,
                         nuevo.correo,
                         nuevo.direccion,
+                        religion,
                     ),
                 )
             except IntegrityError as error:
@@ -197,6 +233,9 @@ class RepositorioTutoresMySQL:
                 if valor is not None:
                     contacto.append(f"{columna} = %s")
                     datos.append(valor or None)
+            if cambios.religion is not None:
+                contacto.append("id_religion_fk = %s")
+                datos.append(self._id_religion(cambios.religion))
             if contacto:
                 with self.conexion.cursor() as cursor:
                     cursor.execute(

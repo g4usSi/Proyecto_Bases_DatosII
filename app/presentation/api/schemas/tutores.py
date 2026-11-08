@@ -12,6 +12,7 @@ class TutorNuevoSchema(Entrada):
     telefono: str | None = Field(default=None, max_length=30)
     correo: str | None = Field(default=None, max_length=254)
     direccion: str | None = Field(default=None, max_length=300)
+    religion: str | None = Field(default=None, max_length=100, description="Opcional")
 
 
 class TutorVincular(Entrada):
@@ -37,6 +38,9 @@ class TutorCambios(Entrada):
     telefono: str | None = Field(default=None, max_length=30)
     correo: str | None = Field(default=None, max_length=254)
     direccion: str | None = Field(default=None, max_length=300)
+    religion: str | None = Field(
+        default=None, max_length=100, description="Vacio borra la religion registrada"
+    )
 
 
 class TutorResponse(BaseModel):
@@ -49,6 +53,7 @@ class TutorResponse(BaseModel):
     telefono: str | None = None
     correo: str | None = None
     direccion: str | None = None
+    religion: str | None = None
 
 
 class TutorDePacienteResponse(BaseModel):

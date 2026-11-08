@@ -3,6 +3,9 @@
 Un tutor puede estar vinculado a varios pacientes (hermanos). Cada paciente tiene como
 maximo un tutor principal, y el principal siempre esta autorizado. Nada se borra: quien ya
 no puede recoger al paciente queda como no autorizado.
+
+La religion es opcional y es un dato del tutor (no del vinculo); la base la guarda en su
+catalogo `religion`, asi "Catolica" y "catolica" quedan como una sola.
 """
 
 from dataclasses import dataclass
@@ -19,6 +22,7 @@ class Tutor:
     telefono: str | None = None
     correo: str | None = None
     direccion: str | None = None
+    religion: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +41,7 @@ class NuevoTutor:
     telefono: str | None = None
     correo: str | None = None
     direccion: str | None = None
+    religion: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +59,8 @@ class Vinculo:
 
 @dataclass(frozen=True, slots=True)
 class CambiosTutor:
-    """None = no cambia. El contacto es del tutor (se ve en todos sus pacientes)."""
+    """None = no cambia; "" borra el dato. El contacto y la religion son del tutor (se ven en
+    todos sus pacientes)."""
 
     parentesco: str | None = None
     es_principal: bool | None = None
@@ -62,6 +68,7 @@ class CambiosTutor:
     telefono: str | None = None
     correo: str | None = None
     direccion: str | None = None
+    religion: str | None = None
 
     @property
     def vacio(self) -> bool:
@@ -74,5 +81,14 @@ class CambiosTutor:
                 self.telefono,
                 self.correo,
                 self.direccion,
+                self.religion,
             )
         )
+
+
+def nombre_de_religion(texto: str | None) -> str | None:
+    """Normaliza el nombre de la religion: sin espacios de mas; vacio = sin religion."""
+    if texto is None:
+        return None
+    limpio = " ".join(texto.split())
+    return limpio or None

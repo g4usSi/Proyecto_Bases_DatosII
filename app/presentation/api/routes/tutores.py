@@ -38,6 +38,12 @@ def buscar_tutor(
     return TutorResponse.model_validate(ConsultarTutores(contexto.unidad).por_documento(documento))
 
 
+@router.get("/religiones", response_model=list[str])
+def religiones(contexto: ContextoRegistrarPaciente) -> list[str]:
+    """Religiones ya registradas, para sugerirlas al escribir la del tutor."""
+    return ConsultarTutores(contexto.unidad).religiones()
+
+
 @router.post(
     "/pacientes/{id_paciente}/tutores",
     response_model=TutorDePacienteResponse,
@@ -51,7 +57,9 @@ def vincular_tutor(
     nuevo = None
     if datos.tutor is not None:
         t = datos.tutor
-        nuevo = NuevoTutor(t.nombres, t.apellidos, t.documento, t.telefono, t.correo, t.direccion)
+        nuevo = NuevoTutor(
+            t.nombres, t.apellidos, t.documento, t.telefono, t.correo, t.direccion, t.religion
+        )
     resultado = VincularTutor(contexto.unidad).ejecutar(
         id_paciente,
         Vinculo(datos.parentesco, datos.es_principal, datos.autorizado),
@@ -68,7 +76,8 @@ def cambiar_tutor(
     datos: TutorCambios,
     contexto: ContextoRegistrarPaciente,
 ) -> TutorDePacienteResponse:
-    """Parentesco, principal, autorizacion o contacto (el contacto es del tutor)."""
+    """Parentesco, principal, autorizacion, contacto o religion (estos dos son del tutor).
+    Un texto vacio borra el dato."""
     cambios = CambiosTutor(
         datos.parentesco,
         datos.es_principal,
@@ -76,6 +85,7 @@ def cambiar_tutor(
         datos.telefono,
         datos.correo,
         datos.direccion,
+        datos.religion,
     )
     return TutorDePacienteResponse.model_validate(
         CambiarTutor(contexto.unidad).ejecutar(id_paciente, id_tutor, cambios)

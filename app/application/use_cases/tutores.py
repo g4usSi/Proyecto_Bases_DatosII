@@ -36,6 +36,10 @@ class ConsultarTutores:
             raise RegistroNoEncontrado("No hay un tutor con ese documento.")
         return tutor
 
+    def religiones(self) -> list[str]:
+        with self.unidad_trabajo as unidad:
+            return unidad.tutores.listar_religiones()
+
 
 class VincularTutor:
     def __init__(self, unidad_trabajo: UnidadDeTrabajo) -> None:

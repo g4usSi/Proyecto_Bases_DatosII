@@ -9,7 +9,7 @@ from app.domain.errores import DatosInvalidos
 from app.domain.identidad import UsuarioAutenticado
 from app.domain.institucion import Institucion
 from app.domain.paciente import Paciente
-from app.domain.tutores import CambiosTutor, Vinculo
+from app.domain.tutores import CambiosTutor, Vinculo, nombre_de_religion
 from app.main import create_app
 from tests.doubles import AutenticadorDoble, UnidadTrabajoDoble
 
@@ -60,3 +60,22 @@ def test_reglas_del_vinculo() -> None:
     with pytest.raises(DatosInvalidos):
         Vinculo("  ").validar()
     assert CambiosTutor().vacio and not CambiosTutor(autorizado=False).vacio
+
+
+def test_religion_del_tutor_se_valida_y_fuera_del_centro_es_501(client) -> None:
+    larga = client.post(
+        "/api/v1/pacientes/1/tutores",
+        json={
+            "tutor": {"nombres": "A", "apellidos": "B", "religion": "x" * 101},
+            "parentesco": "X",
+        },
+        headers=H,
+    )
+    assert larga.status_code == 422
+    assert client.get("/api/v1/religiones", headers=H).status_code == 501
+
+
+def test_religion_normalizada_y_cambio_solo_de_religion() -> None:
+    assert nombre_de_religion("  Iglesia   evangelica ") == "Iglesia evangelica"
+    assert nombre_de_religion("   ") is None and nombre_de_religion(None) is None
+    assert CambiosTutor(religion="").vacio is False  # "" borra la religion: si es un cambio

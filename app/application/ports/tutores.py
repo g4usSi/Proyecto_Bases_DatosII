@@ -12,6 +12,10 @@ class RepositorioTutores(Protocol):
 
     def buscar_por_documento(self, documento: str) -> Tutor | None: ...
 
+    def listar_religiones(self) -> list[str]:
+        """Nombres del catalogo de religiones, en orden alfabetico."""
+        ...
+
     def vincular(
         self,
         id_paciente: str,

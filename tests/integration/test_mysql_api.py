@@ -41,7 +41,7 @@ from app.domain.paciente import (
     NuevoPaciente,
 )
 from app.domain.pediatria import EstadoDosis, NuevoControl
-from app.domain.tutores import NuevoTutor, Vinculo
+from app.domain.tutores import CambiosTutor, NuevoTutor, Vinculo
 from app.infrastructure.persistence.mysql.unidad import UnidadTrabajoMySQL
 from app.main import create_app
 from scripts.sincronizar_profesionales import sincronizar_centro_pediatrico
@@ -81,6 +81,7 @@ def mysql_app(mysql_pruebas):
         "012_permisos_cobros.sql",
         "014_permisos_tutores.sql",
         "016_permisos_facturacion.sql",
+        "017_permisos_religion_tutor.sql",
     ):
         texto = (PROJECT_ROOT / "database/mysql" / archivo).read_text(encoding="utf-8")
         texto = texto.replace("historiales_app", usuario)
@@ -1746,3 +1747,49 @@ def test_tutores_principal_unico_hermanos_y_autorizacion(centro):
                 "UPDATE paciente_tutor SET parentesco = 'X' WHERE id_paciente = %s",
                 (hermano_a,),
             )
+
+
+def test_religion_del_tutor_usa_el_catalogo_y_se_puede_borrar(centro):
+    hermano_a, hermano_b = registrar(centro, "Rut"), registrar(centro, "Raul")
+    religion = "Religion " + centro.marca
+    with centro.unidad() as unidad:
+        madre = unidad.tutores.vincular(
+            hermano_a,
+            Vinculo("Madre", es_principal=True),
+            nuevo=NuevoTutor("Marta", centro.marca, religion=f"  {religion}  "),
+        )
+        # Otro tutor con la misma religion escrita distinto: no duplica el catalogo.
+        padre = unidad.tutores.vincular(
+            hermano_b,
+            Vinculo("Padre"),
+            nuevo=NuevoTutor("Mario", centro.marca, religion=religion.upper()),
+        )
+        sin_religion = unidad.tutores.vincular(
+            hermano_b, Vinculo("Tia"), nuevo=NuevoTutor("Ines", centro.marca)
+        )
+        unidad.commit()
+    assert madre.tutor.religion == religion and padre.tutor.religion == religion
+    assert sin_religion.tutor.religion is None
+    assert contar(centro, "SELECT COUNT(*) FROM religion WHERE nombre = %s", religion) == 1
+    id_madre = madre.tutor.id_tutor
+    with centro.unidad() as unidad:
+        assert religion in unidad.tutores.listar_religiones()
+        cambio = unidad.tutores.cambiar(
+            hermano_a, id_madre, CambiosTutor(religion="Otra " + centro.marca)
+        )
+        assert cambio.tutor.religion == "Otra " + centro.marca
+        assert cambio.tutor.telefono is None  # solo cambia la religion
+        borrada = unidad.tutores.cambiar(hermano_a, id_madre, CambiosTutor(religion=""))
+        unidad.commit()
+    assert borrada.tutor.religion is None
+    with centro.unidad() as unidad:
+        assert unidad.tutores.buscar_por_documento("no-existe") is None
+        assert [t.tutor.religion for t in unidad.tutores.listar(hermano_a)] == [None]
+    # La API agrega religiones, pero no las renombra ni las borra.
+    conexion = _conectar(centro.datos)
+    with conexion.cursor() as cursor:
+        for sql in ("UPDATE religion SET nombre = 'x'", "DELETE FROM religion"):
+            with pytest.raises(pymysql.err.OperationalError) as error:
+                cursor.execute(sql)
+            assert error.value.args[0] in (1142, 1143), sql
+    conexion.close()

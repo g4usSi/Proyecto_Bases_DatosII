@@ -392,6 +392,9 @@ class TutoresNoAplica:
     def buscar_por_documento(self, documento: str) -> Tutor | None:
         self._no()
 
+    def listar_religiones(self) -> list[str]:
+        self._no()
+
     def vincular(
         self,
         id_paciente: str,
