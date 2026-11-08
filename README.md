@@ -31,12 +31,16 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m scripts.configurar_desarrollo
 docker compose --profile api up -d --build
-docker compose logs -f api
+docker compose --profile api ps
+docker compose --profile api logs -f api
 ```
 
 El configurador completa `.env` sin reemplazar valores existentes. Docker inicializa las
 bases vacías y crea las cuentas administrativas. `Ctrl+C` deja de seguir los logs sin
 detener los contenedores.
+
+Si aparece un error de conexión a `dockerDesktopLinuxEngine`, abre Docker Desktop,
+espera a que el motor de contenedores Linux esté listo y repite el comando con `--build`.
 
 | Dirección | Uso |
 | --- | --- |
@@ -106,17 +110,27 @@ primer ingreso.
 
 ## Iniciar y detener
 
+> [!WARNING]
+> Después de hacer `git pull` o cambiar de rama, reconstruye la API con `--build`.
+> La imagen contiene una copia de `app/`, incluido el frontend. Si arrancas con
+> `docker compose --profile api up -d`, Compose puede reutilizar una imagen anterior y
+> mostrar «Tu área todavía no está en esta versión» aunque la rama actual incluya esas
+> pantallas. Las migraciones actualizan la base de datos. El frontend se actualiza al
+> reconstruir la imagen de la API.
+
 ```powershell
-# Iniciar y reconstruir la API después de cambios.
-docker compose --profile api up -d --build
+# Reconstruir e iniciar la API después de actualizar el código.
+docker compose --profile api up -d --build api
 
 # Revisar estado y consola.
-docker compose ps
-docker compose logs -f api
+docker compose --profile api ps
+docker compose --profile api logs -f api
 
 # Detener conservando los datos.
 docker compose --profile api stop
 ```
+
+Si solo vas a reanudar los servicios con el mismo código, usa `docker compose --profile api up -d`.
 
 Conservar `.env` y los volúmenes existentes para mantener las credenciales y los datos.
 No usar `docker compose down -v` para actualizar: elimina las bases locales.
