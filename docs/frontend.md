@@ -37,8 +37,12 @@ catálogo de vacunas y facturación. Cada pantalla aparece según los permisos d
   significa saldo cero; se anula solo sin pagos. No hay cierre, anulación de pagos, catálogo de
   servicios ni pago con cheque. El mockup llama «Emitida» a lo que la API llama `abierto`; se
   muestra como «Por cobrar». El resumen no da «facturado esta semana»: se muestra «cobrado hoy».
-- **La base debe tener las migraciones `006` a `016`**, y `nombre_vacuna` no se carga con ninguna:
-  sin datos en esa tabla, Vacunación avisa que el catálogo está vacío.
+- **La base debe tener las migraciones `006` a `018`**, y `nombre_vacuna` no se carga con ninguna:
+  sin datos en esa tabla, Vacunación avisa que el catálogo está vacío. Se llena con
+  `scripts.cargar_catalogos` (ver README) o desde **Catálogo de vacunas** con la cuenta del
+  administrador del centro, que agrega vacunas y corrige su descripción (el nombre no cambia).
+- **Tutores:** además del contacto, cada tutor puede tener una religión (opcional). Se escribe
+  libre con sugerencias de las ya registradas (`GET /religiones`).
 
 ## Cómo está construida
 

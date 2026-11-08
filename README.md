@@ -103,6 +103,16 @@ docker compose exec postgres psql -U historiales_admin -d hospital_general -f /t
 Ambos comandos se pueden repetir sin duplicar datos. Son datos de demostración: el hospital y
 el laboratorio reales deben cargar su propia estructura, precios y rangos de referencia.
 
+El catálogo de vacunas del Centro Pediátrico también empieza vacío. Para cargar el catálogo de
+partida (basado en el esquema nacional de Guatemala; revisarlo contra el esquema oficial):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.cargar_catalogos vacunas database/ejemplos/catalogo_vacunas_demo.json
+```
+
+Después, el administrador del centro (`admin.pediatria@demo.local`) agrega vacunas o corrige su
+descripción en **Catálogo de vacunas**.
+
 Después, con el administrador de cada institución, crear el personal clínico en
 **Usuarios y accesos**: un médico en el Hospital General y un laboratorista (y un médico, que
 solicita las órdenes) en el Laboratorio Clínico. Cada cuenta nueva cambia su contraseña al

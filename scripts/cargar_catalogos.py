@@ -1,4 +1,4 @@
-"""Carga administrativa de catalogos que la API solo lee (la API no puede escribirlos).
+"""Carga administrativa de catalogos (de una vez, con la cuenta administrativa).
 
     python -m scripts.cargar_catalogos vacunas  database/ejemplos/catalogo_vacunas_demo.json
     python -m scripts.cargar_catalogos laboratorio database/ejemplos/catalogo_laboratorio_demo.json
@@ -10,7 +10,9 @@ validar sus esquemas, edades y rangos de referencia antes de usarlos con pacient
 
 Reglas:
 - Vacunas: el tipo (nombre, edad recomendada, dosis) se crea o actualiza. No hay lotes ni
-  existencias: el equipo decidio no controlar stock (migracion MySQL 010).
+  existencias: el equipo decidio no controlar stock (migracion MySQL 010). Despues de la
+  carga, el administrador del Centro Pediatrico puede agregar vacunas y corregir su
+  descripcion desde la aplicacion (POST/PUT /vacunas, migracion MySQL 018).
 - Laboratorio: una (codigo, version) publicada es inmutable. Si cambia un rango o un
   parametro, publica una version nueva (y usa --desactivar-anteriores).
 """

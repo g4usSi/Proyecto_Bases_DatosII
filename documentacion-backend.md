@@ -56,6 +56,17 @@ no perderlas antes de implementar el cliente.
 * Se conserva el **catálogo de tipos de vacuna** (nombre, edad recomendada, dosis) porque
   el esquema recomendado depende de él. La tabla `catalogo_vacunas` (lotes) sigue en el
   esquema original pero la API ya no la usa.
+* **Quién llena el catálogo.** Las bases se crean vacías (también el catálogo): son datos de
+  cada centro, que deben coincidir con el esquema oficial vigente. Hay dos caminos:
+  1. Carga inicial de una vez: `python -m scripts.cargar_catalogos vacunas
+     database/ejemplos/catalogo_vacunas_demo.json` (catálogo de partida basado en el esquema
+     nacional de Guatemala; revisarlo antes de usarlo con pacientes). Se puede repetir.
+  2. Desde la aplicación: el **administrador del Centro Pediátrico** agrega vacunas y corrige
+     su descripción (`POST /vacunas`, `PUT /vacunas/{id}`, MySQL `018`). No cambia el nombre
+     ni borra vacunas: los esquemas de los pacientes ya apuntan a ellas.
+* `edad_recomendada_meses` es la edad de la **primera dosis**: "Generar esquema recomendado"
+  programa la dosis 1 de cada vacuna con edad. Las demás dosis se describen en
+  `dosis_sugerida` y se programan a mano.
 
 ### 0.4 Administración de profesionales (decisiones de la brecha con el frontend)
 
@@ -227,7 +238,9 @@ Qué llama cada pantalla de la clínica, con campos y límites: [docs/contrato_c
 | --- | --- | --- |
 | `POST /pacientes/{id}/crecimiento` | `consultas:registrar` | Registra un control (peso, talla, perímetro cefálico). Los controles son **inmutables** (un trigger impide modificarlos o borrarlos): un error se corrige registrando un nuevo control y aclarándolo en `observaciones`. Se rechaza un control anterior al nacimiento o en un expediente archivado. |
 | `GET /pacientes/{id}/crecimiento` | `historiales:leer` | Curva de controles. |
-| `GET /vacunas` | `historiales:leer` | Catálogo de tipos de vacuna. |
+| `GET /vacunas` | `historiales:leer` o `profesionales:administrar` | Catálogo de tipos de vacuna (lo lee también el administrador, que lo mantiene). |
+| `POST /vacunas` | `profesionales:administrar` | El administrador del Centro Pediátrico agrega una vacuna (`nombre`, `enfermedades_que_previene`, `edad_recomendada_meses` 0–216, `dosis_sugerida`). 409 si el nombre ya existe (sin distinguir mayúsculas ni tildes). Otras instituciones: 501. |
+| `PUT /vacunas/{id_vacuna}` | `profesionales:administrar` | Reemplaza la descripción (lo no enviado queda vacío). El nombre no se cambia y una vacuna no se borra (§0.3). 404 si no existe. |
 | `GET /pacientes/{id}/vacunacion` | `historiales:leer` | Esquema de vacunación del paciente. |
 | `POST /pacientes/{id}/vacunacion` | `consultas:registrar` | Programa una dosis. No permite duplicar la misma dosis de la misma vacuna. |
 | `POST /pacientes/{id}/vacunacion/esquema-recomendado` | `consultas:registrar` | Genera las dosis pendientes según la edad del paciente (requiere fecha de nacimiento) y el catálogo. |
@@ -304,7 +317,13 @@ texto decimal (`"150.00"`).
 | `GET /pacientes/{id}/tutores` | `pacientes:leer` | Tutores del paciente, el principal primero, con parentesco, contacto y `autorizado` (puede recogerlo). |
 | `GET /tutores?documento=` | `pacientes:leer` | Busca un tutor por DPI/pasaporte para vincularlo a un hermano. |
 | `POST /pacientes/{id}/tutores` | `pacientes:registrar` | Vincula un tutor existente (`id_tutor`) o uno nuevo (`tutor`). Si es principal, el anterior deja de serlo. 409 si ya estaba vinculado o el documento existe. |
-| `PATCH /pacientes/{id}/tutores/{id_tutor}` | `pacientes:registrar` | Parentesco, principal, autorización o contacto (el contacto es del tutor y se ve en todos sus pacientes). El principal siempre está autorizado (422). |
+| `PATCH /pacientes/{id}/tutores/{id_tutor}` | `pacientes:registrar` | Parentesco, principal, autorización, contacto o religión (contacto y religión son del tutor y se ven en todos sus pacientes; un texto vacío los borra). El principal siempre está autorizado (422). |
+| `GET /religiones` | `pacientes:registrar` | Religiones ya registradas, para sugerirlas en el formulario del tutor. |
+
+El tutor tiene una **religión opcional** (`religion`, hasta 100 caracteres) al crearlo y al
+editarlo. Se guarda en el catálogo `religion` de la base (`tutor.id_religion_fk`, que ya
+existía en el esquema): se busca por nombre sin distinguir mayúsculas ni tildes y, si es
+nueva, se agrega. MySQL `017`.
 
 ### 3.12 Laboratorio: tablero y versiones
 
@@ -356,7 +375,7 @@ paginar sin omitir órdenes con igual fecha, conservando el cursor anterior.
 | `citas:leer` / `citas:gestionar` | Ver / agendar y cambiar estado de citas. |
 | `laboratorio:resultados` | Registrar muestras y capturar resultados. |
 | `laboratorio:validar` | Validar órdenes. |
-| `profesionales:administrar` | Solo la cuenta de administración: altas, permisos, estado y contraseñas del personal de su institución. |
+| `profesionales:administrar` | Solo la cuenta de administración: altas, permisos, estado y contraseñas del personal de su institución. En el Centro Pediátrico, también el catálogo de vacunas (§0.3). |
 | `camas:gestionar` | Hospital: marcar camas disponibles, en limpieza o en mantenimiento. |
 | `pagos:ver` / `pagos:registrar` | Hospital y Centro Pediátrico: ver montos / abrir cobros, cargar, pagar y anular. |
 
@@ -440,6 +459,8 @@ Archivos en `database/mysql/` (001, 002, 004, 006, 008, 010, 013 son esquema; 00
 | `014_permisos_tutores.sql` | Permisos por columna sobre `tutor` y `paciente_tutor`. |
 | `015_facturacion_anular_tutor.sql` | `facturacion.anulada_en` (anular solo sin pagos, `CHECK`; una anulada no admite cargos ni pagos y no se reabre) e `id_tutor_fk` (tutor vinculado al paciente, fijo tras emitir). |
 | `016_permisos_facturacion.sql` | `UPDATE (anulada_en)` en `facturacion` (sin `DELETE` ni cambios de montos). |
+| `017_permisos_religion_tutor.sql` | `SELECT/INSERT (nombre)` en `religion` y `SELECT/INSERT/UPDATE (id_religion_fk)` en `tutor`. Sin renombrar ni borrar religiones. |
+| `018_permisos_catalogo_vacunas.sql` | `INSERT` en `nombre_vacuna` y `UPDATE` de la descripción (no del nombre). Sin `DELETE`. |
 
 Consistencia: `FOR UPDATE`/`FOR SHARE` en las filas del paciente, la dosis y la agenda; los
 triggers lanzan `SIGNAL 45000` y el adaptador (`_traducir_trigger`) los convierte en
@@ -514,7 +535,7 @@ Colecciones por paciente con subcolecciones de consultas y odontograma, más
 | `configurar_desarrollo.py` | Genera `.env` con contraseñas aleatorias sin sobrescribir valores existentes. |
 | `crear_profesional.py` | Alta de un profesional (correo, institución, rol, `--permiso` repetible). Pide la contraseña por consola. Valida las reglas de la secretaria y crea la **cuenta de administración** (`--rol administrador`). |
 | `sincronizar_profesionales.py` | Copia los profesionales activos de PostgreSQL al motor de su institución (MongoDB guarda también el `rol`). |
-| `cargar_catalogos.py` | `vacunas ARCHIVO.json` y `laboratorio ARCHIVO.json [--desactivar-anteriores]`. Carga catálogos con conexión administrativa. Vacunas: solo tipos (sin lotes). Laboratorio: una (código, versión) publicada es inmutable. |
+| `cargar_catalogos.py` | `vacunas ARCHIVO.json` y `laboratorio ARCHIVO.json [--desactivar-anteriores]`. Carga catálogos con conexión administrativa. Vacunas: solo tipos (sin lotes); después el administrador del centro los mantiene desde la aplicación. Laboratorio: una (código, versión) publicada es inmutable. |
 | `probar_firestore.py` | Comprueba la conexión a Firestore. |
 
 Catálogos de ejemplo en `database/ejemplos/` (**datos DEMO, no de uso clínico**).
@@ -585,6 +606,7 @@ Barrido de los cuatro modelos contra el enunciado del curso:
 | Camas, ingresos y pagos del hospital sin endpoints. | §3.9 y §3.10 (migraciones 013 y 014). |
 | Tutores y facturación pediátrica sin endpoints. | §3.10 y §3.11 (MySQL 012 a 014). |
 | La facturación pediátrica no se anulaba ni estaba a nombre del tutor (mockup "Facturación"). | Anulación y `facturado_a` (MySQL 015 y 016, §3.10). |
+| El catálogo de vacunas solo se podía cargar con un script; el tutor no guardaba su religión. | El administrador del Centro Pediátrico mantiene el catálogo y el tutor tiene religión opcional (MySQL 017 y 018, §0.3 y §3.11). |
 
 | Clínica: una pieza se podía guardar sobre un historial que se archivaba en ese momento. | La pieza se escribe en una transacción que relee al paciente (§6.4). |
 | Clínica: agotar los reintentos de una transacción respondía 500. | Responde 503 (§6.4). |

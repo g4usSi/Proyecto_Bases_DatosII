@@ -1,23 +1,60 @@
 {
-  "_aviso": "DEMOSTRACION para pruebas. Las edades y dosis NO son el esquema oficial: el Centro Pediatrico debe cargar el suyo (el del Ministerio de Salud) antes de usarlo con pacientes.",
+  "_aviso": "Catalogo de partida basado en el esquema nacional de vacunacion infantil de Guatemala (MSPAS). El Centro Pediatrico debe revisarlo contra el esquema oficial vigente antes de usarlo con pacientes; su administrador puede agregar vacunas y corregir la descripcion desde la aplicacion.",
+  "_edad": "edad_recomendada_meses es la edad de la PRIMERA dosis: con ella 'Generar esquema recomendado' programa la dosis 1. Las demas dosis se describen en dosis_sugerida y se programan a mano.",
   "vacunas": [
     {
-      "nombre": "DEMO BCG",
-      "enfermedades_que_previene": "Tuberculosis",
+      "nombre": "BCG",
+      "enfermedades_que_previene": "Formas graves de tuberculosis (meníngea y miliar)",
       "edad_recomendada_meses": 0,
-      "dosis_sugerida": "0.05 ml"
+      "dosis_sugerida": "Dosis única al nacer"
     },
     {
-      "nombre": "DEMO Pentavalente",
-      "enfermedades_que_previene": "Difteria, tos ferina, tetanos, hepatitis B, Hib",
+      "nombre": "Hepatitis B pediátrica",
+      "enfermedades_que_previene": "Hepatitis B",
+      "edad_recomendada_meses": 0,
+      "dosis_sugerida": "Al nacer, de preferencia en las primeras 24 horas"
+    },
+    {
+      "nombre": "Pentavalente",
+      "enfermedades_que_previene": "Difteria, tos ferina, tétanos, hepatitis B y Haemophilus influenzae tipo b",
       "edad_recomendada_meses": 2,
-      "dosis_sugerida": "0.5 ml"
+      "dosis_sugerida": "3 dosis: 2, 4 y 6 meses"
     },
     {
-      "nombre": "DEMO SPR",
-      "enfermedades_que_previene": "Sarampion, paperas, rubeola",
+      "nombre": "Polio",
+      "enfermedades_que_previene": "Poliomielitis",
+      "edad_recomendada_meses": 2,
+      "dosis_sugerida": "3 dosis (2, 4 y 6 meses); refuerzos a los 18 meses y 4 años"
+    },
+    {
+      "nombre": "Rotavirus",
+      "enfermedades_que_previene": "Diarrea grave por rotavirus",
+      "edad_recomendada_meses": 2,
+      "dosis_sugerida": "2 dosis: 2 y 4 meses"
+    },
+    {
+      "nombre": "Neumococo conjugada",
+      "enfermedades_que_previene": "Neumonía, meningitis y otitis por neumococo",
+      "edad_recomendada_meses": 2,
+      "dosis_sugerida": "2 dosis (2 y 4 meses) y refuerzo a los 12 meses"
+    },
+    {
+      "nombre": "SPR",
+      "enfermedades_que_previene": "Sarampión, paperas (parotiditis) y rubéola",
       "edad_recomendada_meses": 12,
-      "dosis_sugerida": "0.5 ml"
+      "dosis_sugerida": "2 dosis: 12 y 18 meses"
+    },
+    {
+      "nombre": "DPT (refuerzo)",
+      "enfermedades_que_previene": "Difteria, tos ferina y tétanos",
+      "edad_recomendada_meses": 18,
+      "dosis_sugerida": "Refuerzos a los 18 meses y a los 4 años"
+    },
+    {
+      "nombre": "Td",
+      "enfermedades_que_previene": "Tétanos y difteria",
+      "edad_recomendada_meses": 120,
+      "dosis_sugerida": "Refuerzo a los 10 años"
     }
   ]
 }
