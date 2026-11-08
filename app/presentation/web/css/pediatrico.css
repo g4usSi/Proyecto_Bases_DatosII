@@ -66,6 +66,18 @@
 .cita-datos { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .cita-datos b { font-weight: 600; }
 .cita-datos small { color: var(--text-2); font-size: 12.5px; }
+/* Tarjeta de cita en la ficha: el motivo ocupa todo el ancho y se parte por palabras, no por letras. */
+.fila-cita.cita-ficha { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; padding: 12px 16px; }
+.cita-cab { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; align-items: center; }
+.cita-cab time { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.cita-cab time .ic { color: var(--brand); }
+.cita-cab time b { font-weight: 640; }
+.cita-cab time span { color: var(--text-2); font-size: 13px; font-weight: 400; }
+.cita-motivo { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: break-word; }
+.cita-quien, .cita-cambio { display: flex; gap: 6px; align-items: center; margin: 0; color: var(--text-2); font-size: 13px; }
+.cita-cambio { align-items: flex-start; padding: 6px 10px; border-radius: 10px; background: var(--warn-tint); color: var(--warn-ink); }
+.cita-quien .ic, .cita-cambio .ic { flex: none; }
+.cita-cambio .ic { margin-top: 2px; }
 .cargas { display: grid; gap: 10px; }
 .carga { display: grid; grid-template-columns: minmax(120px, 220px) minmax(60px, 1fr) auto; gap: 12px; align-items: center; }
 .medida { height: 8px; overflow: hidden; border-radius: 8px; background: rgba(23, 43, 58, .08); }

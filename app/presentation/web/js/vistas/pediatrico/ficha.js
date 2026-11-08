@@ -165,11 +165,21 @@ function pestanaCitas(p, ctx) {
         : null);
   }
   const ordenadas = [...valor].sort((a, b) => b.inicio.localeCompare(a.inicio));
-  return h('div', { class: 'pila-s' }, ordenadas.map((c) => h('div', { class: `fila-cita ${claseCita(c.estado)}` },
-    h('time', null, fFechaCorta(c.inicio), h('small', { text: `${fHora(c.inicio)} a ${fHora(c.fin)}` })),
-    h('div', { class: 'cita-datos' }, h('b', { text: c.motivo }), c.motivo_cambio && h('small', { text: `Motivo del cambio: ${c.motivo_cambio}` })),
-    h('span', { class: 'hint', text: nombreProfesional(ctx.profesionales, c.id_profesional) }),
-    chipCita(c.estado))));
+  return h('div', { class: 'pila-s' }, ordenadas.map((c) => tarjetaCita(c, ctx.profesionales)));
+}
+
+/* Tarjeta de cita de la ficha: cuando y estado arriba, el motivo a lo ancho y quien atiende abajo. */
+function tarjetaCita(c, profesionales) {
+  return h('article', { class: `fila-cita cita-ficha ${claseCita(c.estado)}` },
+    h('header', { class: 'cita-cab' },
+      h('time', { datetime: c.inicio },
+        ic('calendar-days', 16),
+        h('b', { text: fFechaCorta(c.inicio) }),
+        h('span', { text: `${fHora(c.inicio)} a ${fHora(c.fin)}` })),
+      chipCita(c.estado)),
+    h('p', { class: 'cita-motivo', text: c.motivo }),
+    h('p', { class: 'cita-quien' }, ic('stethoscope', 15), h('span', { text: nombreProfesional(profesionales, c.id_profesional) })),
+    c.motivo_cambio && h('p', { class: 'cita-cambio' }, ic('info', 14), h('span', { text: `Motivo del cambio: ${c.motivo_cambio}` })));
 }
 
 function pestanasDe() {
