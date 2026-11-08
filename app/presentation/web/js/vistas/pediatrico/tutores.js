@@ -1,5 +1,5 @@
-/* Tutores del paciente: el contacto es del tutor y lo comparten sus hermanos; el parentesco,
-   ser principal y poder recoger al paciente son del vinculo con este paciente. */
+/* Tutores del paciente: el contacto y la religion son del tutor y los comparten sus hermanos;
+   el parentesco, ser principal y poder recoger al paciente son del vinculo con este paciente. */
 import { api } from '../../api.js';
 import { accionesFicha, bloqueDatos } from '../compartido/ficha.js';
 import { sesion } from '../../sesion.js';
@@ -15,6 +15,23 @@ const iniciales = (t) => `${t.nombres[0] || ''}${t.apellidos[0] || ''}`.toUpperC
 function selectorParentesco(id, valor) {
   const opciones = h('datalist', { id: `${id}-opciones` }, ['Madre', 'Padre', 'Abuela', 'Abuelo', 'Tía', 'Tío', 'Tutor legal'].map((v) => h('option', { value: v })));
   const control = entrada(id, { maxlength: 80, list: `${id}-opciones`, value: valor || '' });
+  return { control, opciones };
+}
+
+/* Religion opcional: se sugieren las ya registradas en el centro; se puede escribir otra. */
+const RELIGIONES_SUGERIDAS = ['Católica', 'Evangélica', 'Ninguna'];
+const sinTildes = (texto) => texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function selectorReligion(id, valor) {
+  const opciones = h('datalist', { id: `${id}-opciones` });
+  const control = entrada(id, { maxlength: 100, list: `${id}-opciones`, value: valor || '', placeholder: 'Católica, evangélica…' });
+  const pintar = (lista) => {
+    const vistas = new Map();
+    for (const nombre of [...lista, ...RELIGIONES_SUGERIDAS]) if (!vistas.has(sinTildes(nombre))) vistas.set(sinTildes(nombre), nombre);
+    opciones.replaceChildren(...[...vistas.values()].sort((a, b) => a.localeCompare(b, 'es')).map((v) => h('option', { value: v })));
+  };
+  pintar([]);
+  api('/religiones').then(pintar, () => { /* Sin la lista se escribe a mano. */ });
   return { control, opciones };
 }
 
@@ -55,7 +72,8 @@ export function pestanaTutores(p, ctx) {
         h('dt', { text: 'Documento' }), h('dd', { text: v.tutor.documento || 'No registrado' }),
         h('dt', { text: 'Teléfono' }), h('dd', { text: v.tutor.telefono || 'No registrado' }),
         h('dt', { text: 'Correo' }), h('dd', { text: v.tutor.correo || 'No registrado' }),
-        h('dt', { text: 'Dirección' }), h('dd', { text: v.tutor.direccion || 'No registrada' }))),
+        h('dt', { text: 'Dirección' }), h('dd', { text: v.tutor.direccion || 'No registrada' }),
+        h('dt', { text: 'Religión' }), h('dd', { text: v.tutor.religion || 'No registrada' }))),
       escribe && accionesFicha([h('button', { class: 'btn sec sm', type: 'button', onclick: () => abrirCambios(p, v, ctx.repintar) }, ic('pencil', 14), 'Editar tutor')])))));
 }
 
@@ -67,19 +85,22 @@ function abrirVincular(p, tutores, alGuardar) {
   const telefono = entrada('tutor-telefono', { maxlength: 30 });
   const correo = entrada('tutor-correo', { type: 'email', maxlength: 254 });
   const direccion = entrada('tutor-direccion', { maxlength: 300 });
+  const religion = selectorReligion('tutor-religion');
   const parentesco = selectorParentesco('tutor-parentesco');
   const campos = {
     documento: campo('Documento', documento, { opcional: true, ayuda: 'Si es tutor de un hermano, búscalo para no registrarlo dos veces.' }),
     nombres: campo('Nombres', nombres), apellidos: campo('Apellidos', apellidos),
     telefono: campo('Teléfono', telefono, { opcional: true }), correo: campo('Correo', correo, { opcional: true }),
     direccion: campo('Dirección', direccion, { opcional: true }),
+    religion: campo('Religión', religion.control, { opcional: true }),
     parentesco: campo('Parentesco', parentesco.control),
   };
   const vinculo = casillasDeVinculo({ principal: !tutores.some((v) => v.es_principal), autorizado: true });
   const resultado = h('div');
   const datosNuevos = h('div', { class: 'pila-s' },
     h('div', { class: 'dos' }, campos.nombres, campos.apellidos),
-    h('div', { class: 'dos' }, campos.telefono, campos.correo), campos.direccion);
+    h('div', { class: 'dos' }, campos.telefono, campos.correo), campos.direccion,
+    campos.religion, religion.opciones);
   const zona = h('div');
   const boton = h('button', { class: 'btn', type: 'button', text: 'Vincular tutor' });
 
@@ -137,6 +158,7 @@ function abrirVincular(p, tutores, alGuardar) {
       cuerpo.tutor = {
         nombres: limpio(nombres), apellidos: limpio(apellidos), documento: limpio(documento),
         telefono: limpio(telefono), correo: limpio(correo), direccion: limpio(direccion),
+        religion: limpio(religion.control),
       };
     }
     enviar(boton, zona, campos, async () => {
@@ -153,19 +175,22 @@ function abrirCambios(p, v, alGuardar) {
   const telefono = entrada('cambio-telefono', { maxlength: 30, value: v.tutor.telefono || '' });
   const correo = entrada('cambio-correo', { type: 'email', maxlength: 254, value: v.tutor.correo || '' });
   const direccion = entrada('cambio-direccion', { maxlength: 300, value: v.tutor.direccion || '' });
+  const religion = selectorReligion('cambio-religion', v.tutor.religion);
   const campos = {
     parentesco: campo('Parentesco', parentesco.control),
     telefono: campo('Teléfono', telefono, { opcional: true }), correo: campo('Correo', correo, { opcional: true }),
     direccion: campo('Dirección', direccion, { opcional: true }),
+    religion: campo('Religión', religion.control, { opcional: true }),
   };
   const vinculo = casillasDeVinculo({ principal: v.es_principal, autorizado: v.autorizado });
   const zona = h('div');
   const boton = h('button', { class: 'btn', type: 'button', text: 'Guardar cambios' });
   const panel = lateral(nombreDe(v.tutor), [
     campos.parentesco, parentesco.opciones, vinculo.nodo,
-    h('fieldset', { class: 'pila-s' }, h('legend', { class: 'leyenda', text: 'Contacto' }),
-      aviso('info', 'info', 'El contacto es del tutor: el cambio también se ve en la ficha de sus otros pacientes.'),
-      h('div', { class: 'dos' }, campos.telefono, campos.correo), campos.direccion),
+    h('fieldset', { class: 'pila-s' }, h('legend', { class: 'leyenda', text: 'Datos del tutor' }),
+      aviso('info', 'info', 'Estos datos son del tutor: el cambio también se ve en la ficha de sus otros pacientes.'),
+      h('div', { class: 'dos' }, campos.telefono, campos.correo), campos.direccion,
+      campos.religion, religion.opciones),
     zona,
   ], [h('button', { class: 'btn sec', type: 'button', text: 'Cancelar', onclick: () => panel.cerrar() }), boton]);
 
@@ -174,7 +199,7 @@ function abrirCambios(p, v, alGuardar) {
       campos.parentesco.marcar('Escribe el parentesco.');
       return;
     }
-    /* Solo lo que cambio; un contacto en blanco lo borra (la API trata null como «sin cambio»). */
+    /* Solo lo que cambio; un dato en blanco lo borra (la API trata null como «sin cambio»). */
     const cuerpo = {};
     if (limpio(parentesco.control) !== v.parentesco) cuerpo.parentesco = limpio(parentesco.control);
     if (vinculo.esPrincipal.checked !== v.es_principal) cuerpo.es_principal = vinculo.esPrincipal.checked;
@@ -182,6 +207,7 @@ function abrirCambios(p, v, alGuardar) {
     if (telefono.value.trim() !== (v.tutor.telefono || '')) cuerpo.telefono = telefono.value.trim();
     if (correo.value.trim() !== (v.tutor.correo || '')) cuerpo.correo = correo.value.trim();
     if (direccion.value.trim() !== (v.tutor.direccion || '')) cuerpo.direccion = direccion.value.trim();
+    if (religion.control.value.trim() !== (v.tutor.religion || '')) cuerpo.religion = religion.control.value.trim();
     if (!Object.keys(cuerpo).length) {
       zona.replaceChildren(aviso('info', 'info', 'No hay cambios por guardar.'));
       return;
