@@ -166,8 +166,10 @@ Para ejecutar la API con recarga automática y mantener las bases en Docker:
 ```powershell
 docker compose --profile api stop api
 docker compose up -d postgres mysql mongo
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 --log-config app/logging.json
 ```
+
+La terminal muestra un `INFO` con el enlace directo a `/app/` y el puerto elegido.
 
 Después de guardar la clave de Firebase, comprobarla y reiniciar la API:
 
